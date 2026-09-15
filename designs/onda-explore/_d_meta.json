@@ -1,0 +1,45 @@
+{
+  "type": "design",
+  "designSystems": [],
+  "primaryDesignSystem": null,
+  "assets": {
+    "九漾方向探索 · 对比画布": {
+      "versions": [
+        {
+          "path": "Explore.html",
+          "createdAt": "2026-09-12T15:59:46.188Z",
+          "status": "needs-review"
+        }
+      ]
+    },
+    "方向 A · 书房": {
+      "versions": [
+        {
+          "path": "directions/paper/index.html",
+          "createdAt": "2026-09-12T15:59:46.214Z",
+          "status": "needs-review"
+        }
+      ]
+    },
+    "方向 B · 涟漪": {
+      "versions": [
+        {
+          "path": "directions/ripple/index.html",
+          "createdAt": "2026-09-12T15:59:46.239Z",
+          "status": "needs-review"
+        }
+      ]
+    },
+    "方向 C · 色板": {
+      "versions": [
+        {
+          "path": "directions/mosaic/index.html",
+          "createdAt": "2026-09-12T15:59:46.263Z",
+          "status": "needs-review"
+        }
+      ]
+    }
+  },
+  "createdAt": "2026-09-12T15:59:46.188Z",
+  "updatedAt": "2026-09-13T01:12:47.517Z"
+}

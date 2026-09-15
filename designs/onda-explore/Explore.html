@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>九漾 Onda · 三个方向对比</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Noto Sans SC", sans-serif; }
+  #root { position: fixed; inset: 0; }
+  .topbar {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 50;
+    display: flex; align-items: center; gap: 16px;
+    padding: 10px 18px;
+    background: rgba(255,255,255,0.82); backdrop-filter: blur(10px);
+    border-bottom: 1px solid rgba(0,0,0,0.07);
+    font-size: 13px; color: #4a4238;
+  }
+  .topbar strong { font-size: 14px; color: #2a251f; letter-spacing: 0.01em; }
+  .topbar .hint { color: #9a8f80; }
+  .topbar nav { margin-left: auto; display: flex; gap: 8px; }
+  .topbar a {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 12px; border-radius: 999px; text-decoration: none;
+    font-size: 12.5px; font-weight: 500; color: #2a251f;
+    background: rgba(0,0,0,0.05); transition: background 0.15s;
+  }
+  .topbar a:hover { background: rgba(0,0,0,0.09); }
+  .topbar a .dot { width: 8px; height: 8px; border-radius: 3px; display: inline-block; }
+</style>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+
+<div class="topbar">
+  <strong>九漾 Onda · 方向探索</strong>
+  <span class="hint">同一产品骨架 × 三种视觉语言 —— 画板里的原型是可交互的；点画板名全屏聚焦，或新标签页打开完整尺寸：</span>
+  <nav>
+    <a href="directions/paper/index.html" target="_blank" rel="noopener"><span class="dot" style="background:#c93b2e"></span>A · 书房</a>
+    <a href="directions/ripple/index.html" target="_blank" rel="noopener"><span class="dot" style="background:#0ecdd8"></span>B · 涟漪</a>
+    <a href="directions/mosaic/index.html" target="_blank" rel="noopener"><span class="dot" style="background:#2c6ff0"></span>C · 色板</a>
+  </nav>
+</div>
+
+<div id="root"></div>
+
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="explore.jsx"></script>
+</body>
+</html>
