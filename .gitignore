@@ -42,3 +42,4 @@ next-env.d.ts
 
 # playwright-cli 调试产物
 .playwright-cli/
+shots/

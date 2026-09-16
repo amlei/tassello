@@ -10,6 +10,12 @@ function PublishSheet({ post, platforms, onToggle, onReacquire, onClose, onConfi
     if (p.id === "weibo" && bodyLen > 500) return "正文 " + bodyLen + " 字 · 超出 500 字上限";
     return null;
   };
+  /* 三态与设置里的默认名单一致：选中 = 平台色填满，没选中 = 同色淡底，凭据没拿到 = 中性灰 */
+  const skinOf = (p) => {
+    if (p.state !== "ok") return { background: "#F1EFE8", color: "#A9A294" };
+    if (p.selected) return { background: p.color, color: p.fg || "#fff" };
+    return { background: p.color + "33", color: p.fg ? "#16130E" : p.color };
+  };
   return (
     <div className="m-overlay" onClick={onClose}>
       <div className="m-sheet" onClick={(e) => e.stopPropagation()}>
@@ -30,9 +36,7 @@ function PublishSheet({ post, platforms, onToggle, onReacquire, onClose, onConfi
               <button
                 key={p.id}
                 className={"m-platico" + (p.selected ? " sel" : "") + (failed ? " fail" : "")}
-                style={p.selected && !failed
-                  ? { background: "#fff", color: p.color, boxShadow: "inset 0 0 0 2px " + p.color }
-                  : { background: p.color, color: p.fg || "#fff" }}
+                style={skinOf(p)}
                 onClick={() => (failed ? onReacquire(p.id) : onToggle(p.id))}
                 title={p.name + (failed ? " · 获取失败，点击重新获取" : problem ? " · " + problem : "")}
                 aria-label={p.name}

@@ -35,11 +35,16 @@
         {
           "path": "directions/mosaic/index.html",
           "createdAt": "2026-09-12T15:59:46.263Z",
-          "status": "needs-review"
+          "status": "needs-review",
+          "subtitle": "骨架重做：四列 bento → 左栏 + 单列表（预览弹窗、栏底设置）",
+          "viewport": {
+            "width": 1440,
+            "height": 900
+          }
         }
       ]
     }
   },
   "createdAt": "2026-09-12T15:59:46.188Z",
-  "updatedAt": "2026-09-13T01:12:47.517Z"
+  "updatedAt": "2026-09-16T06:44:47.924Z"
 }

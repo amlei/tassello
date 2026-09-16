@@ -1,23 +1,45 @@
-/* app.jsx — 根组件：单页 state 切换 + 后台发布任务引擎 */
+/* app.jsx — 根组件：单页 state + 后台发布任务引擎
+   视图只有三个：内容库（左栏 + 列表）、发布队列、编辑器。
+   发布事实只存一处 —— tasks；稿子上不再挂状态字段。 */
 function nowTime() {
   const d = new Date();
   return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0") + ":" + String(d.getSeconds()).padStart(2, "0");
 }
 
 function App() {
-  const [view, setView] = React.useState("home"); // home | editor | tasks
+  const [view, setView] = React.useState("library"); // library | queue | editor
+  const [scope, setScope] = React.useState("all");   // all | article | image | video | audio
+  const [query, setQuery] = React.useState("");
+  const [sort, setSort] = React.useState("recent");
   const [posts, setPosts] = React.useState(POSTS);
   const [editingId, setEditingId] = React.useState(null);
+  const [previewId, setPreviewId] = React.useState(null);
   const [platforms, setPlatforms] = React.useState(() => PLATFORMS.map((p) => ({ ...p, selected: false })));
   const [defaults, setDefaults] = React.useState(DEFAULT_TARGETS);
   const [sheetOpen, setSheetOpen] = React.useState(false);
-  const [defaultsOpen, setDefaultsOpen] = React.useState(false);
-  const [tasks, setTasks] = React.useState(() => [{
-    id: "seed-1", postId: "i2", postTitle: "白露之后的云", platformId: "xhs",
-    progress: 100, stage: 3, status: "success", willFail: false, failReason: null,
-    url: platformLink("xhs", "K7F2Q9Z1"),
-    createdAt: "09-11 21:12", finishedAt: "09-11 21:14:31",
-  }]);
+  const [settingsOpen, setSettingsOpen] = React.useState(false);
+  const [tasks, setTasks] = React.useState(() => [
+    {
+      id: "seed-1", postId: "i2", postTitle: "白露之后的云", platformId: "xhs",
+      progress: 100, stage: 3, status: "success", willFail: false, failReason: null,
+      url: platformLink("xhs", "K7F2Q9Z1"), createdAt: "09-11 21:12", finishedAt: "09-11 21:14:31",
+    },
+    {
+      id: "seed-2", postId: "a1", postTitle: "为什么我们团队在周五下午不发版", platformId: "wechat",
+      progress: 100, stage: 3, status: "success", willFail: false, failReason: null,
+      url: platformLink("wechat", "M3P8T2WD"), createdAt: "09-12 14:20", finishedAt: "09-12 14:21:08",
+    },
+    {
+      id: "seed-3", postId: "a1", postTitle: "为什么我们团队在周五下午不发版", platformId: "xhs",
+      progress: 100, stage: 3, status: "success", willFail: false, failReason: null,
+      url: platformLink("xhs", "Q9L4V7GB"), createdAt: "09-12 14:20", finishedAt: "09-12 14:20:52",
+    },
+    {
+      id: "seed-4", postId: "v1", postTitle: "三分钟讲清「公摊面积」", platformId: "douyin",
+      progress: 34, stage: 1, status: "running", willFail: false, failReason: null,
+      url: null, token: newToken(), createdAt: "09-12 14:31", finishedAt: null,
+    },
+  ]);
 
   /* 发布任务引擎：按进度推进每个进行中任务，成功时落一条平台回执链接 */
   React.useEffect(() => {
@@ -45,23 +67,37 @@ function App() {
     return () => clearInterval(timer);
   }, []);
 
-  const openPost = (id) => { setEditingId(id); setView("editor"); };
+  const openScope = (k) => { setScope(k); setView("library"); setQuery(""); };
+  const openQueue = () => setView("queue");
+  const openPost = (id) => { setEditingId(id); setPreviewId(null); setView("editor"); };
+  const openPreview = (id) => setPreviewId(id);
+
   const newPost = (type) => {
     const id = "p" + Date.now();
-    const base = { id, type, status: "draft", updated: "09-12 " + nowTime().slice(0, 5), title: "", body: "" };
+    const base = { id, type, updated: "09-12 " + nowTime().slice(0, 5), title: "", body: "" };
     if (type === "image") base.images = [asset("#D52088"), asset("#FD8D11"), asset("#2C6FF0")];
     if (type === "video") base.duration = "00:00";
     if (type === "audio") { base.duration = "00:00"; base.durationSec = 60; }
-    setPosts((ps) => [{ ...base, title: "", body: "" }, ...ps]);
+    setPosts((ps) => [base, ...ps]);
     setEditingId(id);
     setView("editor");
   };
-  const changePost = (id, k, v) => {
-    setPosts((ps) => ps.map((p) => (p.id === id ? { ...p, [k]: v } : p)));
+  const changePost = (id, k, v) => setPosts((ps) => ps.map((p) => (p.id === id ? { ...p, [k]: v } : p)));
+  /* 拖动排序：可见的那几篇按新顺序填回它们原来占的槽位，
+     其它类型的稿子位置不动；同时把排序档切到「自定义顺序」，否则下一次排序会把顺序抹掉。 */
+  const reorderPosts = (ids) => {
+    setSort("manual");
+    setPosts((ps) => {
+      const picked = new Set(ids);
+      const byId = new Map(ps.map((p) => [p.id, p]));
+      const queue = ids.slice();
+      return ps.map((p) => (picked.has(p.id) ? byId.get(queue.shift()) : p));
+    });
   };
   const deletePost = (id) => {
     setPosts((ps) => ps.filter((p) => p.id !== id));
-    if (editingId === id) { setEditingId(null); setView("home"); }
+    if (editingId === id) { setEditingId(null); setView("library"); }
+    if (previewId === id) setPreviewId(null);
   };
 
   const togglePlatform = (id) => {
@@ -71,14 +107,16 @@ function App() {
   const reacquirePlatform = (id) => {
     setPlatforms((ps) => ps.map((p) => (p.id === id ? { ...p, state: "ok", selected: true } : p)));
   };
-  /* 默认名单：按稿子类型记一份平台 id 列表 */
+  /* 设置里的「重新获取」：只补凭据，不改变任何类型的默认名单 */
+  const reacquireAccount = (id) => {
+    setPlatforms((ps) => ps.map((p) => (p.id === id ? { ...p, state: "ok" } : p)));
+  };
   const toggleDefault = (type, id) => {
     setDefaults((d) => {
       const cur = d[type] || [];
       return { ...d, [type]: cur.indexOf(id) >= 0 ? cur.filter((x) => x !== id) : cur.concat([id]) };
     });
   };
-  /* 在默认平台面板里点一个灰掉的平台：先重新获取凭据，顺手设为该类型的默认 */
   const acquireDefault = (type, id) => {
     setPlatforms((ps) => ps.map((p) => (p.id === id ? { ...p, state: "ok" } : p)));
     setDefaults((d) => ((d[type] || []).indexOf(id) >= 0 ? d : { ...d, [type]: (d[type] || []).concat([id]) }));
@@ -100,78 +138,91 @@ function App() {
     setPlatforms((ps) => ps.map((p) => ({ ...p, selected: false })));
     setSheetOpen(false); /* 弹层立刻关闭，界面不阻塞 */
   };
-
   const retryTask = (id) => {
     setTasks((ts) => ts.map((t) => (t.id === id ? {
       ...t, progress: 0, stage: 0, status: "running", willFail: false, failReason: null, url: null, finishedAt: null,
     } : t)));
   };
 
+  const counts = React.useMemo(() => {
+    const c = { article: 0, image: 0, video: 0, audio: 0 };
+    posts.forEach((p) => { c[p.type] = (c[p.type] || 0) + 1; });
+    return c;
+  }, [posts]);
+  const runningIds = React.useMemo(
+    () => Array.from(new Set(tasks.filter((t) => t.status === "running").map((t) => t.postId))),
+    [tasks]
+  );
   const runningCount = tasks.filter((t) => t.status === "running").length;
   const editing = posts.find((p) => p.id === editingId);
+  const previewing = posts.find((p) => p.id === previewId);
 
   return (
     <div className="m-app">
-      <div className="m-topbar">
-        <div className="m-brand">
-          <MosaicLogo size={11} />
-          <div>
-            <div className="m-brand-name">九漾 Onda</div>
-            <div className="m-brand-sub">content worksbench</div>
-          </div>
-        </div>
-        <div className="m-nav">
-          <button className={"m-tab" + (view === "home" ? " on" : "")} onClick={() => setView("home")}>我的稿子</button>
-          <button className={"m-tab" + (view === "tasks" ? " on" : "")} onClick={() => setView("tasks")}>
-            发布队列
-            {runningCount > 0 && <span className="m-tab-badge">{runningCount}</span>}
-          </button>
-        </div>
-        <div className="m-topright">
-          {/* 平台栏常驻顶栏：整个应用里都看得见有哪些出口、各自拿没拿到凭据 */}
-          <div className="m-platrail">
-            {/* 每个 icon 都可点：进去就是这份名单，没获取到的在那里一键重新获取 */}
-            {platforms.map((p) => (
-              <button
-                key={p.id}
-                className={"m-picon" + (p.state === "ok" ? "" : " fail")}
-                style={p.state === "ok" ? { background: p.color, color: p.fg || "#fff" } : { color: "#A9A294" }}
-                onClick={() => setDefaultsOpen(true)}
-                title={p.name + (p.state === "ok" ? " · 已获取 · 点开设置默认发布平台" : " · 获取失败 · 点开重新获取")}
-                aria-label={p.name + (p.state === "ok" ? " 已获取" : " 获取失败")}
-              >
-                {p.char}
-              </button>
-            ))}
-            <button className="m-pset" onClick={() => setDefaultsOpen(true)} title="设置各类型稿子的默认发布平台">
-              默认
-            </button>
-          </div>
-          <span className="m-psep"></span>
-          <span>{platforms.filter((p) => p.state === "ok").length}/{platforms.length} 已获取</span>
-          <span>{posts.length} 篇稿子</span>
-        </div>
-      </div>
+      <div className="w-shell">
+        <Sidebar
+          view={view}
+          scope={scope}
+          counts={counts}
+          total={posts.length}
+          runningCount={runningCount}
+          queueCount={tasks.length}
+          platforms={platforms}
+          onScope={openScope}
+          onQueue={openQueue}
+          onSettings={() => setSettingsOpen(true)}
+        />
+        <div className="w-stage">
+          {view === "library" && (
+            <LibraryView
+              scope={scope}
+              posts={posts}
+              query={query}
+              sort={sort}
+              runningIds={runningIds}
+              onOpen={openPost}
+              onPreview={openPreview}
+              onDelete={deletePost}
+              onNew={newPost}
+              onQuery={setQuery}
+              onSort={setSort}
+              onReorder={reorderPosts}
+            />
+          )}
 
-      <div className="m-main">
-        {view === "home" && <HomeView posts={posts} onOpen={openPost} onNew={newPost} onDelete={deletePost} />}
-        {view === "editor" && editing && (
-          <EditorView
-            post={editing}
-            onChange={changePost}
-            onBack={() => setView("home")}
-            onPublish={() => {
-              /* 打开发布弹层：按「该类型的默认平台」预选（拿不到凭据的不算） */
-              const want = defaults[editing.type] || [];
-              setPlatforms((ps) => ps.map((p) => ({
-                ...p,
-                selected: p.state === "ok" && supportsType(p, editing.type) && want.indexOf(p.id) >= 0,
-              })));
-              setSheetOpen(true);
-            }}
-          />
-        )}
-        {view === "tasks" && <TasksView tasks={tasks} posts={posts} onRetry={retryTask} />}
+          {view === "queue" && (
+            <div className="w-view" data-screen-label="发布队列">
+              <div className="w-canvas">
+                <header className="w-head">
+                  <div className="w-headline">
+                    <h1 className="w-h1">发布队列</h1>
+                    <span className="w-hmeta">{tasks.length} 个发布动作 · 发布事实只此一处</span>
+                  </div>
+                </header>
+                <div className="w-scroll">
+                  <TasksView tasks={tasks} posts={posts} onRetry={retryTask} onOpen={openPost} />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {view === "editor" && editing && (
+            <EditorView
+              post={editing}
+              onChange={changePost}
+              onBack={() => setView("library")}
+              onPublish={() => {
+                /* 打开发布弹层：按「该类型的默认平台」预选（拿不到凭据的不算） */
+                const want = defaults[editing.type] || [];
+                setPlatforms((ps) => ps.map((p) => ({
+                  ...p,
+                  selected: p.state === "ok" && supportsType(p, editing.type) && want.indexOf(p.id) >= 0,
+                })));
+                setSheetOpen(true);
+              }}
+            />
+          )}
+        </div>
       </div>
 
       {sheetOpen && editing && (
@@ -185,17 +236,26 @@ function App() {
         />
       )}
 
-      {defaultsOpen && (
-        <DefaultsSheet
+      {settingsOpen && (
+        <SettingsSheet
           platforms={platforms}
           defaults={defaults}
           onToggle={toggleDefault}
           onAcquire={acquireDefault}
-          onClose={() => setDefaultsOpen(false)}
+          onReacquire={reacquireAccount}
+          onClose={() => setSettingsOpen(false)}
         />
       )}
 
-      <FloatingPill tasks={tasks} onClick={() => setView("tasks")} />
+      {previewing && (
+        <PreviewModal
+          post={previewing}
+          onClose={() => setPreviewId(null)}
+          onEdit={() => openPost(previewing.id)}
+        />
+      )}
+
+      <FloatingPill tasks={tasks} onClick={openQueue} />
     </div>
   );
 }

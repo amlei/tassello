@@ -85,4 +85,59 @@ function IcChevron({ size = 14, dir = "down" }) {
   );
 }
 
-Object.assign(window, { IcArrowLeft, IcPlus, IcCheck, IcX, IcPlay, IcPause, IcRetry, IcSend, IcClock, IcLinkOut, IcChevron });
+/* 搜索：左栏导航之外唯一的跨类型出口 */
+function IcSearch({ size = 14 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <circle cx="6.1" cy="6.1" r="4.1" />
+      <path d="M9.3 9.3 12.5 12.5" />
+    </svg>
+  );
+}
+
+/* 预览：行内的「看一眼」，唤起弹窗而不是常驻侧栏 */
+function IcEye({ size = 14 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M1.4 8S4 3.6 8 3.6 14.6 8 14.6 8 12 12.4 8 12.4 1.4 8 1.4 8z" />
+      <circle cx="8" cy="8" r="2.1" />
+    </svg>
+  );
+}
+
+/* 排序：上短下长的双箭头，表示「按时间排」而不是「筛掉一部分」 */
+function IcSort({ size = 14 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3.5 2.5v9M1.6 9.6l1.9 1.9 1.9-1.9M8 4h4.5M8 7h3M8 10h1.6" />
+    </svg>
+  );
+}
+
+/* 设置：滑杆比齿轮更像这套界面里的东西（没有圆弧、只有块与线） */
+function IcSettings({ size = 15 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
+      <path d="M1.8 4.4h12.4M1.8 8h12.4M1.8 11.6h12.4" />
+      <circle cx="5.4" cy="4.4" r="1.7" fill="var(--card)" />
+      <circle cx="10.4" cy="8" r="1.7" fill="var(--card)" />
+      <circle cx="6.4" cy="11.6" r="1.7" fill="var(--card)" />
+    </svg>
+  );
+}
+
+/* 问题：全部「出事了」的信号共用这一枚图标和一种错误色 */
+function IcAlert({ size = 13 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M7 1.9 13 12H1L7 1.9z" />
+      <path d="M7 5.7v2.8" />
+      <path d="M7 10.4h.01" />
+    </svg>
+  );
+}
+
+Object.assign(window, {
+  IcArrowLeft, IcPlus, IcCheck, IcX, IcPlay, IcPause, IcRetry, IcSend, IcClock, IcLinkOut, IcChevron,
+  IcSearch, IcEye, IcSort, IcSettings, IcAlert,
+});
