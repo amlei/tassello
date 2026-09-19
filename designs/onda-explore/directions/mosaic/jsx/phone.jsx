@@ -1,14 +1,12 @@
 /* phone.jsx — 一篇稿子发出去的样子。
-   同一块屏幕有两个入口：编辑页右侧的常驻预览列（PreviewColumn），
-   以及列表行内按钮唤起的预览弹窗（PhoneCard）。两者共用一个组件，
-   免得「预览」在应用里长出两套长相。 */
-
-const PHONE_IMG_RE = /^!\[([^\]]*)\]\(asset:\/\/([^)]+)\)$/;
+   只在编辑页右侧常驻（PreviewColumn）：列表里不再提供预览入口，
+   想知道发出去什么样，就打开这篇稿子。 */
 
 function PhoneCard({ post, paneRef, onScroll, more }) {
   const t = TYPES[post.type];
-  const paras = post.body.split("\n").filter((p) => p.trim());
   const assets = post.images || [];
+  /* 预览与编辑用同一份富文本：编辑器里长什么样，发出去就长什么样 */
+  const html = (post.bodyHtml && post.bodyHtml.trim()) ? post.bodyHtml : mdToHtml(post.body || "", t.color, assets);
   return (
     <div className="m-phone">
       <div className="m-phone-head">
@@ -23,15 +21,9 @@ function PhoneCard({ post, paneRef, onScroll, more }) {
       <div className="m-phone-body">
         <div className="m-phone-scroll" ref={paneRef} onScroll={onScroll}>
           <div className="body">
-            {paras.length ? paras.map((p, i) => {
-              /* 独占一行的 ![说明](asset://id) 在预览里落成一张图，实现图文混排 */
-              const m = p.trim().match(PHONE_IMG_RE);
-              if (m) {
-                const im = assets.find((x) => x.id === m[2]);
-                return <div key={i} className="pimgblock" style={im ? { background: im.color } : null}>{!im && <span>素材已不在</span>}</div>;
-              }
-              return <p key={i} style={{ marginBottom: 10 }}>{tagNodes(p, t.color, "pv" + i)}</p>;
-            }) : <p style={{ color: "#C9C4B8" }}>正文会实时出现在这里…</p>}
+            {html.trim()
+              ? <div className="m-richbody-phone" dangerouslySetInnerHTML={{ __html: html }} />
+              : <p style={{ color: "#C9C4B8" }}>正文会实时出现在这里…</p>}
           </div>
         </div>
         <span className={"m-more" + (more ? "" : " off")} aria-hidden="true"></span>

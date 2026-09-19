@@ -96,7 +96,7 @@ function useLongPressReorder({ ids, onCommit, holdMs = 220, moveTolerance = 8 })
 
   const onTilePointerDown = (e, id) => {
     if (e.button != null && e.button !== 0) return;
-    /* 格子角上的预览/删除按钮不该把长按也吃了 */
+    /* 格子角上的删除按钮不该把长按也吃了 */
     if (e.target.closest && e.target.closest(".w-tileacts")) return;
     if (idsRef.current.indexOf(id) < 0) return;
     /* 上一次拖拽如果因为 mouseup 落在了别的格子上而没发出 click，

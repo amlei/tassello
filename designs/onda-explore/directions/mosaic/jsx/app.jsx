@@ -11,9 +11,12 @@ function App() {
   const [scope, setScope] = React.useState("all");   // all | article | image | video | audio
   const [query, setQuery] = React.useState("");
   const [sort, setSort] = React.useState("recent");
-  const [posts, setPosts] = React.useState(POSTS);
+  /* 纯文本正文（body）装载时补齐富文本形态（bodyHtml）：编辑与预览都用同一份 */
+  const [posts, setPosts] = React.useState(() => POSTS.map((p) => ({
+    ...p,
+    bodyHtml: p.bodyHtml || mdToHtml(p.body || "", TYPES[p.type].color, p.images || []),
+  })));
   const [editingId, setEditingId] = React.useState(null);
-  const [previewId, setPreviewId] = React.useState(null);
   const [platforms, setPlatforms] = React.useState(() => PLATFORMS.map((p) => ({ ...p, selected: false })));
   const [defaults, setDefaults] = React.useState(DEFAULT_TARGETS);
   const [sheetOpen, setSheetOpen] = React.useState(false);
@@ -69,12 +72,11 @@ function App() {
 
   const openScope = (k) => { setScope(k); setView("library"); setQuery(""); };
   const openQueue = () => setView("queue");
-  const openPost = (id) => { setEditingId(id); setPreviewId(null); setView("editor"); };
-  const openPreview = (id) => setPreviewId(id);
+  const openPost = (id) => { setEditingId(id); setView("editor"); };
 
   const newPost = (type) => {
     const id = "p" + Date.now();
-    const base = { id, type, updated: "09-12 " + nowTime().slice(0, 5), title: "", body: "" };
+    const base = { id, type, updated: "09-12 " + nowTime().slice(0, 5), title: "", body: "", bodyHtml: "" };
     if (type === "image") base.images = [asset("#D52088"), asset("#FD8D11"), asset("#2C6FF0")];
     if (type === "video") base.duration = "00:00";
     if (type === "audio") { base.duration = "00:00"; base.durationSec = 60; }
@@ -97,7 +99,6 @@ function App() {
   const deletePost = (id) => {
     setPosts((ps) => ps.filter((p) => p.id !== id));
     if (editingId === id) { setEditingId(null); setView("library"); }
-    if (previewId === id) setPreviewId(null);
   };
 
   const togglePlatform = (id) => {
@@ -155,7 +156,6 @@ function App() {
   );
   const runningCount = tasks.filter((t) => t.status === "running").length;
   const editing = posts.find((p) => p.id === editingId);
-  const previewing = posts.find((p) => p.id === previewId);
 
   return (
     <div className="m-app">
@@ -181,7 +181,6 @@ function App() {
               sort={sort}
               runningIds={runningIds}
               onOpen={openPost}
-              onPreview={openPreview}
               onDelete={deletePost}
               onNew={newPost}
               onQuery={setQuery}
@@ -244,14 +243,6 @@ function App() {
           onAcquire={acquireDefault}
           onReacquire={reacquireAccount}
           onClose={() => setSettingsOpen(false)}
-        />
-      )}
-
-      {previewing && (
-        <PreviewModal
-          post={previewing}
-          onClose={() => setPreviewId(null)}
-          onEdit={() => openPost(previewing.id)}
         />
       )}
 

@@ -182,19 +182,11 @@ function ViewHead({ title, meta, query, onQuery, sort, onSort, scope, onNew, onN
   );
 }
 
-/* ---------- 行内动作：预览按需唤起；删除要点一次确认 ---------- */
-function RowActions({ post, onPreview, onDelete, solid }) {
+/* ---------- 行内动作：删除要点一次确认 ---------- */
+function RowActions({ post, onDelete, solid }) {
   const [confirming, setConfirming] = React.useState(false);
   return (
     <div className={solid ? "w-tileacts" : "w-rowacts"}>
-      <button
-        className="w-icon"
-        title="预览发布后的样子"
-        aria-label={"预览 " + (post.title || "未命名")}
-        onClick={(e) => { e.stopPropagation(); onPreview(post.id); }}
-      >
-        <IcEye size={13} />
-      </button>
       <button
         className={"w-icon" + (confirming ? " confirm" : "")}
         title={confirming ? "再点一次删除" : "删除这篇稿子"}
@@ -213,9 +205,9 @@ function RowActions({ post, onPreview, onDelete, solid }) {
 }
 
 /* ---------- 行：文章、音频，以及「全部稿子」里的任意类型 ---------- */
-function PostRow({ post, showKind, live, onOpen, onPreview, onDelete }) {
+function PostRow({ post, showKind, live, onOpen, onDelete }) {
   const t = TYPES[post.type];
-  const excerpt = post.body.split("\n").filter(Boolean)[0] || "";
+  const excerpt = plainSummary(post.body);
   return (
     <article
       className="w-row"
@@ -241,13 +233,13 @@ function PostRow({ post, showKind, live, onOpen, onPreview, onDelete }) {
           ? <span className="w-dur" style={{ color: t.color }}><IcPlay size={8} /> {post.duration}</span>
           : <span>{post.images ? post.images.length + " 图 · " : ""}{post.body.length} 字</span>}
       </div>
-      <RowActions post={post} onPreview={onPreview} onDelete={onDelete} />
+      <RowActions post={post} onDelete={onDelete} />
     </article>
   );
 }
 
 /* ---------- 格子：贴图用拼贴封面，视频用 16:9 封面 ---------- */
-function ImageTile({ post, onOpen, onPreview, onDelete, dnd }) {
+function ImageTile({ post, onOpen, onDelete, dnd }) {
   const imgs = post.images || [];
   const cells = [0, 1, 2, 3].map((i) => imgs[i % Math.max(imgs.length, 1)]);
   const cls = "w-tile"
@@ -269,7 +261,7 @@ function ImageTile({ post, onOpen, onPreview, onDelete, dnd }) {
           {cells.map((im, i) => (<i key={i} style={{ background: im ? im.color : "#E4E0D4" }}></i>))}
           <span className="w-count">{imgs.length} 张</span>
         </div>
-        <RowActions post={post} onPreview={onPreview} onDelete={onDelete} solid />
+        <RowActions post={post} onDelete={onDelete} solid />
       </div>
       <div className="w-tilemain">
         <h3 className="w-tiletitle">{post.title || "未命名稿子"}</h3>
@@ -282,7 +274,7 @@ function ImageTile({ post, onOpen, onPreview, onDelete, dnd }) {
   );
 }
 
-function VideoTile({ post, onOpen, onPreview, onDelete }) {
+function VideoTile({ post, onOpen, onDelete }) {
   return (
     <article className="w-tile" tabIndex={0} role="button" onClick={() => onOpen(post.id)} onKeyDown={(e) => { if (e.key === "Enter") onOpen(post.id); }}>
       <div className="w-coverwrap">
@@ -291,7 +283,7 @@ function VideoTile({ post, onOpen, onPreview, onDelete }) {
           <span className="tri"></span>
           <span className="dur">{post.duration || "00:00"}</span>
         </div>
-        <RowActions post={post} onPreview={onPreview} onDelete={onDelete} solid />
+        <RowActions post={post} onDelete={onDelete} solid />
       </div>
       <div className="w-tilemain">
         <h3 className="w-tiletitle">{post.title || "未命名稿子"}</h3>
@@ -305,7 +297,7 @@ function VideoTile({ post, onOpen, onPreview, onDelete }) {
 }
 
 /* ---------- 主视图 ---------- */
-function LibraryView({ scope, posts, query, sort, runningIds, onOpen, onPreview, onDelete, onNew, onQuery, onSort, onReorder }) {
+function LibraryView({ scope, posts, query, sort, runningIds, onOpen, onDelete, onNew, onQuery, onSort, onReorder }) {
   const t = scope === "all" ? null : TYPES[scope];
   const counts = React.useMemo(() => {
     const c = { article: 0, image: 0, video: 0, audio: 0 };
@@ -383,8 +375,7 @@ function LibraryView({ scope, posts, query, sort, runningIds, onOpen, onPreview,
                   showKind={showKind}
                   live={runningIds.indexOf(p.id) >= 0}
                   onOpen={onOpen}
-                  onPreview={onPreview}
-                  onDelete={onDelete}
+                                    onDelete={onDelete}
                 />
               ))}
             </div>
@@ -392,8 +383,8 @@ function LibraryView({ scope, posts, query, sort, runningIds, onOpen, onPreview,
           {grid && (
             <div className={"w-grid" + (dnd.dragId ? " reordering" : "")} ref={dnd.gridRef}>
               {shown.map((p) => (p.type === "video"
-                ? <VideoTile key={p.id} post={p} onOpen={onOpen} onPreview={onPreview} onDelete={onDelete} />
-                : <ImageTile key={p.id} post={p} onOpen={onOpen} onPreview={onPreview} onDelete={onDelete} dnd={orderable ? dnd : null} />))}
+                ? <VideoTile key={p.id} post={p} onOpen={onOpen} onDelete={onDelete} />
+                : <ImageTile key={p.id} post={p} onOpen={onOpen} onDelete={onDelete} dnd={orderable ? dnd : null} />))}
             </div>
           )}
         </div>

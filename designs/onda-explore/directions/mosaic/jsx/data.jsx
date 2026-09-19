@@ -19,13 +19,18 @@ const PALETTE = ["#2C6FF0", "#D52088", "#FD8D11", "#0EC3D4", "#07B56F", "#16130E
  *  · 小红书 —— 图文笔记 / 视频笔记 / 长文笔记（内置长文编辑器，约 6000 字）；无独立音频发布
  *  · 微博 —— 文字 + 多图 + 视频同帖；音频需转成视频，官方不支持直发音频
  *  · 即刻 —— 动态文字 / 图片 / 视频 / 音乐链接分享；不能上传音频文件
- *  · X —— 推文文字 / 图片 / 视频 / 语音推文（140 秒）
+ *  · X —— 推文文字 / 图片 / 视频（语音推文只有 140 秒，音频出口不放在这里）
  *  · B站 —— 视频投稿 / 专栏文章 / 动态图文；音频分区已停止投稿（改为 BGM 投稿）
  *  · 知乎 —— 文章（专栏）/ 想法（图文）/ 视频；官方不支持上传音频
  *  · 豆瓣 —— 日记（长文）/ 广播与相册（图文）；不支持直发视频与音频
- *  · 头条号 —— 创作栏含 文章 / 视频 / 微头条 / 问答 / 音频，图集走文章发布
- *  · 百家号 —— 图文 / 图集 / 视频 / 动态 / 直播 / 音频 全形态
+ *  · 头条号 —— 创作栏含 文章 / 视频 / 微头条 / 问答（自家也有音频，但音频出口统一交给播客平台）
+ *  · 百家号 —— 图文 / 图集 / 视频 / 动态 / 直播（同上：音频不列）
  *  · 抖音 —— 视频 / 图文；2025 年底上线长图文（文章，最多 8000 字、30 图）；音频只作背景音
+ *  · 小宇宙 / 喜马拉雅 / 荔枝播客 / 蜻蜓FM —— 音频出口：收声音（喜马拉雅在自家后台另有视频形态，
+ *    但对本工作台只当音频目的地用），因此 supports 只写 audio
+ *
+ * 一条产品判断：音频＝播客，所以「audio」只留给播客平台与微信公众号（语音），
+ * 综合平台的音频能力（X 语音推文、头条音频、百家号音频）不在这里当出口。
  *
  * state：账号凭据的获取状态 —— ok = 已获取，fail = 获取失败（可重新获取）
  * account：拿到的是哪个账号 —— 「已获取」本身说明不了会发到哪儿，
@@ -45,18 +50,27 @@ const PLATFORMS = [
     account: { name: "九漾", kind: "个人号", uid: "即刻 ID 9A3F7C", until: "2026-10-20", checked: "09-14 11:03", lands: "直接发一条动态" } },
   { id: "bili",      name: "B站",        char: "B",  color: "#00A1D6", state: "fail", link: "www.bilibili.com/video/",    supports: ["article", "image", "video"],
     account: null, accountError: "登录态已过期（08-30 失效），需要重新登录 B站 账号" },
-  { id: "x",         name: "X",          char: "X",  color: "#16130E", state: "fail", link: "x.com/i/status/",            supports: ["article", "image", "video", "audio"],
+  { id: "x",         name: "X",          char: "X",  color: "#16130E", state: "fail", link: "x.com/i/status/",            supports: ["article", "image", "video"],
     account: null, accountError: "授权被平台撤销，需要重新登录 X 账号" },
   { id: "zhihu",     name: "知乎",       char: "知", color: "#0084FF", state: "ok",   link: "zhuanlan.zhihu.com/p/",      supports: ["article", "image", "video"],
     account: { name: "九漾 Onda", kind: "机构号授权", uid: "zhuanlan.zhihu.com/people/onda", until: "2026-12-08", checked: "09-16 08:30", lands: "存成一篇专栏草稿，发布按钮在知乎后台" } },
   { id: "douban",    name: "豆瓣",       char: "豆", color: "#2E963D", state: "ok",   link: "www.douban.com/note/",       supports: ["article", "image"],
     account: { name: "九漾", kind: "个人号", uid: "豆瓣 ID 197364821", until: "2026-11-11", checked: "09-13 19:22", lands: "直接发成一篇日记" } },
-  { id: "toutiao",   name: "头条号",     char: "头", color: "#F04142", state: "ok",   link: "www.toutiao.com/article/",   supports: ["article", "image", "video", "audio"],
+  { id: "toutiao",   name: "头条号",     char: "头", color: "#F04142", state: "ok",   link: "www.toutiao.com/article/",   supports: ["article", "image", "video"],
     account: { name: "九漾 Onda", kind: "头条号", uid: "头条号 ID 1736…", until: "2026-12-20", checked: "09-16 10:15", lands: "进创作栏草稿，需要你手动点发布" } },
-  { id: "baijiahao", name: "百家号",     char: "百", color: "#2932E1", state: "ok",   link: "baijiahao.baidu.com/s?id=",  supports: ["article", "image", "video", "audio"],
+  { id: "baijiahao", name: "百家号",     char: "百", color: "#2932E1", state: "ok",   link: "baijiahao.baidu.com/s?id=",  supports: ["article", "image", "video"],
     account: { name: "九漾Onda", kind: "百家号", uid: "百家号 ID 9f3c…", until: "2027-02-01", checked: "09-16 10:20", lands: "直接发布，发完能在百家号后台撤下" } },
   { id: "douyin",    name: "抖音",       char: "抖", color: "#25F4EE", fg: "#16130E", state: "ok", link: "www.douyin.com/video/", supports: ["article", "image", "video"],
     account: { name: "九漾 Onda", kind: "企业号", uid: "抖音号 onda2026", until: "2026-10-05", checked: "09-12 16:40", lands: "传成草稿，发布要你在抖音 App 里点" } },
+  /* 四个音频出口：只收声音，不收图文/视频 —— 音频稿的发布面就是靠它们撑起来的 */
+  { id: "xiaoyuzhou", name: "小宇宙",    char: "宇", color: "#6E4AFF", state: "ok",   link: "www.xiaoyuzhoufm.com/episode/", supports: ["audio"],
+    account: { name: "九漾电台", kind: "播客", uid: "小宇宙 ID onda", until: "2027-03-01", checked: "09-16 11:02", lands: "单集进草稿，发布要你去小宇宙创作者后台点一次" } },
+  { id: "ximalaya",  name: "喜马拉雅",   char: "喜", color: "#F86442", state: "ok",   link: "www.ximalaya.com/sound/",       supports: ["audio"],
+    account: { name: "九漾 Onda", kind: "主播号", uid: "喜马拉雅 ID 3f9c…", until: "2026-12-15", checked: "09-16 11:05", lands: "上传成一条声音，审核通过后才对外可见" } },
+  { id: "lizhi",     name: "荔枝播客",     char: "荔", color: "#D6336C", state: "ok",   link: "www.lizhi.fm/",                supports: ["audio"],
+    account: { name: "九漾电台", kind: "播客号", uid: "荔枝 ID lz8823", until: "2026-11-20", checked: "09-16 11:08", lands: "进草稿箱，发布要你去荔枝后台点" } },
+  { id: "qingting",  name: "蜻蜓FM",     char: "蜻", color: "#1FA2E0", state: "ok",   link: "www.qtfm.cn/programs/",        supports: ["audio"],
+    account: { name: "九漾 Onda", kind: "主播号", uid: "蜻蜓 ID qtf_39a2", until: "2027-01-08", checked: "09-16 11:12", lands: "直接发成一条声音" } },
 ];
 
 /** 这个平台收不收这种稿子 */
@@ -80,7 +94,7 @@ const DEFAULT_TARGETS = {
   article: ["wechat", "xhs"],
   image: ["xhs", "jike"],
   video: ["douyin", "bili"],
-  audio: ["wechat", "toutiao"],
+  audio: ["wechat"],
 };
 
 /* 发布成功后的回执链接 */

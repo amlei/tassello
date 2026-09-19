@@ -10,22 +10,6 @@ function MosaicLogo({ size = 11 }) {
   );
 }
 
-/* 把文本切成片段：#标签 用类型色高亮，插图记号用浅灰（纯着色，不动字重，避免光标跑位） */
-function tagNodes(text, color, keyPrefix = "t") {
-  if (!text) return null;
-  const parts = text.split(/(#[^\s#，。！？；：,.!?;:]+|!\[[^\]]*\]\(asset:\/\/[^)]+\))/g);
-  return parts.map((p, i) => {
-    if (!p) return null;
-    if (p.charAt(0) === "#") {
-      return <span key={keyPrefix + i} className="tag" style={{ color, background: color + "1A" }}>{p}</span>;
-    }
-    if (p.slice(0, 2) === "![") {
-      return <span key={keyPrefix + i} className="mdimg">{p}</span>;
-    }
-    return <React.Fragment key={keyPrefix + i}>{p}</React.Fragment>;
-  });
-}
-
 function fmtTime(sec) {
   const m = Math.floor(sec / 60), s = Math.floor(sec % 60);
   return String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
@@ -77,4 +61,150 @@ function FloatingPill({ tasks, onClick }) {
   );
 }
 
-Object.assign(window, { MosaicLogo, tagNodes, fmtTime, AudioBar, FloatingPill });
+/* 正文里的插图记号：独占一行时在预览里落成一张图，在列表里要跳过 */
+const ASSET_IMG_RE = /^!\[([^\]]*)\]\(asset:\/\/([^)]+)\)$/;
+
+/* 列表摘要：跳过插图记号和空行，取第一段真正的文字 */
+function plainSummary(body) {
+  const lines = (body || "").split("\n").map((s) => s.trim()).filter(Boolean);
+  return lines.find((l) => !ASSET_IMG_RE.test(l)) || "";
+}
+
+/* ---------- 正文：文字稿的两种形态 ----------
+   存储上正文是纯文本（body，列表摘要/搜索/字数都用它），
+   编辑与预览用的是它的富文本形态（bodyHtml）—— 一份内容，两个视图。 */
+
+function escHtml(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/* #标签 包成 span（颜色随内容类型），字号字重都不动 */
+function wrapTags(escaped, color) {
+  return escaped.replace(/(#[^\s#，。！？；：,.!?;:]+)/g, (m) =>
+    '<span class="m-tag" style="color:' + color + ";background:" + color + '1A">' + m + "</span>");
+}
+
+/* 正文里的图块：在编辑器里是 figure（不可编辑），在预览里是同一份 HTML */
+function figHtml(id, alt, color) {
+  return '<figure class="m-fig" contenteditable="false" data-asset="' + id + '" data-alt="' + escHtml(alt || "配图") +
+    '" style="background:' + color + '"><span class="m-fig-lb">' + escHtml(alt || "配图") +
+    '</span><button type="button" class="m-fig-del" aria-label="移除这张图">×</button></figure>';
+}
+
+/* 纯文本正文 → HTML：段落 + #标签 + 独占一行的插图 */
+function mdToHtml(body, color, assets) {
+  const list = assets || [];
+  const out = [];
+  let buf = [];
+  const flush = () => {
+    if (!buf.length) return;
+    out.push("<p>" + buf.map((l) => wrapTags(escHtml(l), color)).join("<br>") + "</p>");
+    buf = [];
+  };
+  (body || "").split("\n").forEach((line) => {
+    const m = line.trim().match(ASSET_IMG_RE);
+    if (m) {
+      flush();
+      const im = list.find((x) => x.id === m[2]);
+      out.push(figHtml(m[2], m[1] || "配图", im ? im.color : "#E4E0D4"));
+    } else if (!line.trim()) {
+      flush();
+    } else {
+      buf.push(line);
+    }
+  });
+  flush();
+  return out.join("");
+}
+
+/* contenteditable 里的 DOM → 纯文本正文（段落之间空一行，图还原成 asset 引用） */
+function htmlToPlain(root) {
+  const blocks = [];
+  Array.from(root.childNodes).forEach((node) => {
+    if (node.nodeType === 1 && node.classList && node.classList.contains("m-fig")) {
+      blocks.push("![" + (node.getAttribute("data-alt") || "配图") + "](asset://" + node.getAttribute("data-asset") + ")");
+      return;
+    }
+    const text = (node.innerText != null ? node.innerText : node.textContent || "").replace(/\n{3,}/g, "\n\n").trim();
+    if (text) blocks.push(text);
+  });
+  return blocks.join("\n\n");
+}
+
+/* 把 root 里还没高亮的 #标签 包起来（跑在克隆体上，不动正在编辑的 DOM） */
+function highlightTags(root, color) {
+  const test = /#[^\s#，。！？；：,.!?;:]+/;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+  const nodes = [];
+  while (walker.nextNode()) {
+    const n = walker.currentNode;
+    const host = n.parentNode;
+    if (!host || (host.closest && host.closest(".m-tag, a, code, .m-fig"))) continue;
+    if (test.test(n.nodeValue)) nodes.push(n);
+  }
+  nodes.forEach((n) => {
+    const frag = document.createDocumentFragment();
+    n.nodeValue.split(/(#[^\s#，。！？；：,.!?;:]+)/g).forEach((part) => {
+      if (!part) return;
+      if (part.charAt(0) === "#") {
+        const span = document.createElement("span");
+        span.className = "m-tag";
+        span.style.color = color;
+        span.style.background = color + "1A";
+        span.textContent = part;
+        frag.appendChild(span);
+      } else {
+        frag.appendChild(document.createTextNode(part));
+      }
+    });
+    n.parentNode.replaceChild(frag, n);
+  });
+}
+
+/* 行内 Markdown：**加粗** / ~~删除线~~ / *斜体*，在克隆体上做，同样不动正在编辑的 DOM */
+function markdownifyInline(root) {
+  const rules = [
+    { re: /\*\*([^*\n]+)\*\*/g, tag: "b" },
+    { re: /~~([^~\n]+)~~/g, tag: "s" },
+    { re: /\*([^*\n]+)\*/g, tag: "i" },
+  ];
+  rules.forEach((rule) => {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+    const hits = [];
+    while (walker.nextNode()) {
+      const n = walker.currentNode;
+      const host = n.parentNode;
+      if (!host || (host.closest && host.closest("b, i, s, a, code, .m-tag, .m-fig"))) continue;
+      if (rule.re.test(n.nodeValue)) { rule.re.lastIndex = 0; hits.push(n); }
+      rule.re.lastIndex = 0;
+    }
+    hits.forEach((n) => {
+      const frag = document.createDocumentFragment();
+      let last = 0;
+      n.nodeValue.replace(rule.re, (m, inner, offset) => {
+        if (offset > last) frag.appendChild(document.createTextNode(n.nodeValue.slice(last, offset)));
+        const el = document.createElement(rule.tag);
+        el.textContent = inner;
+        frag.appendChild(el);
+        last = offset + m.length;
+        return m;
+      });
+      if (last < n.nodeValue.length) frag.appendChild(document.createTextNode(n.nodeValue.slice(last)));
+      n.parentNode.replaceChild(frag, n);
+    });
+  });
+}
+
+/* 序列化：html 给预览与下次打开用，plain 给列表摘要、搜索与字数用 */
+function serializeBody(root, color) {
+  const clone = root.cloneNode(true);
+  highlightTags(clone, color);
+  markdownifyInline(clone);
+  return { html: clone.innerHTML, plain: htmlToPlain(root) };
+}
+
+Object.assign(window, {
+  MosaicLogo, fmtTime, AudioBar, FloatingPill, ASSET_IMG_RE, plainSummary,
+  mdToHtml, figHtml, htmlToPlain, highlightTags, serializeBody,
+  markdownifyInline,
+});

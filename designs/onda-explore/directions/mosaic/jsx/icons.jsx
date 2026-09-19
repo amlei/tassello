@@ -95,16 +95,6 @@ function IcSearch({ size = 14 }) {
   );
 }
 
-/* 预览：行内的「看一眼」，唤起弹窗而不是常驻侧栏 */
-function IcEye({ size = 14 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M1.4 8S4 3.6 8 3.6 14.6 8 14.6 8 12 12.4 8 12.4 1.4 8 1.4 8z" />
-      <circle cx="8" cy="8" r="2.1" />
-    </svg>
-  );
-}
-
 /* 排序：上短下长的双箭头，表示「按时间排」而不是「筛掉一部分」 */
 function IcSort({ size = 14 }) {
   return (
@@ -137,7 +127,126 @@ function IcAlert({ size = 13 }) {
   );
 }
 
+/* ---------- 编辑工具栏：一排 icon，没有文字 ---------- */
+function IcFormatHeading({ size = 17 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4.6 3.6v10.8M13.4 3.6v10.8M4.6 9h8.8" />
+    </svg>
+  );
+}
+
+/* B / I / U / S：图标本身要长得像那个格式 —— 斜体是斜的，下划线底下有线 */
+function IcFormatBold({ size = 17 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 18 18">
+      <text x="9" y="13.4" textAnchor="middle" fontFamily="var(--font)" fontSize="13.5" fontWeight="800" fill="currentColor">B</text>
+    </svg>
+  );
+}
+function IcFormatItalic({ size = 17 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
+      <path d="M7.2 4.2h4.4M6.4 13.8h4.4M10.6 4.2 7.4 13.8" />
+    </svg>
+  );
+}
+function IcFormatUnderline({ size = 17 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 18 18">
+      <text x="9" y="12.4" textAnchor="middle" fontFamily="var(--font)" fontSize="13.5" fontWeight="700" fill="currentColor">U</text>
+      <path d="M4.6 15.6h8.8" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
+    </svg>
+  );
+}
+function IcFormatStrike({ size = 17 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 18 18">
+      <text x="9" y="13.4" textAnchor="middle" fontFamily="var(--font)" fontSize="13.5" fontWeight="700" fill="currentColor">S</text>
+      <path d="M4.4 9.1h9.2" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+    </svg>
+  );
+}
+/* 标题下拉的小三角 */
+function IcCaret({ size = 9 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 10 10" fill="currentColor">
+      <path d="M5 7.4 1.4 3.2h7.2L5 7.4Z" />
+    </svg>
+  );
+}
+function IcFormatQuote({ size = 17 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 18 18" fill="currentColor">
+      <path d="M6.5 4.4c-2 1-3.3 2.7-3.3 4.7 0 1.7 1 2.8 2.4 2.8 1.2 0 2.1-.8 2.1-2 0-1.1-.8-1.9-1.9-1.9h-.3c.3-.9 1-1.6 2-2.1l-1-1.5Zm7 0c-2 1-3.3 2.7-3.3 4.7 0 1.7 1 2.8 2.4 2.8 1.2 0 2.1-.8 2.1-2 0-1.1-.8-1.9-1.9-1.9h-.3c.3-.9 1-1.6 2-2.1l-1-1.5Z" />
+    </svg>
+  );
+}
+function IcFormatListUl({ size = 17 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+      <path d="M6.8 4.6h8M6.8 9h8M6.8 13.4h8" />
+      <circle cx="3.4" cy="4.6" r="1.15" fill="currentColor" stroke="none" />
+      <circle cx="3.4" cy="9" r="1.15" fill="currentColor" stroke="none" />
+      <circle cx="3.4" cy="13.4" r="1.15" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+function IcFormatListOl({ size = 17 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 18 18" fill="none">
+      <path d="M7.2 4.6h7.6M7.2 9h7.6M7.2 13.4h7.6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <text x="1.3" y="6.3" fontSize="5" fontFamily="ui-monospace, monospace" fill="currentColor">1</text>
+      <text x="1.3" y="10.7" fontSize="5" fontFamily="ui-monospace, monospace" fill="currentColor">2</text>
+      <text x="1.3" y="15.1" fontSize="5" fontFamily="ui-monospace, monospace" fill="currentColor">3</text>
+    </svg>
+  );
+}
+function IcFormatDivider({ size = 17 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
+      <path d="M2.6 9h3.1M7.45 9h3.1M12.3 9h3.1" />
+    </svg>
+  );
+}
+function IcFormatLink({ size = 17 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M7.6 10.4a3 3 0 0 0 4.2 0l2-2a3 3 0 0 0-4.2-4.2l-1 1" />
+      <path d="M10.4 7.6a3 3 0 0 0-4.2 0l-2 2a3 3 0 0 0 4.2 4.2l1-1" />
+    </svg>
+  );
+}
+function IcFormatImage({ size = 17 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round">
+      <rect x="2.4" y="3.6" width="13.2" height="10.8" rx="2.4" />
+      <circle cx="6.5" cy="7.2" r="1.3" />
+      <path d="M3.4 12.9 7 9.6l2.5 2.2 2.3-2.2 2.8 2.7" strokeLinecap="round" />
+    </svg>
+  );
+}
+function IcFormatUndo({ size = 17 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 8.6h6.2a3.4 3.4 0 1 1 0 6.8H7.2" />
+      <path d="M6.8 5.4 3.4 8.6l3.4 3.2" />
+    </svg>
+  );
+}
+function IcFormatRedo({ size = 17 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 8.6H7.8a3.4 3.4 0 1 0 0 6.8h3" />
+      <path d="M11.2 5.4l3.4 3.2-3.4 3.2" />
+    </svg>
+  );
+}
+
 Object.assign(window, {
   IcArrowLeft, IcPlus, IcCheck, IcX, IcPlay, IcPause, IcRetry, IcSend, IcClock, IcLinkOut, IcChevron,
-  IcSearch, IcEye, IcSort, IcSettings, IcAlert,
+  IcSearch, IcSort, IcSettings, IcAlert,
+  IcFormatHeading, IcFormatQuote, IcFormatListUl, IcFormatListOl, IcFormatDivider,
+  IcFormatLink, IcFormatImage, IcFormatUndo, IcFormatRedo,
+  IcFormatBold, IcFormatItalic, IcFormatUnderline, IcFormatStrike, IcCaret,
 });
