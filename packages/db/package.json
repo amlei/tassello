@@ -1,0 +1,18 @@
+{
+  "devDependencies": {
+    "prisma": "^7.10.0"
+  },
+  "name": "@tassello/db",
+  "type": "module",
+  "private": true,
+  "dependencies": {
+    "@libsql/client": "^0.18.0",
+    "@prisma/adapter-libsql": "^7.10.0",
+    "@prisma/client": "^7.10.0"
+  },
+  "types": "./src/index.ts",
+  "main": "./src/index.ts",
+  "files": [
+    "src"
+  ]
+}

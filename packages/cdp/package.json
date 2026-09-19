@@ -1,0 +1,15 @@
+{
+  "devDependencies": {},
+  "name": "@tassello/cdp",
+  "type": "module",
+  "private": true,
+  "dependencies": {},
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts",
+  "main": "./src/index.ts",
+  "files": [
+    "src"
+  ]
+}

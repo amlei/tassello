@@ -1,0 +1,13 @@
+{
+  "name": "@tassello/desktop",
+  "type": "module",
+  "private": true,
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "bun build src/main.ts src/preload.ts --outdir dist --target node",
+    "desktop": "bun run build && electron dist/main.js"
+  },
+  "devDependencies": {
+    "electron": "^39.2.0"
+  }
+}

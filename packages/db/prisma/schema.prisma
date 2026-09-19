@@ -1,0 +1,81 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// 稿子不挂发布状态字段，发布事实只在 PublishTask（与原型判断一致）
+model Post {
+  id          String   @id @default(cuid())
+  type        String // article | image | video | audio
+  title       String   @default("")
+  body        String   @default("") // 纯文本（列表摘要/搜索/字数）
+  bodyHtml    String   @default("") // 富文本（编辑与预览）
+  durationSec Int? // 视频/音频时长（秒）
+  manualOrder Int      @default(0) // 「自定义顺序」排序档
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  assets      Asset[]
+}
+
+model Asset {
+  id     String @id
+  postId String
+  post   Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
+  kind   String // image | video | audio | file
+  path   String @default("") // 空路径 = 占位素材（meta.color 色块）
+  order  Int    @default(0)
+  meta   String @default("{}")
+}
+
+model PlatformAccount {
+  id            String    @id @default(cuid())
+  platformId    String
+  state         String    @default("fail") // ok | fail —— 最近一次 verify 结果
+  failReason    String?
+  name          String?
+  uid           String?
+  avatarUrl     String?
+  authExpiresAt DateTime?
+  lastCheckedAt DateTime?
+  lands         String?
+  credentialRef String? // safeStorage/SecretBox 密文引用；机密绝不进 profile
+  profile       String    @default("{}") // 平台私有 JSON，schema 归平台包所有
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model PublishTask {
+  id         String    @id @default(cuid())
+  postId     String
+  platformId String
+  accountUid String? // 发布时账号快照（无外键）
+  status     String    @default("queued") // queued | running | success | failed
+  stage      Int       @default(0) // 0渲染排版 1上传素材 2填充编辑器 3人工确认
+  progress   Int       @default(0)
+  failReason String?
+  url        String?
+  createdAt  DateTime  @default(now())
+  finishedAt DateTime?
+
+  @@index([postId])
+  @@index([status])
+}
+
+model PublishLog {
+  id          String   @id @default(cuid())
+  taskId      String
+  event       String
+  payloadJson String   @default("{}")
+  at          DateTime @default(now())
+
+  @@index([taskId])
+}
+
+model Setting {
+  key       String @id
+  valueJson String
+}

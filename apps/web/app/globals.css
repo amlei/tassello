@@ -1,0 +1,409 @@
+@import "tailwindcss";
+
+/* HeroUI v3（必须在 tailwindcss 之后）。经 ./css 子路径取到 dist/index.css（default 条件，解析稳定） */
+@import "@heroui/styles/css";
+
+/* ==================================================================
+   方向 B · 中性工作台 —— HeroUI 语义变量覆盖（浅色 + 深色）
+   白底、发丝线、一个功能蓝；对比度整体降到久看舒适的区间。
+   ================================================================== */
+:root,
+[data-theme="light"] {
+  --background: #ffffff;
+  --foreground: #37352f;
+  --surface: #ffffff; /* 卡片 */
+  --surface-foreground: #37352f;
+  --surface-secondary: #fbfbfa; /* 侧栏 */
+  --surface-secondary-foreground: #37352f;
+  --surface-tertiary: #f4f3f1; /* hover 井 */
+  --surface-tertiary-foreground: #37352f;
+  --overlay: #ffffff; /* 菜单/弹层 */
+  --overlay-foreground: #37352f;
+  --muted: #aba9a4;
+  --default: #37352f;
+  --default-foreground: #37352f; /* ghost 按钮文字色：透明底上必须是深色 */
+  --field-background: #ffffff;
+  --field-foreground: #37352f;
+  --field-placeholder: #aba9a4;
+  --accent: #2383e2; /* 交互蓝：链接/焦点/主按钮，唯一强调色 */
+  --accent-foreground: #ffffff;
+  --success: #07b56f; /* 产品语义：绿 = 发布/成功 */
+  --success-foreground: #ffffff;
+  --danger: #c81e4e;
+  --danger-foreground: #ffffff;
+  --warning: #fd8d11;
+  --warning-foreground: #ffffff;
+  --segment: #f1f0ee;
+  --segment-foreground: #37352f;
+  --border: #edece9;
+  --separator: #edece9;
+  --focus: #2383e2;
+  --link: #2383e2;
+  --backdrop: rgba(15, 15, 15, 0.46);
+  --surface-shadow: 0 1px 2px rgba(15, 15, 15, 0.04);
+  --overlay-shadow: 0 14px 40px rgba(15, 15, 15, 0.14);
+  --field-shadow: 0 0 0 0 transparent inset;
+  --radius: 0.625rem;
+}
+
+[data-theme="dark"] {
+  --background: #191919;
+  --foreground: #e6e5e3;
+  --surface: #252525;
+  --surface-foreground: #e6e5e3;
+  --surface-secondary: #202020;
+  --surface-secondary-foreground: #e6e5e3;
+  --surface-tertiary: #2a2a2a;
+  --surface-tertiary-foreground: #e6e5e3;
+  --overlay: #252525;
+  --overlay-foreground: #e6e5e3;
+  --muted: #6f6e69;
+  --default: #e6e5e3;
+  --default-foreground: #191919; /* default 变体按钮文字（未使用）；ghost 文字走 text-ink */
+  --field-background: #252525;
+  --field-foreground: #e6e5e3;
+  --field-placeholder: #6f6e69;
+  --accent: #4a9ee8;
+  --accent-foreground: #ffffff;
+  --success: #2ea97c;
+  --success-foreground: #ffffff;
+  --danger: #e5484d;
+  --danger-foreground: #ffffff;
+  --warning: #fd8d11;
+  --warning-foreground: #191919;
+  --segment: #2f2f2f;
+  --segment-foreground: #e6e5e3;
+  --border: #2f2f2f;
+  --separator: #2f2f2f;
+  --focus: #4a9ee8;
+  --link: #4a9ee8;
+  --backdrop: rgba(0, 0, 0, 0.6);
+  --surface-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --overlay-shadow: 0 14px 40px rgba(0, 0, 0, 0.5);
+  --field-shadow: 0 0 0 0 transparent inset;
+  --radius: 0.625rem;
+}
+
+/* ---------- 设计 tokens：方向 B 色板（浅/深可翻转，结构同名） ---------- */
+:root {
+  --onda-bg: #ffffff;
+  --onda-rail: #fbfbfa;
+  --onda-card: #ffffff;
+  --onda-line: #edece9;
+  --onda-hover: #f4f3f1;
+  --onda-selected: #f1f0ee;
+  --onda-ink: #37352f;
+  --onda-ink2: #787672;
+  --onda-ink3: #aba9a4;
+  --onda-accent: #2383e2;
+  --onda-accent-tint: #e9f3fb;
+}
+[data-theme="dark"] {
+  --onda-bg: #191919;
+  --onda-rail: #202020;
+  --onda-card: #252525;
+  --onda-line: #2f2f2f;
+  --onda-hover: #2a2a2a;
+  --onda-selected: #2f2f2f;
+  --onda-ink: #e6e5e3;
+  --onda-ink2: #9b9a97;
+  --onda-ink3: #6f6e69;
+  --onda-accent: #4a9ee8;
+  --onda-accent-tint: #20304a;
+}
+@theme inline {
+  /* 内容类型色：保留，只出现在小面积（方块/chip） */
+  --color-blue: #2c6ff0;
+  --color-magenta: #d52088;
+  --color-orange: #fd8d11;
+  --color-cyan: #0ec3d4;
+  --color-green: #07b56f;
+  /* 错误色只有一种：所有「出问题」的信号都归它，橙色因此回归成纯内容色（视频） */
+  --color-error: #c81e4e;
+
+  /* 骨架灰阶：三档中性灰 + 结构色，随主题翻转 */
+  --color-ink: var(--onda-ink);
+  --color-ink2: var(--onda-ink2);
+  --color-ink3: var(--onda-ink3);
+  --color-paper: var(--onda-bg);
+  --color-card: var(--onda-card);
+  --color-rail: var(--onda-rail);
+  --color-line: var(--onda-line);
+  --color-hover: var(--onda-hover);
+  --color-selected: var(--onda-selected);
+  --color-accent: var(--onda-accent);
+  --color-accent-tint: var(--onda-accent-tint);
+
+  --font-sans: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --animate-pulse-soft: m-pulse 0.8s infinite;
+  --animate-pulse-live: m-pulse 1.1s infinite;
+  --animate-fade: m-fade 0.18s ease-out;
+  --animate-pop: m-pop 0.16s ease-out;
+  --animate-rise: m-rise 0.3s cubic-bezier(0.2, 0.8, 0.3, 1.2);
+  --animate-q-wave: q-wave 3.6s ease-in-out infinite;
+}
+
+@keyframes m-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+@keyframes m-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes m-pop {
+  from { opacity: 0; transform: scale(0.92) translateY(10px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+@keyframes m-rise {
+  from { opacity: 0; transform: translateX(-50%) translateY(24px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+@keyframes q-wave {
+  0%, 100% { transform: translateX(-3%); }
+  50% { transform: translateX(3%); }
+}
+
+/* 方向 B：菜单项 hover 用浅灰井，不用 HeroUI 默认的墨色反差（与原型 .w-newpop-item:hover 一致） */
+.menu-item:hover,
+.menu-item[data-hovered="true"] {
+  background-color: var(--color-hover);
+}
+
+/* ---------- base ---------- */
+@layer base {
+  html,
+  body {
+    height: 100%;
+  }
+  body {
+    margin: 0;
+    font-family: var(--font-sans);
+    background: var(--color-paper);
+    color: var(--color-ink);
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+  button {
+    font-family: inherit;
+    cursor: pointer;
+  }
+  input,
+  textarea {
+    font-family: inherit;
+  }
+  ::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+  }
+  /* 拖动排序进行中：全局禁选中，光标保持抓取 */
+  body.w-dragging,
+  body.w-dragging * {
+    user-select: none;
+    cursor: grabbing;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation: none !important;
+      transition: none !important;
+    }
+  }
+}
+
+/* ---------- 可滚动区留一条细滚动条：看得见、够得着，而不是被无声裁掉 ---------- */
+@utility scroll-thin {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(22, 19, 14, 0.26) transparent;
+  &::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: rgba(22, 19, 14, 0.18);
+    border-radius: 99px;
+  }
+  &::-webkit-scrollbar-thumb:hover {
+    background: rgba(22, 19, 14, 0.32);
+  }
+}
+
+/* ==================================================================
+   序列化富文本：正文以 HTML 字符串出入（编辑器 + 预览共用同一份），
+   类名长在生成的内容里，无法改成 utilities，只能留在这层全局 CSS。
+   ================================================================== */
+
+/* 正文：一整块可编辑文档，图文同层 */
+.m-richbody {
+  position: relative;
+  margin-top: 22px;
+  min-height: 260px;
+  outline: none;
+  font-size: 17px;
+  line-height: 1.85;
+  color: var(--color-ink);
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+/* 占位文字浮在文字层之外：否则光标会被它挤到下一行，看着像错位 */
+.m-richbody:empty:before,
+.m-richbody.is-empty:before {
+  content: attr(data-placeholder);
+  position: absolute;
+  top: 0;
+  left: 0;
+  color: #c9c4b8;
+  pointer-events: none;
+}
+/* 输入法组字期间内容还没进 plain，is-empty 仍在 —— 占位符必须让位，否则压在组字串上 */
+.m-richbody.is-composing:before {
+  content: none;
+}
+.m-richbody p,
+.m-richbody > div {
+  margin: 0 0 14px;
+}
+.m-richbody h1 {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  line-height: 1.4;
+  margin: 24px 0 12px;
+}
+.m-richbody h2 {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+  line-height: 1.5;
+  margin: 22px 0 10px;
+}
+.m-richbody h3 {
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.55;
+  margin: 18px 0 8px;
+}
+.m-richbody blockquote {
+  margin: 0 0 14px;
+  padding: 2px 0 2px 14px;
+  border-left: 3px solid var(--color-ink);
+  color: var(--color-ink2);
+}
+.m-richbody ul,
+.m-richbody ol {
+  margin: 0 0 14px;
+  padding-left: 24px;
+}
+.m-richbody li {
+  margin-bottom: 4px;
+}
+.m-richbody hr {
+  border: none;
+  border-top: 2px solid var(--color-ink);
+  margin: 20px 0;
+}
+.m-richbody a {
+  color: var(--color-blue);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+/* 话题标签：行内色块，颜色由 JS 注入 style */
+.m-tag {
+  border-radius: 4px;
+}
+/* 正文里的配图：写的时候就是一张图，不是一个 markdown 记号 */
+.m-fig {
+  display: block;
+  position: relative;
+  width: min(100%, 340px);
+  aspect-ratio: 16/9;
+  border-radius: 12px;
+  margin: 4px 0 16px;
+  background: #e4e0d4;
+}
+.m-fig-lb {
+  position: absolute;
+  left: 10px;
+  bottom: 8px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.92);
+}
+.m-fig-del {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  border: 2px solid #fff;
+  background: rgba(22, 19, 14, 0.32);
+  color: #fff;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s, background 0.15s;
+}
+.m-fig:hover .m-fig-del {
+  opacity: 1;
+}
+.m-fig-del:hover {
+  background: var(--color-ink);
+}
+
+/* ---------- 手机预览：与编辑器同一份富文本，只换字号与间距 ---------- */
+.m-phone .m-richbody-phone p {
+  margin: 0 0 10px;
+}
+.m-phone .m-richbody-phone h1 {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.45;
+  margin: 16px 0 8px;
+}
+.m-phone .m-richbody-phone h2 {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.5;
+  margin: 14px 0 8px;
+}
+.m-phone .m-richbody-phone h3 {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.55;
+  margin: 12px 0 6px;
+}
+.m-phone .m-richbody-phone blockquote {
+  margin: 0 0 10px;
+  padding-left: 10px;
+  border-left: 2.5px solid #d8d3c6;
+  color: #5b554b;
+}
+.m-phone .m-richbody-phone ul,
+.m-phone .m-richbody-phone ol {
+  margin: 0 0 10px;
+  padding-left: 20px;
+}
+.m-phone .m-richbody-phone hr {
+  border: none;
+  border-top: 1.5px solid #eeece4;
+  margin: 14px 0;
+}
+.m-phone .m-richbody-phone a {
+  color: #2c6ff0;
+}
+.m-phone .m-richbody-phone .m-fig {
+  width: 100%;
+  max-width: none;
+  margin: 2px 0 10px;
+  border-radius: 10px;
+}
+.m-phone .m-fig-del {
+  display: none;
+}
