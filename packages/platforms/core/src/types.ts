@@ -54,20 +54,13 @@ export type VerifyResult<TProfile = unknown> = {
   authExpiresAt?: string | null;
 };
 
-export type AcquireResult<TProfile = unknown> = {
-  state: "ok" | "fail";
-  failReason?: string;
-  profile?: TProfile;
-};
-
 export interface PlatformAdapter<TProfile = unknown> {
   meta: PlatformMeta;
   account: {
     /** profile JSON 校验，schema 归平台包所有 */
     profileSchema: ZodType<TProfile>;
-    /** 登录/授权获取：CDP 平台打开登录页等用户操作；API 平台返回需要用户填的字段说明 */
-    acquire(ctx: AdapterCtx): Promise<AcquireResult<TProfile>>;
-    /** 校验：拿 profile → 派生展示字段 → 服务层写回 PlatformAccount */
+    /** 校验：拿 profile → 派生展示字段 → 服务层写回 PlatformAccount。
+     *  登录态来自导入的用户浏览器 Profile，应用内不承担登录 */
     verify(acct: AdapterAccount<TProfile>, ctx: AdapterCtx): Promise<VerifyResult<TProfile>>;
   };
   publish(

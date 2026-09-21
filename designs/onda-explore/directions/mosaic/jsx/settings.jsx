@@ -1,6 +1,47 @@
-/* settings.jsx — 设置：平台账号 + 各类型的默认发布平台
+/* settings.jsx — 设置：外观（主题色）+ 平台账号 + 各类型的默认发布平台
    原先摊在左栏底下的那份平台清单收进这里：出口是低频配置，
    不该占日常动线上的位置，也不该在左栏里长成第三个实体。 */
+
+const THEME_KEY = "onda-theme";
+
+/* 主题偏好：浅色 / 深色 / 跟随系统（默认系统）。
+   首屏防闪烁与系统跟随由 index.html 里的常驻脚本负责，这里只落偏好。 */
+function applyTheme(pref) {
+  const dark = pref === "dark" || (pref === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+  document.documentElement.dataset.theme = dark ? "dark" : "light";
+}
+function getThemePref() {
+  const v = localStorage.getItem(THEME_KEY);
+  return v === "light" || v === "dark" ? v : "system";
+}
+function ThemeSwitcher() {
+  const [pref, setPref] = React.useState(() => getThemePref());
+  const pick = (p) => {
+    setPref(p);
+    try { localStorage.setItem(THEME_KEY, p); } catch (e) {}
+    applyTheme(p);
+  };
+  const opts = [
+    { id: "light", label: "浅色" },
+    { id: "dark", label: "深色" },
+    { id: "system", label: "跟随系统" },
+  ];
+  return (
+    <div className="w-theme" role="radiogroup" aria-label="外观">
+      {opts.map((o) => (
+        <button
+          key={o.id}
+          role="radio"
+          aria-checked={pref === o.id}
+          className={pref === o.id ? "on" : ""}
+          onClick={() => pick(o.id)}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 /* 平台账号一行 = 一枚方块 + 平台名 + 「拿到的是哪个账号」。
    凭据详情不往下展开 —— 那会把下面的名单顶走、还让人丢失上下文；
@@ -17,7 +58,7 @@ function AccountRow({ p, active, onToggle }) {
     >
       <span className="w-sq" style={{ background: p.color, opacity: off ? 0.38 : 1 }}></span>
       <span className="w-acctname">{p.name}</span>
-      <span className="w-acctwho">{off ? "未连接账号" : (a ? a.name + " · " + a.kind : "")}</span>
+      <span className="w-acctwho">{off ? "未连接账号" : (a ? a.name : "")}</span>
       {off
         ? <span className="w-statchip bad">获取失败</span>
         : <span className="w-statchip ok">已获取</span>}
@@ -57,7 +98,7 @@ function AccountPop({ p, side, style, onReacquire, onClose }) {
           <div className="w-acctpop-acc">
             <span className="w-avatar" style={{ background: p.color, color: p.fg || "#fff" }} aria-hidden="true">{a.name.slice(0, 1)}</span>
             <div className="w-acctpop-who">
-              <div className="n">{a.name}<span className="w-acctkind">{a.kind}</span></div>
+              <div className="n">{a.name}</div>
               <div className="u">{a.uid}</div>
             </div>
           </div>
@@ -72,8 +113,6 @@ function AccountPop({ p, side, style, onReacquire, onClose }) {
 }
 
 function SettingsSheet({ platforms, defaults, onToggle, onAcquire, onReacquire, onClose }) {
-  const okCount = platforms.filter((p) => p.state === "ok").length;
-  const picked = TYPE_ORDER.reduce((n, k) => n + (defaults[k] || []).length, 0);
   const [pop, setPop] = React.useState(null); // { id, side, top, left }
   const sheetRef = React.useRef(null);
 
@@ -121,15 +160,21 @@ function SettingsSheet({ platforms, defaults, onToggle, onAcquire, onReacquire, 
       <div className="m-sheet w-set" data-screen-label="设置" ref={sheetRef} onClick={(e) => e.stopPropagation()}>
         <div className="m-sheet-head">
           <h2>设置</h2>
-          <span className="sel">{okCount}/{platforms.length} 已获取</span>
         </div>
-        <div className="m-sheet-sub">平台账号与默认发布名单。只有拿到凭据的平台能作为发布出口。</div>
 
         <div className="w-setscroll" onScroll={() => { if (pop) setPop(null); }}>
-          {/* 一、平台账号：凭据状态是发布能不能成的唯一前提，所以放在最上。
-                 「已获取」三个字本身证明不了什么，所以每行都写明是哪个账号，点一下看凭据。 */}
+          {/* 〇、外观：标题与主题切换器同一行，不占两行 */}
           <section className="w-setsec">
-            <h4>平台账号 <span className="w-setn">点一行看账号详情</span></h4>
+            <div className="w-sethead">
+              <h4>外观</h4>
+              <ThemeSwitcher />
+            </div>
+          </section>
+
+          {/* 一、平台账号：凭据状态是发布能不能成的唯一前提。
+                  「已获取」三个字本身证明不了什么，所以每行都写明是哪个账号，点一下看凭据。 */}
+          <section className="w-setsec">
+            <h4>平台账号</h4>
             <div className="w-accts">
               {platforms.map((p) => (
                 <AccountRow key={p.id} p={p} active={!!pop && pop.id === p.id} onToggle={openPop(p)} />
@@ -139,8 +184,7 @@ function SettingsSheet({ platforms, defaults, onToggle, onAcquire, onReacquire, 
 
           {/* 二、默认发布名单：每种稿子挑一次，发布弹层就按这份名单预选 */}
           <section className="w-setsec">
-            <h4>默认发布平台 <span className="w-setn">已定 {picked} 项</span></h4>
-            <p className="w-setnote">每种稿子挑一次，之后打开发布弹层就按这份名单预选。灰掉的平台是凭据获取失败，点一下会先重新获取，再设为该类型的默认。</p>
+            <h4>默认发布平台</h4>
             <div className="m-typerows">
               {TYPE_ORDER.map((k) => {
                 const t = TYPES[k];
@@ -156,12 +200,13 @@ function SettingsSheet({ platforms, defaults, onToggle, onAcquire, onReacquire, 
                       {list.map((p) => {
                         const on = chosen.indexOf(p.id) >= 0;
                         const off = p.state !== "ok";
-                        /* 三态：选中 = 平台色填满；没选中 = 同色淡底（保留平台身份）；凭据没拿到 = 中性灰 */
+                        /* 三态：选中 = 平台色填满；没选中 = 同色淡底（保留平台身份）；凭据没拿到 = 中性灰。
+                           淡底用 color-mix：平台色可能是主题变量（如 X），字符串拼透明度会失效 */
                         const skin = off
-                          ? { background: "#F1EFE8", color: "#A9A294" }
+                          ? { background: "var(--hover)", color: "var(--ink3)" }
                           : on
                             ? { background: p.color, color: p.fg || "#fff" }
-                            : { background: p.color + "33", color: p.fg ? "#16130E" : p.color };
+                            : { background: "color-mix(in srgb," + p.color + " 20%,transparent)", color: p.fg ? "var(--ink)" : p.color };
                         return (
                           <button
                             key={p.id}
@@ -186,8 +231,7 @@ function SettingsSheet({ platforms, defaults, onToggle, onAcquire, onReacquire, 
         </div>
 
         <div className="m-sheet-foot">
-          <span className="cnt">默认名单只管预选，每次发布仍可临时增减</span>
-          <button className="m-ghostbtn" onClick={onClose}>完成</button>
+          <button className="m-donebtn" onClick={onClose}>完成</button>
         </div>
       </div>
 

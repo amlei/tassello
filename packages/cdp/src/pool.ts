@@ -35,23 +35,32 @@ function findChrome(): string {
 
 let conn: CdpConnection | null = null;
 let connecting: Promise<CdpConnection> | null = null;
+let connectingMode: BrowserMode = "visible";
 let chromeProc: ChildProcess | null = null;
+let connMode: BrowserMode = "visible";
 
-/** 取共享浏览器连接：已有调试端口就复用，否则拉起可见 Chrome（CDP 发布需要真实窗口做人工确认） */
-export async function getConnection(): Promise<CdpConnection> {
-  if (conn) return conn;
-  if (connecting) return connecting;
+export type BrowserMode = "headless" | "visible";
+
+/** 取共享浏览器连接：已有调试端口就复用，否则拉起。
+ *  headless = 校验/获取用（无窗口）；visible = 发布用（需真实窗口人工确认）。
+ *  同一 profile 只能跑一个 Chrome 实例，模式切换时先关停再重启 */
+export async function getConnection(mode: BrowserMode = "visible"): Promise<CdpConnection> {
+  if (conn && connMode === mode) return conn;
+  if (connecting && connectingMode === mode) return connecting;
+  shutdownBrowser();
+  connectingMode = mode;
   connecting = (async () => {
     const profileDir = resolveChromeProfileDir();
     fs.mkdirSync(profileDir, { recursive: true });
     let port = await findExistingChromeDebugPort({ profileDir });
     if (!port) {
       port = await getFreePort();
-      chromeProc = await launchChrome({ chromePath: findChrome(), profileDir, port });
+      chromeProc = await launchChrome({ chromePath: findChrome(), profileDir, port, headless: mode === "headless" });
     }
     const wsUrl = await waitForChromeDebugPort(port, 15_000);
     const c = await CdpConnection.connect(wsUrl, 15_000);
     conn = c;
+    connMode = mode;
     return c;
   })();
   try {
@@ -59,6 +68,21 @@ export async function getConnection(): Promise<CdpConnection> {
   } catch (e) {
     connecting = null;
     throw e;
+  }
+}
+
+/** 关停本应用的浏览器实例（连接断开 + 进程结束），profile 即可被安全替换 */
+export function shutdownBrowser(): void {
+  try {
+    conn?.close();
+  } catch {}
+  conn = null;
+  connecting = null;
+  if (chromeProc) {
+    try {
+      chromeProc.kill("SIGTERM");
+    } catch {}
+    chromeProc = null;
   }
 }
 
@@ -78,6 +102,8 @@ export type PageRunOptions = {
   /** true = 执行完不关标签页（人工确认场景：留给用户检查点发布） */
   keepOpen?: boolean;
   activate?: boolean;
+  /** 浏览器运行模式：headless（校验/获取）| visible（发布人工确认），默认 visible */
+  mode?: BrowserMode;
 };
 
 /** 按平台互斥执行一次页面任务：同平台排队，跨平台并行（各开各的标签页） */
@@ -88,7 +114,7 @@ export async function withPage<T>(
 ): Promise<T> {
   const prev = locks.get(platformId) ?? Promise.resolve();
   const run = prev.then(async () => {
-    const cdp = await getConnection();
+    const cdp = await getConnection(opts.mode ?? "visible");
     const session = await openPageSession({
       cdp,
       reusing: true,

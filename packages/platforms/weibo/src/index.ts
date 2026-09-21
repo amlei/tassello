@@ -89,19 +89,10 @@ export const weiboAdapter: PlatformAdapter<WeiboProfile> = {
   account: {
     profileSchema: weiboProfileSchema,
 
-    async acquire() {
-      // 打开微博首页（不关），等用户登录；登录态落在共享 profile 里
-      await withPage("weibo", { url: WEIBO_HOME, keepOpen: true, activate: true }, async () => {});
-      return {
-        state: "fail" as const,
-        failReason: "已在浏览器打开微博，请登录后回到工作台点「重新校验」",
-      };
-    },
-
     async verify(_acct, ctx) {
       ctx.log("weibo.verify.start");
       try {
-        const r = await withPage("weibo", { url: WEIBO_HOME, keepOpen: false, activate: false }, async (cdp, sid) => {
+        const r = await withPage("weibo", { url: WEIBO_HOME, keepOpen: false, activate: false, mode: "headless" }, async (cdp, sid) => {
           await waitForWeiboReady(cdp, sid);
           return evaluateScalar<VerifyJsResult>(cdp, sid, VERIFY_JS, { timeoutMs: 20_000 });
         });

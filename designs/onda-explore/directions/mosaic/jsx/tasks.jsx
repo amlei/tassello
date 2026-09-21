@@ -37,10 +37,9 @@ function TasksView({ tasks, posts, onRetry, onOpen }) {
         <span><span className="m-dot" style={{ background: "var(--blue)", marginRight: 6 }}></span>进行中<b>{running.length}</b></span>
         <span><span className="m-dot" style={{ background: "var(--green)", marginRight: 6 }}></span>成功<b>{ok.length}</b></span>
         <span><span className="m-dot" style={{ background: "var(--error)", marginRight: 6 }}></span>失败<b>{failed.length}</b></span>
-        <span className="m-thint">发布在后台跑，不阻塞界面</span>
       </div>
       <div className="m-tlist">
-        {tasks.length === 0 && <div className="m-emptybox">队列空闲 — 去编辑器点「发布」试试</div>}
+        {tasks.length === 0 && <div className="m-emptybox">队列为空</div>}
         {order.map((g) => (<PostGroup key={g.postId} group={g} onRetry={onRetry} onOpen={onOpen} />))}
       </div>
     </div>
@@ -67,7 +66,6 @@ function PostGroup({ group, onRetry, onOpen }) {
           {group.tasks.map((task) => (<PlatformTile key={task.id} task={task} onRetry={onRetry} />))}
         </div>
         <div className="q-meta">
-          <span>{group.tasks.length} 个平台</span>
           <span>{group.latest}</span>
         </div>
       </div>

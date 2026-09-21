@@ -217,17 +217,17 @@
 /* ---------- 可滚动区留一条细滚动条：看得见、够得着，而不是被无声裁掉 ---------- */
 @utility scroll-thin {
   scrollbar-width: thin;
-  scrollbar-color: rgba(22, 19, 14, 0.26) transparent;
+  scrollbar-color: var(--color-ink3) transparent;
   &::-webkit-scrollbar {
     width: 8px;
     height: 8px;
   }
   &::-webkit-scrollbar-thumb {
-    background: rgba(22, 19, 14, 0.18);
+    background: var(--color-ink3);
     border-radius: 99px;
   }
   &::-webkit-scrollbar-thumb:hover {
-    background: rgba(22, 19, 14, 0.32);
+    background: var(--color-ink2);
   }
 }
 
@@ -255,7 +255,7 @@
   position: absolute;
   top: 0;
   left: 0;
-  color: #c9c4b8;
+  color: var(--color-ink3);
   pointer-events: none;
 }
 /* 输入法组字期间内容还没进 plain，is-empty 仍在 —— 占位符必须让位，否则压在组字串上 */
@@ -322,12 +322,21 @@
   aspect-ratio: 16/9;
   border-radius: 12px;
   margin: 4px 0 16px;
-  background: #e4e0d4;
+  background: var(--color-hover);
+}
+.m-fig img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
 }
 .m-fig-lb {
   position: absolute;
   left: 10px;
   bottom: 8px;
+  z-index: 1;
   font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 700;
@@ -337,6 +346,7 @@
   position: absolute;
   top: 8px;
   right: 8px;
+  z-index: 1;
   width: 24px;
   height: 24px;
   display: flex;
@@ -382,8 +392,8 @@
 .m-phone .m-richbody-phone blockquote {
   margin: 0 0 10px;
   padding-left: 10px;
-  border-left: 2.5px solid #d8d3c6;
-  color: #5b554b;
+  border-left: 2.5px solid var(--color-line);
+  color: var(--color-ink2);
 }
 .m-phone .m-richbody-phone ul,
 .m-phone .m-richbody-phone ol {
@@ -392,17 +402,18 @@
 }
 .m-phone .m-richbody-phone hr {
   border: none;
-  border-top: 1.5px solid #eeece4;
+  border-top: 1.5px solid var(--color-line);
   margin: 14px 0;
 }
 .m-phone .m-richbody-phone a {
-  color: #2c6ff0;
+  color: var(--color-accent);
 }
 .m-phone .m-richbody-phone .m-fig {
   width: 100%;
   max-width: none;
   margin: 2px 0 10px;
   border-radius: 10px;
+  background: var(--color-selected);
 }
 .m-phone .m-fig-del {
   display: none;

@@ -35,7 +35,7 @@ const CHIP = "inline-block flex-none min-w-[66px] rounded-full border px-[9px] p
 function StatusChip({ p, busy }: { p: PlatformDTO; busy: boolean }) {
   const off = p.status !== "active" || !p.account || p.account.state !== "ok";
   if (busy) return <span className={CHIP}>校验中…</span>;
-  if (p.status !== "active") return <span className={CHIP + " border-[#F2C2D1] text-error"}>planned</span>;
+  if (p.status !== "active") return <span className={CHIP + " border-error/30 bg-error/10 text-error"}>planned</span>;
   if (off) return <span className={CHIP + " border-[#F2C2D1] text-error"}>获取失败</span>;
   return <span className={CHIP + " border-[#B7E3CD] text-green"}>已获取</span>;
 }
@@ -119,7 +119,7 @@ function AccountPopBody({
         <AccountMark p={p} off={off} />
         <span className="min-w-0 flex-1 text-sm font-bold tracking-[-0.2px]">{p.name}</span>
         <StatusChip p={p} busy={busy} />
-        <Button isIconOnly variant="ghost" className="h-[22px] w-[22px] min-w-0 rounded-lg border border-line bg-card text-ink2 hover:text-ink" onPress={onClose} aria-label="关闭账号信息"><IcX size={11} /></Button>
+        <Button isIconOnly variant="ghost" className="h-[22px] w-[22px] min-w-0 rounded-lg border border-line bg-card text-ink2 data-[hovered=true]:bg-hover data-[hovered=true]:text-ink" onPress={onClose} aria-label="关闭账号信息"><IcX size={11} /></Button>
       </div>
       {p.status !== "active" ? (
         <div className="flex flex-col gap-3.5 pt-3.5">

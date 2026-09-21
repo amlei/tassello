@@ -10,11 +10,12 @@ function PublishSheet({ post, platforms, onToggle, onReacquire, onClose, onConfi
     if (p.id === "weibo" && bodyLen > 500) return "正文 " + bodyLen + " 字 · 超出 500 字上限";
     return null;
   };
-  /* 三态与设置里的默认名单一致：选中 = 平台色填满，没选中 = 同色淡底，凭据没拿到 = 中性灰 */
+  /* 三态与设置里的默认名单一致：选中 = 平台色填满，没选中 = 同色淡底，凭据没拿到 = 中性灰。
+     淡底用 color-mix：平台色可能是主题变量（如 X），字符串拼透明度会失效 */
   const skinOf = (p) => {
-    if (p.state !== "ok") return { background: "#F1EFE8", color: "#A9A294" };
+    if (p.state !== "ok") return { background: "var(--hover)", color: "var(--ink3)" };
     if (p.selected) return { background: p.color, color: p.fg || "#fff" };
-    return { background: p.color + "33", color: p.fg ? "#16130E" : p.color };
+    return { background: "color-mix(in srgb," + p.color + " 20%,transparent)", color: p.fg ? "var(--ink)" : p.color };
   };
   return (
     <div className="m-overlay" onClick={onClose}>
@@ -27,7 +28,6 @@ function PublishSheet({ post, platforms, onToggle, onReacquire, onClose, onConfi
           </span>
           <span className="sel">已选 {String(selected.length).padStart(2, "0")} / {supported.length}</span>
         </div>
-        <div className="m-sheet-sub">「{post.title || "未命名"}」 — 只有收{t.zh}的平台会出现在这里。点亮方块即加入本次发布。</div>
         <div className="m-platwall">
           {supported.map((p) => {
             const problem = problemOf(p);
@@ -50,9 +50,6 @@ function PublishSheet({ post, platforms, onToggle, onReacquire, onClose, onConfi
           })}
         </div>
         <div className="m-sheet-foot">
-          <span className="cnt">
-            {selected.length ? "将创建 " + selected.length + " 个发布任务 · 不阻塞当前操作" : "至少点亮一个平台"}
-          </span>
           <button className="m-ghostbtn" onClick={onClose}>取消</button>
           <button className="m-confirmbtn" disabled={!selected.length} onClick={onConfirm}>
             <IcSend size={15} /> 确认发布

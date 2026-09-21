@@ -4,6 +4,7 @@
   "type": "module",
   "private": true,
   "dependencies": {
+    "@tassello/cdp": "workspace:*",
     "@tassello/db": "workspace:*",
     "@tassello/platform-core": "workspace:*",
     "@tassello/platform-wechat": "workspace:*",

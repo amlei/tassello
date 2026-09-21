@@ -81,7 +81,7 @@ function ViewHead({
         </SearchField>
 
         <Dropdown>
-          <Button variant="ghost" className="gap-[7px] rounded-full border border-line bg-card px-[15px] py-2 text-[13.5px] font-bold text-ink">
+          <Button variant="ghost" className="gap-[7px] rounded-full border border-line bg-card px-[15px] py-2 text-[13.5px] font-bold text-ink data-[hovered=true]:bg-hover">
             <IcSort size={13} /> {cur.label}
           </Button>
           <Dropdown.Popover placement="bottom right">
@@ -126,7 +126,7 @@ function RowActions({ post, onAskDelete, solid }: { post: PostDTO; onAskDelete: 
           isIconOnly
           aria-label={`删除 ${post.title || "未命名"}`}
           variant="ghost"
-          className={base + " border border-line text-ink2 hover:text-ink"}
+          className={base + " border border-line text-ink2 data-[hovered=true]:bg-hover data-[hovered=true]:text-ink"}
           onPress={() => onAskDelete(post)}
         >
           <IcX size={11} />
@@ -150,16 +150,17 @@ function CoverLive({ live }: { live: boolean }) {
 function PublishedBadge({ published }: { published: boolean }) {
   if (!published) return null;
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-green/10 px-2 py-[2px] font-mono text-[10px] font-bold text-green">
+    <span className="inline-flex h-[16px] items-center gap-1 rounded-full bg-green/10 px-2 font-mono text-[10px] font-bold leading-none text-green">
       <Check size={9} aria-hidden="true" />
       已发布
     </span>
   );
 }
 
-/* 静态布局用内联样式锁定（HeroUI 按钮基础样式会压过工具类），hover 交给 data-attr 类 */
+/* 静态布局用内联样式锁定（HeroUI 按钮基础样式会压过工具类），hover 交给 data-attr 类。
+   whitespace-normal：HeroUI 按钮自带 nowrap，不放开换行的话摘要/标题的 line-clamp 全部失效 */
 const TILE_CLS =
-  "w-full gap-2.5 rounded-[14px] transition-[transform,box-shadow] data-[hovered=true]:-translate-y-1 data-[hovered=true]:shadow-[0_3px_10px_rgba(15,15,15,0.07)]";
+  "w-full gap-2.5 whitespace-normal break-words rounded-[14px] transition-[transform,box-shadow] data-[hovered=true]:-translate-y-1 data-[hovered=true]:shadow-[0_3px_10px_rgba(15,15,15,0.07)]";
 const TILE_STYLE: React.CSSProperties = {
   display: "flex",
   flexDirection: "column",
@@ -176,8 +177,8 @@ const TILE_STYLE: React.CSSProperties = {
 function TileTitleMeta({ post, extra, published }: { post: PostDTO; extra: string; published?: boolean }) {
   return (
     <span className="flex min-w-0 flex-col gap-1">
-      <span className="line-clamp-2 text-[15px] font-bold leading-[1.35] tracking-[-0.2px] text-ink">{post.title || "未命名稿子"}</span>
-      <span className="flex items-center gap-[9px] font-mono text-[10.5px] text-ink2">
+      <span className="line-clamp-2 min-h-[2.7em] text-[15px] font-bold leading-[1.35] tracking-[-0.2px] text-ink">{post.title || "未命名稿子"}</span>
+      <span className="flex h-[16px] items-center gap-[9px] font-mono text-[10.5px] leading-none text-ink2">
         <span>{fmtDate(post.updatedAt)}</span>
         <span>{extra}</span>
         <PublishedBadge published={!!published} />
@@ -251,18 +252,24 @@ function ImageTile({
   onAskDelete: (post: PostDTO) => void;
 }) {
   const imgs = post.assets;
-  const cells = [0, 1, 2, 3].map((i) => imgs[i % Math.max(imgs.length, 1)]);
+  const n = imgs.length;
+  const shown: (typeof imgs)[number][] | undefined[] = n === 0 ? [undefined, undefined, undefined, undefined] : imgs.slice(0, 4);
+  const span = (i: number) => (n === 1 ? "col-span-2 row-span-2" : n === 2 ? "row-span-2" : n === 3 && i === 0 ? "col-span-2" : "");
   return (
     <div className="group relative">
       <Button variant="ghost" className={TILE_CLS + " text-left"} style={TILE_STYLE} onPress={() => onOpen(post.id)} aria-label={post.title || "未命名稿子"}>
         <span className="relative block w-full">
-          <span className="relative grid aspect-[16/10] grid-cols-2 grid-rows-2 gap-[3px] overflow-hidden rounded-[10px] bg-hover" aria-hidden="true">
-            {cells.map((im, i) => (
-              <i key={i} className="block" style={{ background: im ? im.color || "#EDECE9" : "#EDECE9" }} />
-            ))}
-            <span className="absolute bottom-1.5 right-[7px] rounded-full bg-[rgba(55,53,47,0.6)] px-2 py-0.5 font-mono text-[10px] font-bold text-white">{imgs.length} 张</span>
-            <CoverLive live={live} />
-          </span>
+        <span className="relative grid aspect-[16/10] grid-cols-2 grid-rows-2 gap-[3px] overflow-hidden rounded-[10px] bg-hover" aria-hidden="true">
+          {shown.map((im, i) => (
+            <span key={im?.id ?? i} className={"relative block " + span(i)} style={{ background: im ? (im.path ? "#4A4740" : im.color || "var(--onda-hover)") : "#EDECE9" }}>
+              {im?.path && (
+                // eslint-disable-next-line @next/next/no-img-element -- 本地 API 字节流缩略图
+                <img src={`/api/assets/${im.id}/raw`} alt="" className="absolute inset-0 h-full w-full object-cover" draggable={false} />
+              )}
+            </span>
+          ))}
+          <CoverLive live={live} />
+        </span>
         </span>
         <TileTitleMeta post={post} extra={`${post.body.length} 字`} published={published} />
       </Button>
@@ -418,7 +425,7 @@ export function LibraryScreen({
                 「{deleteTarget?.title || "未命名"}」将被删除，此操作不可撤销。
               </AlertDialog.Body>
               <AlertDialog.Footer className="mt-5 flex items-center justify-end gap-3">
-                <Button variant="ghost" className="rounded-full px-4 py-2 text-[13.5px] font-bold text-ink2 hover:text-ink" onPress={() => setDeleteTarget(null)}>
+                <Button variant="ghost" className="rounded-full border-2 border-line bg-transparent px-4 py-2 text-[13.5px] font-bold text-ink2 data-[hovered=true]:bg-ink data-[hovered=true]:text-paper" onPress={() => setDeleteTarget(null)}>
                   取消
                 </Button>
                 <Button

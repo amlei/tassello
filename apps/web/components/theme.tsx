@@ -13,9 +13,10 @@ export function applyTheme(pref: ThemePref): void {
   document.documentElement.dataset.theme = dark ? "dark" : "light";
 }
 
-/* 首屏防闪烁：在 body 渲染前按偏好落 data-theme */
+/* 首屏防闪烁 + 跟随系统：body 渲染前按偏好落 data-theme，并常驻监听系统主题切换
+   （监听放在内联脚本里：ThemeSwitcher 只在设置弹层打开时挂载，跟着组件走会丢事件） */
 export function ThemeScript(): React.ReactElement {
-  const code = `(function(){try{var p=localStorage.getItem("${THEME_KEY}")||"system";var d=p==="dark"||(p==="system"&&window.matchMedia("(prefers-color-scheme: dark)").matches);document.documentElement.dataset.theme=d?"dark":"light";}catch(e){}})();`;
+  const code = `(function(){try{var K="${THEME_KEY}";var pref=function(){var v=null;try{v=localStorage.getItem(K);}catch(e){}return v==="light"||v==="dark"?v:"system";};var apply=function(){var p=pref();var d=p==="dark"||(p==="system"&&window.matchMedia("(prefers-color-scheme: dark)").matches);document.documentElement.dataset.theme=d?"dark":"light";};apply();window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change",function(){if(pref()==="system")apply();});}catch(e){}})();`;
   return <script dangerouslySetInnerHTML={{ __html: code }} />;
 }
 
@@ -29,19 +30,11 @@ export function setThemePref(pref: ThemePref): void {
   applyTheme(pref);
 }
 
-/* 外观切换：三段选择器（浅色 / 深色 / 跟随系统） */
+/* 外观切换：三段选择器（浅色 / 深色 / 跟随系统）。
+   只在设置弹层里挂载（纯客户端渲染），useState 惰性读 localStorage；
+   系统主题的实时跟随由 ThemeScript 的常驻监听负责 */
 export function ThemeSwitcher(): React.ReactElement {
-  const [pref, setPref] = React.useState<ThemePref>("system");
-
-  React.useEffect(() => {
-    setPref(getThemePref());
-    const media = window.matchMedia("(prefers-color-scheme: dark)");
-    const onChange = () => {
-      if (getThemePref() === "system") applyTheme("system");
-    };
-    media.addEventListener("change", onChange);
-    return () => media.removeEventListener("change", onChange);
-  }, []);
+  const [pref, setPref] = React.useState<ThemePref>(() => getThemePref());
 
   const pick = (p: ThemePref) => {
     setPref(p);

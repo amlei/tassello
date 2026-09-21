@@ -1,26 +1,37 @@
-/* editor.jsx — 编辑器：写作区 + 实时预览 + 自动保存 */
-function EditorView({ post, onChange, onBack, onPublish }) {
+/* editor.jsx — 编辑器：写作区 + 实时预览 + 手动保存（保存按钮自身表达状态） */
+function EditorView({ post, onChange, onBack, onPublish, onDirty }) {
   const t = TYPES[post.type];
   const [saveState, setSaveState] = React.useState("saved"); // saved | dirty | saving
-  const [savedAt, setSavedAt] = React.useState(post.updated || "—");
   const dirtyRef = React.useRef(false);
+
+  /* 脏状态上报给外层：未保存离开时的确认弹窗靠它 */
+  React.useEffect(() => {
+    if (onDirty) onDirty(saveState === "dirty");
+  }, [saveState]);
 
   const markDirty = () => { dirtyRef.current = true; setSaveState("dirty"); };
 
-  /* setInterval 模拟自动保存：每 2.5s 检查一次脏标记 */
+  /* 手动保存：与自动保存同一套脏标记流程，⌘S / Ctrl+S 也能触发 */
+  const saveNow = () => {
+    if (saveState === "saving") return;
+    dirtyRef.current = false;
+    setSaveState("saving");
+    setTimeout(() => {
+      setSaveState("saved");
+    }, 500);
+  };
+
+  /* ⌘S / Ctrl+S 触发手动保存 */
   React.useEffect(() => {
-    const timer = setInterval(() => {
-      if (!dirtyRef.current) return;
-      dirtyRef.current = false;
-      setSaveState("saving");
-      setTimeout(() => {
-        const d = new Date();
-        setSavedAt(String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0") + ":" + String(d.getSeconds()).padStart(2, "0"));
-        setSaveState("saved");
-      }, 700);
-    }, 2500);
-    return () => clearInterval(timer);
-  }, []);
+    const onKey = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        saveNow();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
 
   const setField = (k, v) => { onChange(post.id, k, v); markDirty(); };
   const wordCount = (post.title + post.body).length;
@@ -44,25 +55,34 @@ function EditorView({ post, onChange, onBack, onPublish }) {
   const removeImage = (id) => {
     setField("images", (post.images || []).filter((im) => im.id !== id));
   };
+  /* 从素材区删除一张图：素材收走，正文里引用它的图块一并清掉 */
+  const deleteImage = (id) => {
+    const figRe = new RegExp('<figure[^>]*data-asset="' + id + '"[^>]*>[\\s\\S]*?</figure>', "g");
+    const lineRe = new RegExp("^!\\[[^\\]]*\\]\\(asset://" + id + "\\)\\s*$", "gm");
+    setField("bodyHtml", (post.bodyHtml || "").replace(figRe, ""));
+    setField("body", (post.body || "").replace(lineRe, ""));
+    setField("images", (post.images || []).filter((im) => im.id !== id));
+  };
   /* 新增图片素材：追加到末尾 —— 数组尾部插入是摊销 O(1)，第一格的「+」永远不动（其余格位也不变） */
   const addImage = () => {
     const list = post.images || [];
     setField("images", list.concat([{ id: "u" + Date.now(), color: PALETTE[list.length % PALETTE.length] }]));
   };
-  /* 拖拽换位：相邻两格只需交换（O(1)），跨位移动要平移中间元素，splice 的 O(n) 是连续数组的下界 */
-  const moveImage = (from, to) => {
-    const list = post.images || [];
-    const ok = (i) => Number.isInteger(i) && i >= 0 && i < list.length;
-    if (from === to || !ok(from) || !ok(to)) return;
-    const next = list.slice();
-    if (Math.abs(from - to) === 1) {
-      next[from] = list[to];
-      next[to] = list[from];
-    } else {
-      const [moved] = next.splice(from, 1);
-      next.splice(to, 0, moved);
-    }
-    setField("images", next);
+  /* 图片素材换序：与贴图页同一套长按拖拽（dnd.jsx），提交的是完整的新顺序 */
+  const reorderImages = (ids) => {
+    const byId = new Map((post.images || []).map((im) => [im.id, im]));
+    setField("images", ids.map((id) => byId.get(id)).filter(Boolean));
+  };
+  /* 视频 / 音频素材：删除 = 收走文件回到「未上传」，上传 = 放一个示例文件 */
+  const deleteMedia = () => {
+    setField("media", false);
+    setField("duration", "00:00");
+    if (post.type === "audio") setField("durationSec", 0);
+  };
+  const uploadMedia = () => {
+    setField("media", true);
+    if (post.type === "video") { setField("duration", "02:18"); setField("durationSec", 138); }
+    else { setField("duration", "12:05"); setField("durationSec", 725); }
   };
 
   /* 两栏各自可滚：底部渐隐提示「下面还有」，滚到底自动收掉 */
@@ -88,16 +108,17 @@ function EditorView({ post, onChange, onBack, onPublish }) {
     <div className="m-editor">
       <div className="m-edbar">
         <button className="m-backbtn" onClick={onBack}><IcArrowLeft size={14} /> 返回</button>
-        <span className="m-typechip" style={{ background: t.color }}>
-          <span style={{ width: 10, height: 10, borderRadius: 3, background: "#fff", display: "inline-block" }}></span>
-          {t.zh} · {t.en}
-        </span>
-        <span className={"m-savestate " + saveState}>
-          <span className="dot"></span>
-          {saveState === "saved" && "已保存 " + savedAt}
-          {saveState === "dirty" && "有未保存改动"}
+        {/* 一枚按钮表达保存状态：未保存时点亮成主色，其余时候灰着 */}
+        <button
+          className={"m-savebtn" + (saveState === "dirty" ? " ready" : "")}
+          disabled={saveState !== "dirty"}
+          onClick={saveNow}
+          aria-label="保存（⌘S）"
+        >
+          {saveState === "saved" && "已保存"}
+          {saveState === "dirty" && "保存"}
           {saveState === "saving" && "保存中…"}
-        </span>
+        </button>
         <span className="m-wordcount">{wordCount} 字</span>
         <button className="m-pubbtn" onClick={onPublish}><IcSend size={15} /> 发布</button>
       </div>
@@ -109,7 +130,10 @@ function EditorView({ post, onChange, onBack, onPublish }) {
               post={post}
               color={t.color}
               onAddImage={addImage}
-              onMoveImage={moveImage}
+              onReorderImages={reorderImages}
+              onDeleteImage={deleteImage}
+              onDeleteMedia={deleteMedia}
+              onUploadMedia={uploadMedia}
             />
             {/* 标题上方的编辑工具栏 */}
             <EditToolbar onCommand={runCommand} onImage={insertImage} />
@@ -129,9 +153,7 @@ function EditorView({ post, onChange, onBack, onPublish }) {
               onAddImage={addImageAsset}
               onRemoveAsset={removeImage}
               bodyRef={richRef}
-              placeholder={post.type === "article"
-                ? "开始写正文。粘贴图片或点工具栏「图片」，图会落在光标处；用 #标签 标记话题。"
-                : "开始写正文。用 #标签 标记话题，右侧的预览会实时更新。"}
+              placeholder={post.type === "article" ? "开始写正文…" : "开始写正文…"}
             />
           </div>
           <span className={"m-more" + (more.write ? "" : " off")} aria-hidden="true"></span>
@@ -308,6 +330,33 @@ function setBlockTag(root, tag) {
   return target;
 }
 
+/* 引用切换：手动包 / 解一层 blockquote —— 不走 formatBlock。
+   Chrome 会把 <p> 转掉却把 <blockquote> 壳留下来（「后面全是引用且清不掉」），
+   解包时也必须自己把内容搬出去，execCommand 处理不了这个壳 */
+function unwrapQuote(root, quote) {
+  const p = document.createElement("p");
+  while (quote.firstChild) p.appendChild(quote.firstChild);
+  if (!p.firstChild) p.appendChild(document.createElement("br"));
+  quote.parentNode.replaceChild(p, quote);
+  caretInto(p, true);
+  normalizeEdges(root);
+}
+
+function setBlockQuote(root) {
+  const block = blockAt(root);
+  if (!block || block.nodeType !== 1) return false;
+  if (block.tagName === "HR" || block.classList.contains("m-fig") || block.tagName === "UL" || block.tagName === "OL") return false;
+  if (block.tagName === "BLOCKQUOTE") {
+    unwrapQuote(root, block);
+  } else {
+    const quote = document.createElement("blockquote");
+    block.parentNode.insertBefore(quote, block);
+    quote.appendChild(block);
+    caretInto(block, true);
+  }
+  return true;
+}
+
 /* 首尾不能是分隔线或图：否则光标没地方落脚，字也打不进去 */
 function normalizeEdges(root) {
   /* 浏览器插入分隔线时会外面套一层 div，拆掉它，让 hr 直接站在正文里 */
@@ -473,7 +522,10 @@ function RichBody({ html, plain, color, assets, postId, placeholder, onChangeBod
         if (marker) marker.remove();
         return;
       }
+      const hadFocus = document.activeElement === el;
       el.innerHTML = s.html;
+      /* 重写 DOM 不该把焦点弄丢 */
+      if (hadFocus) el.focus();
       /* 上色只是外观变化，不该占掉一步撤销 */
       const st = hist.current;
       if (st.idx >= 0) st.stack[st.idx] = s.html;
@@ -503,16 +555,30 @@ function RichBody({ html, plain, color, assets, postId, placeholder, onChangeBod
     scheduleHighlight();
   };
 
+  /* 粘贴：图片走素材插入；文字一律拦截成规范 HTML 再插入 ——
+     不拦截的话浏览器塞进来的脏标签会让高亮重写整块 DOM，编辑区因此失焦 */
   const handlePaste = (e) => {
+    e.preventDefault();
     const items = (e.clipboardData && e.clipboardData.items) || [];
     for (let i = 0; i < items.length; i += 1) {
       if (items[i].type && items[i].type.indexOf("image") === 0) {
-        e.preventDefault();
         const im = onAddImage();
         if (im) insertFigure(im);
         return;
       }
     }
+    const el = ref.current;
+    if (!el) return;
+    const text = (e.clipboardData && e.clipboardData.getData) ? (e.clipboardData.getData("text/plain") || "") : "";
+    if (!text) return;
+    const html = text.replace(/\r/g, "").split(/\n{2,}/)
+      .map((par) => "<p>" + escHtml(par).replace(/\n/g, "<br>") + "</p>")
+      .join("");
+    document.execCommand("insertHTML", false, html);
+    normalizeEdges(el);
+    push();
+    record(true);
+    scheduleHighlight();
   };
 
   /* 改写 DOM 的命令都在这里落地：工具栏只管报「按了哪个」，怎么改由正文自己负责 */
@@ -522,10 +588,18 @@ function RichBody({ html, plain, color, assets, postId, placeholder, onChangeBod
     /* 结构要变了：先把排队中的高亮取消，免得它在中途重写 DOM 把光标弄丢 */
     cancelHighlight();
     el.focus();
-    if (kind === "h1" || kind === "h2" || kind === "h3" || kind === "blockquote") {
+    if (kind === "h1" || kind === "h2" || kind === "h3") {
+      /* 在引用里换标题：先解壳，否则壳会一直套着 */
+      const b = blockAt(el);
+      if (b && b.tagName === "BLOCKQUOTE") unwrapQuote(el, b);
       setBlockTag(el, kind);
+    } else if (kind === "blockquote") {
+      setBlockQuote(el);
     } else if (kind === "p") {
-      setBlockTag(el, "p");
+      /* 在引用里点「正文」：先解壳再回段落，壳留在原地震不来 */
+      const b = blockAt(el);
+      if (b && b.tagName === "BLOCKQUOTE") unwrapQuote(el, b);
+      else setBlockTag(el, "p");
     } else if (kind === "ul" || kind === "ol") {
       setBlockList(el, kind === "ul" ? "UL" : "OL");
     } else if (kind === "hr") {
@@ -563,7 +637,8 @@ function RichBody({ html, plain, color, assets, postId, placeholder, onChangeBod
         const table = { "#": "h1", "##": "h2", "###": "h3", ">": "blockquote" };
         if (marker && table[marker]) {
           e.preventDefault();
-          setBlockTag(el, table[marker]);
+          if (table[marker] === "blockquote") setBlockQuote(el);
+          else setBlockTag(el, table[marker]);
           stripMarker(el, marker.length);
           push();
           record(true);
@@ -595,9 +670,10 @@ function RichBody({ html, plain, color, assets, postId, placeholder, onChangeBod
     if (e.key === "Enter" && !e.shiftKey && formatted) {
       cancelHighlight();
       if (!block.textContent.trim()) {
-        /* 空行回车：退出格式，回到正文段落 */
+        /* 空行回车：退出格式，回到正文段落（引用必须手动解壳） */
         e.preventDefault();
-        setBlockTag(el, "p");
+        if (tag === "blockquote") unwrapQuote(el, block);
+        else setBlockTag(el, "p");
         push();
         record(true);
       } else if (caretAtBlockEnd(el)) {
@@ -615,7 +691,8 @@ function RichBody({ html, plain, color, assets, postId, placeholder, onChangeBod
       cancelHighlight();
       /* 行首退格先把格式去掉（文档第一行的引用/标题否则退不出来） */
       e.preventDefault();
-      setBlockTag(el, "p");
+      if (tag === "blockquote") unwrapQuote(el, block);
+      else setBlockTag(el, "p");
       push();
       record(true);
       return;
@@ -723,14 +800,14 @@ function EditToolbar({ onCommand, onImage }) {
     { k: "italic", ic: <IcFormatItalic />, title: "斜体", run: cmd("italic") },
     { k: "underline", ic: <IcFormatUnderline />, title: "下划线", run: cmd("underline") },
     { k: "strike", ic: <IcFormatStrike />, title: "删除线", run: cmd("strikeThrough") },
-    { k: "quote", ic: <IcFormatQuote />, title: "引用（再点一次回正文）", run: cmd("blockquote") },
+    { k: "quote", ic: <IcFormatQuote />, title: "引用", run: cmd("blockquote") },
     { sep: true },
     { k: "ul", ic: <IcFormatListUl />, title: "无序列表", run: cmd("ul") },
     { k: "ol", ic: <IcFormatListOl />, title: "有序列表", run: cmd("ol") },
     { k: "hr", ic: <IcFormatDivider />, title: "插入分隔线", run: cmd("hr") },
     { sep: true },
     { k: "link", ic: <IcFormatLink />, title: "插入链接", run: cmd("link") },
-    { k: "img", ic: <IcFormatImage />, title: "在光标处插入配图（也可直接粘贴图片）", run: onImage },
+    { k: "img", ic: <IcFormatImage />, title: "在光标处插入图片（也可直接粘贴）", run: onImage },
     { sep: true },
     { k: "undo", ic: <IcFormatUndo />, title: "撤销", run: cmd("undo") },
     { k: "redo", ic: <IcFormatRedo />, title: "重做", run: cmd("redo") },
@@ -782,17 +859,20 @@ function EditToolbar({ onCommand, onImage }) {
 const IMG_W = 72; /* 缩略图边长 */
 const IMG_GAP = 8;
 
-/* 图片素材：+ 固定在第一个格位，缩略图可拖拽换位；超出一行时给一个收起/展开 icon，默认收起 */
-function ImageAssets({ images, color, onAdd, onMove }) {
+/* 图片素材：与贴图页同一套长按拖拽换序（dnd.jsx 的 useLongPressReorder）。
+   「+」固定在第一个格位，缩略图按住 220ms 拎起、其余格子实时让位、松手落位；
+   每格右上角一枚 ×（悬停出现），删除时正文里引用它的图块一并清掉；
+   超出一行时给一个收起/展开 icon，默认收起。 */
+function ImageAssets({ images, color, onAdd, onReorder, onDelete }) {
   const list = images || [];
-  const [dragFrom, setDragFrom] = React.useState(null);
-  const [overIdx, setOverIdx] = React.useState(null);
   const [expanded, setExpanded] = React.useState(false);
   const [overflow, setOverflow] = React.useState(false);
-  const rowRef = React.useRef(null);
+  /* 长按拖拽：ids 是素材 id，提交完整新顺序；角上的 × 挂在 .w-tileacts 里，
+     钩子会跳过它，删除不会把长按也吃了 */
+  const dnd = useLongPressReorder({ ids: list.map((im) => im.id), onCommit: onReorder });
   /* 一行放不下就给开关：按格位尺寸直接算，展开时容器宽度不变，判断依然成立 */
   React.useLayoutEffect(() => {
-    const el = rowRef.current;
+    const el = dnd.gridRef.current;
     if (!el) return undefined;
     const check = () => {
       const cells = list.length + 1;
@@ -803,45 +883,45 @@ function ImageAssets({ images, color, onAdd, onMove }) {
     window.addEventListener("resize", check);
     return () => window.removeEventListener("resize", check);
   }, [list.length]);
-  const endDrag = () => { setDragFrom(null); setOverIdx(null); };
+  /* 拖动中的预览顺序按 id 回填 */
+  const shown = (() => {
+    if (!dnd.order) return list;
+    const byId = new Map(list.map((im) => [im.id, im]));
+    return dnd.order.map((id) => byId.get(id)).filter(Boolean);
+  })();
   return (
     <div className="m-assetsec">
       <div className="m-assethead">
         <span className="sq" style={{ background: color }}></span>
         <span className="t">图片素材</span>
-        <span className="n">{list.length} 张 · 拖拽换顺序</span>
+        <span className="n">{list.length} 张</span>
       </div>
       <div className="m-imgwrap">
-        <div className={"m-imgrow" + (expanded ? " open" : "")} ref={rowRef}>
+        <div
+          className={"m-imgrow" + (expanded ? " open" : "") + (dnd.dragId ? " reordering" : "")}
+          ref={dnd.gridRef}
+        >
           {/* 「+」恒定占据第一格：新增往末尾追加，格位与已有缩略图的位置都不受影响 */}
           <button className="m-imgcell add" onClick={onAdd} aria-label="添加图片素材"><IcPlus size={16} /></button>
-          {list.map((im, i) => (
+          {shown.map((im, i) => (
             <div
               key={im.id}
-              className={"m-imgcell" + (dragFrom === i ? " dragging" : "") + (overIdx === i && dragFrom !== null && dragFrom !== i ? " over" : "")}
+              className={"m-imgcell" + (dnd.dragId === im.id ? " dragging" : "") + (dnd.pressing === im.id ? " pressing" : "")}
+              ref={(el) => dnd.register(im.id, el)}
               style={{ background: im.color }}
-              draggable
-              title="拖拽换顺序"
-              onDragStart={(e) => {
-                setDragFrom(i);
-                e.dataTransfer.effectAllowed = "move";
-                e.dataTransfer.setData("text/plain", String(i));
-              }}
-              onDragOver={(e) => {
-                e.preventDefault();
-                e.dataTransfer.dropEffect = "move";
-                if (overIdx !== i) setOverIdx(i);
-              }}
-              onDragLeave={() => setOverIdx((o) => (o === i ? null : o))}
-              onDrop={(e) => {
-                e.preventDefault();
-                const raw = e.dataTransfer.getData("text/plain");
-                onMove(dragFrom !== null ? dragFrom : Number(raw), i);
-                endDrag();
-              }}
-              onDragEnd={endDrag}
+              aria-label={"第 " + (i + 1) + " 张图片素材"}
+              onPointerDown={(e) => dnd.onTilePointerDown(e, im.id)}
             >
-              <span className="n">{String(i + 1).padStart(2, "0")}</span>
+              <div className="w-tileacts">
+                <button
+                  className="w-icon"
+                  title="删除这张素材"
+                  aria-label={"删除第 " + (i + 1) + " 张图片素材"}
+                  onClick={(e) => { e.stopPropagation(); onDelete(im.id); }}
+                >
+                  <IcX size={11} />
+                </button>
+              </div>
             </div>
           ))}
         </div>
@@ -862,11 +942,12 @@ function ImageAssets({ images, color, onAdd, onMove }) {
 }
 
 /* 类型素材区：统一放在标题之上，尺寸收到一条，不与正文抢版面。
-   文章不在这里挂素材 —— 它的图直接落在正文行间（见 insertImage / paste） */
-function AssetSection({ post, color, onAddImage, onMoveImage }) {
+   文章不在这里挂素材 —— 它的图直接落在正文行间（见 insertImage / paste）。
+   视频 / 音频的文件可删（回到「未上传」，可再传）；贴图的每一张都可删。 */
+function AssetSection({ post, color, onAddImage, onReorderImages, onDeleteImage, onDeleteMedia, onUploadMedia }) {
   if (post.type === "article") return null;
   if (post.type === "image") {
-    return <ImageAssets images={post.images} color={color} onAdd={onAddImage} onMove={onMoveImage} />;
+    return <ImageAssets images={post.images} color={color} onAdd={onAddImage} onReorder={onReorderImages} onDelete={onDeleteImage} />;
   }
   if (post.type === "video") {
     return (
@@ -874,13 +955,23 @@ function AssetSection({ post, color, onAddImage, onMoveImage }) {
         <div className="m-assethead">
           <span className="sq" style={{ background: color }}></span>
           <span className="t">视频素材</span>
-          <span className="n">封面占位 · {post.duration || "00:00"}</span>
+          <span className="n">{post.media === false ? "未上传" : (post.duration || "00:00")}</span>
         </div>
-        <div className="m-cover">
-          <span className="badge">封面占位 16:9</span>
-          <button className="m-playbig" aria-label="预览视频"><IcPlay size={14} /></button>
-          <span className="dur">{post.duration || "00:00"}</span>
-        </div>
+        {post.media === false ? (
+          <button className="m-uploadslot box" onClick={onUploadMedia} aria-label="上传视频">
+            <IcPlus size={16} /> 上传视频
+          </button>
+        ) : (
+          <div className="m-mediabox">
+            <div className="m-cover">
+              <button className="m-playbig" aria-label="预览视频"><IcPlay size={14} /></button>
+              <span className="dur">{post.duration || "00:00"}</span>
+            </div>
+            <div className="w-tileacts">
+              <button className="w-icon" title="删除这个视频" aria-label="删除视频素材" onClick={onDeleteMedia}><IcX size={11} /></button>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -890,9 +981,20 @@ function AssetSection({ post, color, onAddImage, onMoveImage }) {
         <div className="m-assethead">
           <span className="sq" style={{ background: color }}></span>
           <span className="t">音频素材</span>
-          <span className="n">{post.duration || "00:00"} · 假播放</span>
+          <span className="n">{post.media === false ? "未上传" : (post.duration || "00:00")}</span>
         </div>
-        <AudioBar durationSec={post.durationSec} color={color} />
+        {post.media === false ? (
+          <button className="m-uploadslot slim" onClick={onUploadMedia} aria-label="上传音频">
+            <IcPlus size={16} /> 上传音频
+          </button>
+        ) : (
+          <div className="m-audiowrap">
+            <AudioBar durationSec={post.durationSec} color={color} />
+            <div className="w-tileacts">
+              <button className="w-icon" title="删除这条音频" aria-label="删除音频素材" onClick={onDeleteMedia}><IcX size={11} /></button>
+            </div>
+          </div>
+        )}
       </div>
     );
   }

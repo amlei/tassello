@@ -5,6 +5,6 @@ import { QueueScreen } from "@/components/queue-screen";
 export const dynamic = "force-dynamic";
 
 export default async function QueuePage() {
-  const { tasks, postMins, platforms } = await loadQueueData();
-  return <QueueScreen tasks={tasks} postMins={postMins} platforms={platforms} />;
+  const { tasks, postMins, platforms, counts } = await loadQueueData();
+  return <QueueScreen tasks={tasks} postMins={postMins} platforms={platforms} counts={counts} />;
 }

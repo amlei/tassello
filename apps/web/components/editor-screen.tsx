@@ -97,11 +97,15 @@ export function EditorScreen({
   const mutateAssets = (postId: string, fn: (assets: AssetDTO[]) => AssetDTO[]) => {
     setPost((p) => (p && p.id === postId ? { ...p, assets: fn(p.assets) } : p));
   };
-  const addImageAssetAsync = async (postId: string): Promise<{ id: string; color: string } | null> => {
+  /** 上传图片并返回新素材（正文插图/粘贴：真实文件落盘） */
+  const uploadImageForInsert = async (postId: string, file: File): Promise<{ id: string; color: string; path?: string | null } | null> => {
     try {
-      const asset = await api.addAsset(postId);
-      mutateAssets(postId, (as) => [...as, asset]);
-      return { id: asset.id, color: asset.color ?? "#2C6FF0" };
+      const before = new Set(post.assets.map((a) => a.id));
+      const updated = await api.uploadMedia(postId, "image", file);
+      setPost((p) => (p && p.id === postId ? updated : p));
+      setSavedAt(fmtClock(new Date().toISOString()));
+      const created = updated.assets.find((a) => !before.has(a.id));
+      return created ? { id: created.id, color: created.color ?? "var(--onda-hover)", path: created.path } : null;
     } catch {
       return null;
     }
@@ -125,6 +129,13 @@ export function EditorScreen({
       return next;
     });
     void api.reorderAssets(postId, nextIds);
+  };
+  const uploadMedia = async (postId: string, kind: "video" | "audio" | "image", file: File): Promise<void> => {
+    try {
+      const updated = await api.uploadMedia(postId, kind, file);
+      setPost((p) => (p && p.id === postId ? updated : p));
+      setSavedAt(fmtClock(new Date().toISOString()));
+    } catch {}
   };
 
   /* 发布 */
@@ -168,10 +179,10 @@ export function EditorScreen({
           saveState={saveState}
           savedAt={savedAt}
           onChangeField={(k, v) => patchPost(post.id, { [k]: v })}
-          onAddImageAsync={() => addImageAssetAsync(post.id)}
-          onAddImage={() => void addImageAssetAsync(post.id)}
+          onUploadImage={(file) => uploadImageForInsert(post.id, file)}
           onRemoveAsset={(assetId) => removeImageAsset(post.id, assetId)}
           onMoveImage={(from, to) => moveImageAsset(post.id, from, to)}
+          onUploadMedia={(kind, file) => uploadMedia(post.id, kind, file)}
           onBack={back}
           onPublish={() => void openPublishSheet()}
           onSave={() => void saveNow()}

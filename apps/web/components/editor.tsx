@@ -14,7 +14,6 @@ import {
   IcFormatRedo, IcFormatStrike, IcFormatUnderline, IcFormatUndo, IcPlus, IcSend,
 } from "./icons";
 
-const PALETTE = ["#2C6FF0", "#D52088", "#FD8D11", "#0EC3D4", "#07B56F", "#37352F"];
 export const ASSET_IMG_RE = /^!\[([^\]]*)\]\(asset:\/\/([^)]+)\)$/;
 
 /* ---------- DOM 光标工具（与原型一致） ---------- */
@@ -241,15 +240,20 @@ function wrapTags(escaped: string, color: string): string {
   return escaped.replace(/(#[^\s#，。！？；：,.!?;:]+)/g, (m) =>
     `<span class="m-tag" style="color:${color};background:${color}1A">${m}</span>`);
 }
-function figHtml(id: string, alt: string, color: string): string {
-  // 序列化富文本里不能挂 React 组件：内联 reicon「X」outline 的同款 path，与 reicon-react 视觉一致
+function figHtml(id: string, alt: string, color: string, path?: string | null): string {
+  // 序列化富文本里不能挂 React 组件：内联 reicon「X」outline 的同款 path，与 reicon-react 视觉一致。
+  // 有真实文件的素材渲染 <img>；无 path 的历史素材回退色块
+  const img = path
+    ? `<img class="m-fig-img" src="/api/assets/${id}/raw" alt="${escHtml(alt || "配图")}" draggable="false">`
+    : "";
   return (
     `<figure class="m-fig" contenteditable="false" data-asset="${id}" data-alt="${escHtml(alt || "配图")}" style="background:${color}">` +
+    img +
     `<span class="m-fig-lb">${escHtml(alt || "配图")}</span>` +
-    `<button type="button" class="m-fig-del" aria-label="移除这张图"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M18.4697 19.5303C18.7626 19.8232 19.2374 19.8232 19.5303 19.5303C19.8232 19.2374 19.8232 18.7626 19.5303 18.4697L13.0607 12L19.5303 5.53033C19.8232 5.23744 19.8232 4.76256 19.5303 4.46967C19.2374 4.17678 18.7626 4.17678 18.4697 4.46967L12 10.9393L5.53033 4.46967C5.23744 4.17678 4.76256 4.17678 4.46967 4.46967C4.17678 4.76256 4.17678 5.23744 4.46967 5.53033L10.9393 12L4.46967 18.4697C4.17678 18.7626 4.17678 19.2374 4.46967 19.5303C4.76256 19.8232 5.23744 19.8232 5.53033 19.5303L12 13.0607L18.4697 19.5303Z" fill="currentColor"/></svg></button></figure>`
+    `<button type="button" class="m-fig-del" aria-label="移除这张图"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M18.4697 19.5303C18.7626 19.8232 19.2374 19.8232 19.5303 19.5303C19.8232 19.2374 19.8232 18.7626 19.5303 18.4697L13.0607 12L19.5303 5.53033C19.8232 5.23744 19.8232 4.76256 19.5303 4.46967C19.8232 4.17678 18.7626 4.17678 18.4697 4.46967L12 10.9393L5.53033 4.46967C5.23744 4.17678 5.23744 4.17678 5.53033 4.46967C4.17678 4.76256 4.17678 5.23744 4.46967 5.53033L10.9393 12L4.46967 18.4697C4.17678 18.7626 4.17678 19.2374 4.46967 19.5303C4.17678 19.8232 5.23744 19.8232 5.53033 19.5303L12 13.0607L18.4697 19.5303Z" fill="currentColor"/></svg></button></figure>`
   );
 }
-function mdToHtmlLocal(body: string, color: string, assets: { id: string; color?: string | null }[]): string {
+function mdToHtmlLocal(body: string, color: string, assets: { id: string; color?: string | null; path?: string | null }[]): string {
   const out: string[] = [];
   let buf: string[] = [];
   const flush = () => {
@@ -262,7 +266,7 @@ function mdToHtmlLocal(body: string, color: string, assets: { id: string; color?
     if (m) {
       flush();
       const im = assets.find((x) => x.id === m[2]);
-      out.push(figHtml(m[2]!, m[1] || "配图", im?.color || "#EDECE9"));
+      out.push(figHtml(m[2]!, m[1] || "配图", im?.color || "var(--onda-hover)", im?.path));
     } else if (!line.trim()) {
       flush();
     } else {
@@ -377,20 +381,22 @@ type RichBodyHandle = {
 };
 
 function RichBody({
-  html, plain, color, assets, postId, placeholder, onChangeBody, onAddImage, onRemoveAsset, bodyRef,
+  html, plain, color, assets, postId, placeholder, onChangeBody, onUploadImage, onRemoveAsset, bodyRef,
 }: {
   html: string;
   plain: string;
   color: string;
-  assets: { id: string; color?: string | null }[];
+  assets: { id: string; color?: string | null; path?: string | null }[];
   postId: string;
   placeholder: string;
   onChangeBody: (html: string, plain: string) => void;
-  onAddImage: () => Promise<{ id: string; color: string } | null>;
+  /** 上传图片并返回新素材（插入正文用真实文件） */
+  onUploadImage: (file: File) => Promise<{ id: string; color: string; path?: string | null } | null>;
   onRemoveAsset: (id: string) => void;
   bodyRef: React.RefObject<RichBodyHandle | null>;
 }) {
   const ref = React.useRef<HTMLDivElement | null>(null);
+  const inputRef = React.useRef<HTMLInputElement | null>(null);
   const composing = React.useRef(false);
   const timer = React.useRef<number | null>(null);
   const snapTimer = React.useRef<number | null>(null);
@@ -514,23 +520,29 @@ function RichBody({
     }, 500);
   };
 
-  const insertFigure = (im: { id: string; color: string }) => {
+  const insertFigure = (im: { id: string; color: string; path?: string | null }) => {
     const el = ref.current;
     if (!el) return;
     el.focus();
-    document.execCommand("insertHTML", false, figHtml(im.id, "配图", im.color) + "<p><br></p>");
+    document.execCommand("insertHTML", false, figHtml(im.id, "配图", im.color, im.path) + "<p><br></p>");
     normalizeEdges(el);
     push();
     record(true);
     scheduleHighlight();
   };
 
+  const pickImage = () => {
+    inputRef.current?.click();
+  };
+
   const handlePaste = (e: React.ClipboardEvent) => {
     const items = (e.clipboardData && e.clipboardData.items) || [];
     for (let i = 0; i < items.length; i += 1) {
       if (items[i].type && items[i].type.startsWith("image")) {
+        const file = items[i].getAsFile();
+        if (!file) continue;
         e.preventDefault();
-        void onAddImage().then((im) => {
+        void onUploadImage(file).then((im) => {
           if (im) insertFigure(im);
         });
         return;
@@ -650,16 +662,13 @@ function RichBody({
     if (!bodyRef) return;
     bodyRef.current = {
       insert: () => {
-        void onAddImage().then((im) => {
-          if (im) insertFigure(im);
-        });
+        pickImage();
       },
       run: runCommand,
       undo,
       redo,
       removeFig,
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   });
 
   const handleClick = (e: React.MouseEvent) => {
@@ -676,9 +685,23 @@ function RichBody({
   };
 
   return (
-    <div
-      ref={ref}
-      className={"m-richbody" + ((plain || "").trim() ? "" : " is-empty")}
+    <>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={async (e) => {
+          const f = e.target.files?.[0];
+          e.target.value = "";
+          if (!f) return;
+          const im = await onUploadImage(f);
+          if (im) insertFigure(im);
+        }}
+      />
+      <div
+        ref={ref}
+        className={"m-richbody" + ((plain || "").trim() ? "" : " is-empty")}
       contentEditable
       suppressContentEditableWarning
       role="textbox"
@@ -692,7 +715,8 @@ function RichBody({
       onClick={handleClick}
       onKeyDown={handleKeyDown}
       onBlur={() => { push(); record(true); }}
-    />
+      />
+    </>
   );
 }
 
@@ -803,23 +827,25 @@ function EditToolbar({ onCommand, onImage }: { onCommand: (kind: string) => void
   );
 }
 
-/* ---------- 图片素材（占位色块；真实文件路径由发布时选择/后续上传补齐） ---------- */
+/* ---------- 图片素材（真实文件上传；粘贴/工具栏插图仍走占位色块） ---------- */
 const IMG_W = 72;
 const IMG_GAP = 8;
 
 function ImageAssets({
-  images, color, onAdd, onMove, onDelete,
+  images, color, onUploadFiles, onMove, onDelete,
 }: {
-  images: { id: string; color?: string | null }[];
+  images: { id: string; path?: string; color?: string | null }[];
   color: string;
-  onAdd: () => void;
+  onUploadFiles: (files: File[]) => Promise<void>;
   onMove: (from: number, to: number) => void;
   onDelete: (id: string) => void;
 }) {
   const list = images || [];
   const [expanded, setExpanded] = React.useState(false);
   const [overflow, setOverflow] = React.useState(false);
+  const [busy, setBusy] = React.useState(false);
   const rowRef = React.useRef<HTMLDivElement | null>(null);
+  const inputRef = React.useRef<HTMLInputElement | null>(null);
   /* 长按拖拽排序：按住拎起 → 其余格子实时让位（FLIP）→ 松手滑进槽位。
      关键：渲染顺序必须由 dnd.order 驱动 —— order 变格子才真的让位，
      只让被拖格跟着指针走而其余不动，就是「看起来不可用」的根源 */
@@ -860,43 +886,71 @@ function ImageAssets({
         <span className="h-[13px] w-[13px] rounded" style={{ background: color }} />
         <span className="text-[13px] font-black">图片素材</span>
         <span className="font-mono text-[11px] text-ink2">{list.length} 张 · 长按拖拽换顺序</span>
+        {busy && <span className="font-mono text-[11px] text-ink2">上传中…</span>}
       </div>
       <div className="flex items-center gap-2.5">
         {/* 拖拽进行中放开裁剪：被拖的格子要能甩出素材条外，否则拖到边缘就被「吃掉」。
             relative 是必须的：格子的 offsetLeft 要以这行为基准，与指针坐标同系，拖拽判定才准 */}
         <div className={"relative flex min-w-0 flex-1 gap-2" + (expanded ? " flex-wrap" : "") + (expanded || dnd.dragId ? " overflow-visible" : " overflow-hidden")} ref={(el) => { rowRef.current = el; dnd.gridRef.current = el; }}>
+          <input
+            ref={inputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={async (e) => {
+              const files = Array.from(e.target.files ?? []);
+              e.target.value = "";
+              if (!files.length) return;
+              setBusy(true);
+              try {
+                await onUploadFiles(files);
+              } finally {
+                setBusy(false);
+              }
+            }}
+          />
           <Button
             className="flex h-[72px] w-[72px] flex-none items-center justify-center rounded-[10px] border border-dashed border-ink3 bg-card text-ink2 transition-[transform,border-color,color] data-[hovered=true]:border-ink2 data-[hovered=true]:text-ink"
-            onPress={onAdd}
-            aria-label="添加图片素材"
+            isDisabled={busy}
+            onPress={() => inputRef.current?.click()}
+            aria-label="上传图片素材"
           >
             <IcPlus size={16} />
           </Button>
-          {view.map((im, i) => (
+          {view.map((im) => (
             <div
               key={im.id}
               ref={(el) => dnd.register(im.id, el)}
               className={
-                "group relative flex h-[72px] w-[72px] flex-none flex-col items-end justify-end gap-[3px] rounded-[10px] p-1.5 cursor-grab transition-[transform,box-shadow] hover:-translate-y-0.5" +
+                "group relative flex h-[72px] w-[72px] flex-none flex-col items-end justify-end gap-[3px] overflow-hidden rounded-[10px] p-1.5 cursor-grab transition-[transform,box-shadow] hover:-translate-y-0.5" +
                 (dnd.pressing === im.id ? " scale-[.97]" : "") +
                 (dnd.dragId === im.id ? " z-[5] cursor-grabbing shadow-[0_10px_24px_rgba(15,15,15,0.2)] [transition:none] [touch-action:none]" : "")
               }
-              style={{ background: im.color || "#EDECE9" }}
+              style={{ background: im.path ? "#4A4740" : im.color || "var(--onda-hover)" }}
               title={dnd.dragId === im.id ? undefined : "长按拖拽换顺序"}
               onPointerDown={(e) => dnd.onTilePointerDown(e, im.id)}
             >
+              {im.path && (
+                // eslint-disable-next-line @next/next/no-img-element -- 本地 API 字节流缩略图，next/image 无增益
+                <img
+                  src={`/api/assets/${im.id}/raw`}
+                  alt=""
+                  className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+                  draggable={false}
+                />
+              )}
               <Button
                 isIconOnly
                 className={
                   "absolute right-1 top-1 flex h-4 w-4 min-w-0 items-center justify-center rounded-full bg-[rgba(15,15,15,0.45)] p-0 text-white opacity-0 transition-[opacity,background] data-[hovered=true]:bg-[rgba(15,15,15,0.65)] group-hover:opacity-100" +
                   (dnd.dragId === im.id ? " hidden" : "")
                 }
-                aria-label={`删除素材 ${String(i + 1).padStart(2, "0")}`}
+                aria-label="删除素材"
                 onPress={() => onDelete(im.id)}
               >
                 <X size={12} aria-hidden="true" />
               </Button>
-              <span className="font-mono text-[10px] font-bold text-white/90">{String(i + 1).padStart(2, "0")}</span>
             </div>
           ))}
         </div>
@@ -917,43 +971,137 @@ function ImageAssets({
   );
 }
 
+/** 视频/音频素材区：空态整块可点上传；上传后 hover 右上角替换；预览用真实媒体文件 */
+function MediaAssetSection({
+  kind, post, color, onUploadMedia,
+}: {
+  kind: "video" | "audio";
+  post: PostDTO;
+  color: string;
+  onUploadMedia: (kind: "video" | "audio", file: File) => Promise<void>;
+}) {
+  const t = kind === "video" ? { zh: "视频素材", empty: "还没有视频" } : { zh: "音频素材", empty: "还没有音频" };
+  const inputRef = React.useRef<HTMLInputElement | null>(null);
+  const [busy, setBusy] = React.useState(false);
+  const media = post.assets.find((a) => a.kind === kind && a.path);
+  return (
+    <div className="mb-[26px]">
+      <input
+        ref={inputRef}
+        type="file"
+        accept={kind === "video" ? "video/*" : "audio/*"}
+        className="hidden"
+        onChange={async (e) => {
+          const f = e.target.files?.[0];
+          e.target.value = "";
+          if (!f) return;
+          setBusy(true);
+          try {
+            await onUploadMedia(kind, f);
+          } finally {
+            setBusy(false);
+          }
+        }}
+      />
+      <div className="mb-2.5 flex items-center gap-[9px]">
+        <span className="h-[13px] w-[13px] rounded" style={{ background: color }} />
+        <span className="text-[13px] font-black">{t.zh}</span>
+        <span className="font-mono text-[11px] text-ink2">{fmtTime(post.durationSec ?? 0)}</span>
+        {busy && <span className="font-mono text-[11px] text-ink2">上传中…</span>}
+      </div>
+      {kind === "video" ? (
+        media ? (
+          <div className="group relative w-[196px]">
+            <video
+              src={`/api/assets/${media.id}/raw`}
+              controls
+              preload="metadata"
+              className="block aspect-video w-[196px] rounded-xl bg-[#4A4740]"
+            />
+            <div className="absolute right-1.5 top-1.5 z-[5] flex gap-1.5 opacity-0 transition-opacity group-hover:opacity-100">
+              <Button
+                variant="ghost"
+                isDisabled={busy}
+                className="m-0 h-7 min-w-0 rounded-full border border-line bg-card px-2.5 py-0 font-mono text-[10.5px] font-bold text-ink shadow-[0_1px_4px_rgba(15,15,15,0.18)] data-[hovered=true]:bg-hover"
+                onPress={() => inputRef.current?.click()}
+                aria-label="替换视频"
+              >
+                替换
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="flex aspect-video w-[196px] flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-ink3 text-ink3 transition-colors hover:border-ink2 hover:text-ink2"
+            onClick={() => inputRef.current?.click()}
+            aria-label="上传视频"
+          >
+            <IcPlus size={18} />
+            <span className="font-mono text-[10.5px]">{t.empty}</span>
+          </button>
+        )
+      ) : media ? (
+        <div className="group relative max-w-[440px]">
+          <AudioBar src={`/api/assets/${media.id}/raw`} durationSec={post.durationSec} />
+          <div className="absolute right-1.5 top-1.5 z-[5] flex gap-1.5 opacity-0 transition-opacity group-hover:opacity-100">
+            <Button
+              variant="ghost"
+              isDisabled={busy}
+              className="m-0 h-7 min-w-0 rounded-full border border-line bg-card px-2.5 py-0 font-mono text-[10.5px] font-bold text-ink shadow-[0_1px_4px_rgba(15,15,15,0.18)] data-[hovered=true]:bg-hover"
+              onPress={() => inputRef.current?.click()}
+              aria-label="替换音频"
+            >
+              替换
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <button
+          type="button"
+          className="flex aspect-video w-[196px] flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-ink3 text-ink3 transition-colors hover:border-ink2 hover:text-ink2"
+          onClick={() => inputRef.current?.click()}
+          aria-label="上传音频"
+        >
+          <IcPlus size={18} />
+          <span className="font-mono text-[10.5px]">{t.empty}</span>
+        </button>
+      )}
+    </div>
+  );
+}
+
 function AssetSection({
-  post, color, onAddImage, onMoveImage, onRemoveImage,
+  post, color, onMoveImage, onRemoveImage, onUploadMedia,
 }: {
   post: PostDTO;
   color: string;
-  onAddImage: () => void;
   onMoveImage: (from: number, to: number) => void;
   onRemoveImage: (id: string) => void;
+  onUploadMedia: (kind: "video" | "audio" | "image", file: File) => Promise<void>;
 }) {
   if (post.type === "article") return null;
   if (post.type === "image") {
-    return <ImageAssets images={post.assets} color={color} onAdd={onAddImage} onMove={onMoveImage} onDelete={onRemoveImage} />;
-  }
-  if (post.type === "video") {
     return (
-      <div className="mb-[26px]">
-        <div className="mb-2.5 flex items-center gap-[9px]">
-          <span className="h-[13px] w-[13px] rounded" style={{ background: color }} />
-          <span className="text-[13px] font-black">视频素材</span>
-          <span className="font-mono text-[11px] text-ink2">{fmtTime(post.durationSec ?? 0)}</span>
-        </div>
-        <div className="relative flex aspect-video w-[196px] items-center justify-center overflow-hidden rounded-xl bg-[#4A4740]">
-          <span className="absolute bottom-2 right-[9px] font-mono text-[10px] text-white">{fmtTime(post.durationSec ?? 0)}</span>
-        </div>
-      </div>
+      <ImageAssets
+        images={post.assets}
+        color={color}
+        onUploadFiles={async (files) => {
+          for (const f of files) await onUploadMedia("image", f);
+        }}
+        onMove={onMoveImage}
+        onDelete={onRemoveImage}
+      />
     );
   }
-  if (post.type === "audio") {
+  if (post.type === "video" || post.type === "audio") {
     return (
-      <div className="mb-[26px]">
-        <div className="mb-2.5 flex items-center gap-[9px]">
-          <span className="h-[13px] w-[13px] rounded" style={{ background: color }} />
-          <span className="text-[13px] font-black">音频素材</span>
-          <span className="font-mono text-[11px] text-ink2">{fmtTime(post.durationSec ?? 0)}</span>
-        </div>
-        <AudioBar durationSec={post.durationSec} />
-      </div>
+      <MediaAssetSection
+        kind={post.type}
+        post={post}
+        color={color}
+        onUploadMedia={onUploadMedia}
+      />
     );
   }
   return null;
@@ -961,24 +1109,40 @@ function AssetSection({
 
 /* ---------- EditorView ---------- */
 export function EditorView({
-  post, saveState, savedAt, onChangeField, onAddImageAsync, onAddImage, onRemoveAsset, onMoveImage, onBack, onPublish, onSave,
+  post, saveState, savedAt, onChangeField, onUploadImage, onRemoveAsset, onMoveImage, onUploadMedia, onBack, onPublish, onSave,
 }: {
   post: PostDTO;
   saveState: "saved" | "dirty" | "saving";
   savedAt: string;
   onChangeField: (k: "title" | "body" | "bodyHtml", v: string) => void;
-  /** 创建一张素材并返回（粘贴图/工具栏插图：新图要落在光标处） */
-  onAddImageAsync: () => Promise<{ id: string; color: string } | null>;
-  /** 只加一张素材（素材条「+」：追加到末尾） */
-  onAddImage: () => void;
+  /** 上传图片并返回新素材（正文插图/粘贴：真实文件） */
+  onUploadImage: (file: File) => Promise<{ id: string; color: string; path?: string | null } | null>;
   onRemoveAsset: (id: string) => void;
   onMoveImage: (from: number, to: number) => void;
+  onUploadMedia: (kind: "video" | "audio" | "image", file: File) => Promise<void>;
   onBack: () => void;
   onPublish: () => void;
   onSave: () => void;
 }) {
   const t = TYPE_META[post.type];
   const wordCount = (post.title + post.body).length;
+
+  /* 全编辑区拖拽上传：按稿子类型路由文件（video/audio 取第一个，image 逐张追加） */
+  const [dropping, setDropping] = React.useState(false);
+  const dragDepth = React.useRef(0);
+  const [uploading, setUploading] = React.useState(false);
+  const onDropFiles = async (files: File[]) => {
+    const kindOf = (f: File): "video" | "audio" | "image" | null =>
+      f.type.startsWith("video/") ? "video" : f.type.startsWith("audio/") ? "audio" : f.type.startsWith("image/") ? "image" : null;
+    const wanted = files.filter((f) => kindOf(f) === post.type) as File[];
+    if (!wanted.length) return;
+    setUploading(true);
+    try {
+      for (const f of wanted) await onUploadMedia(post.type as "video" | "audio" | "image", f);
+    } finally {
+      setUploading(false);
+    }
+  };
 
   /* ⌘S / Ctrl+S 手动保存（自动保存之外的用户主动兜底） */
   React.useEffect(() => {
@@ -1001,7 +1165,29 @@ export function EditorView({
   };
 
   return (
-    <div className="flex h-full flex-col">
+    <div
+      className="relative flex h-full flex-col"
+      onDragEnter={(e) => {
+        e.preventDefault();
+        dragDepth.current += 1;
+        if (e.dataTransfer?.types && Array.from(e.dataTransfer.types).includes("Files")) setDropping(true);
+      }}
+      onDragOver={(e) => e.preventDefault()}
+      onDragLeave={() => {
+        dragDepth.current -= 1;
+        if (dragDepth.current <= 0) {
+          dragDepth.current = 0;
+          setDropping(false);
+        }
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        dragDepth.current = 0;
+        setDropping(false);
+        const files = Array.from(e.dataTransfer?.files ?? []);
+        if (files.length) void onDropFiles(files);
+      }}
+    >
       <div className="flex h-[60px] flex-none items-center gap-3.5 bg-card px-7">
         <Button variant="ghost" className="flex items-center gap-[7px] rounded-full border border-ink3 bg-card px-4 py-2 text-sm font-bold text-ink data-[hovered=true]:bg-hover" onPress={onBack}><IcArrowLeft size={14} /> 返回</Button>
         <span className="inline-flex items-center gap-2 rounded-full px-3.5 py-2 text-[13px] font-extrabold text-white" style={{ background: t.color }}>
@@ -1032,10 +1218,10 @@ export function EditorView({
             <AssetSection
               post={post}
               color={t.color}
-              onAddImage={onAddImage}
               onMoveImage={onMoveImage}
               onRemoveImage={(id) => { richRef.current?.removeFig(id); onRemoveAsset(id); }}
-            />
+              onUploadMedia={onUploadMedia}
+                  />
             <EditToolbar onCommand={runCommand} onImage={insertImage} />
             <input
               className="w-full border-b-2 border-transparent bg-transparent pb-3 pt-1 text-[28px] font-bold leading-[1.35] tracking-[-0.4px] text-ink outline-none transition-colors placeholder:text-ink3 focus:border-accent"
@@ -1050,7 +1236,7 @@ export function EditorView({
               assets={post.assets}
               postId={post.id}
               onChangeBody={(html, plain) => { onChangeField("bodyHtml", html); onChangeField("body", plain); }}
-              onAddImage={onAddImageAsync}
+              onUploadImage={onUploadImage}
               onRemoveAsset={onRemoveAsset}
               bodyRef={richRef}
               placeholder={post.type === "article"
@@ -1062,6 +1248,13 @@ export function EditorView({
         </div>
         <PreviewColumn post={post} />
       </div>
+      {(dropping || uploading) && (
+        <div className="pointer-events-none absolute inset-0 z-[60] flex items-center justify-center bg-[rgba(35,131,226,0.08)]" aria-live="polite">
+          <span className="rounded-full bg-accent px-5 py-2.5 text-sm font-black text-white shadow-[0_10px_30px_rgba(35,131,226,0.35)]">
+            {uploading ? "上传中…" : "松开，上传到这篇稿子"}
+          </span>
+        </div>
+      )}
     </div>
   );
 }

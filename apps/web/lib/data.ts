@@ -33,6 +33,7 @@ export async function loadQueueData(): Promise<{
   tasks: TaskDTO[];
   postMins: { id: string; type: string; title: string }[];
   platforms: PlatformDTO[];
+  counts: Record<string, number>;
 }> {
   boot();
   const [tasks, all, platforms] = await Promise.all([listTasks(), listPosts({ scope: "all", query: "", sort: "recent" }), listPlatforms()]);
@@ -41,7 +42,9 @@ export async function loadQueueData(): Promise<{
     const p = byId.get(t.postId);
     return { id: t.postId, type: p?.type ?? "article", title: p?.title ?? t.postTitle };
   });
-  return { tasks, postMins, platforms };
+  const counts: Record<string, number> = {};
+  for (const p of all) counts[p.type] = (counts[p.type] ?? 0) + 1;
+  return { tasks, postMins, platforms, counts };
 }
 
 export async function loadEditorData(id: string): Promise<{

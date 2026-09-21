@@ -8,7 +8,7 @@ function nowTime() {
 
 function App() {
   const [view, setView] = React.useState("library"); // library | queue | editor
-  const [scope, setScope] = React.useState("all");   // all | article | image | video | audio
+  const [scope, setScope] = React.useState("article"); // article | image | video | audio
   const [query, setQuery] = React.useState("");
   const [sort, setSort] = React.useState("recent");
   /* 纯文本正文（body）装载时补齐富文本形态（bodyHtml）：编辑与预览都用同一份 */
@@ -21,6 +21,23 @@ function App() {
   const [defaults, setDefaults] = React.useState(DEFAULT_TARGETS);
   const [sheetOpen, setSheetOpen] = React.useState(false);
   const [settingsOpen, setSettingsOpen] = React.useState(false);
+  /* 未保存离开确认：editorDirty 由编辑器上报；pendingLeave 存放被拦下的动作 */
+  const [editorDirty, setEditorDirty] = React.useState(false);
+  const [pendingLeave, setPendingLeave] = React.useState(null);
+  const leaveGuard = (action) => {
+    if (view === "editor" && editorDirty) setPendingLeave(() => action);
+    else action();
+  };
+  /* 真·离开页面（刷新 / 关闭）也要拦一道 */
+  React.useEffect(() => {
+    const onBeforeUnload = (e) => {
+      if (!editorDirty) return;
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [editorDirty]);
   const [tasks, setTasks] = React.useState(() => [
     {
       id: "seed-1", postId: "i2", postTitle: "白露之后的云", platformId: "xhs",
@@ -78,8 +95,9 @@ function App() {
     const id = "p" + Date.now();
     const base = { id, type, updated: "09-12 " + nowTime().slice(0, 5), title: "", body: "", bodyHtml: "" };
     if (type === "image") base.images = [asset("#D52088"), asset("#FD8D11"), asset("#2C6FF0")];
-    if (type === "video") base.duration = "00:00";
-    if (type === "audio") { base.duration = "00:00"; base.durationSec = 60; }
+    /* 视频 / 音频建稿时没有文件：素材区从「上传」开始，删掉后也回到这一态 */
+    if (type === "video") { base.media = false; base.duration = "00:00"; }
+    if (type === "audio") { base.media = false; base.duration = "00:00"; base.durationSec = 0; }
     setPosts((ps) => [base, ...ps]);
     setEditingId(id);
     setView("editor");
@@ -154,6 +172,11 @@ function App() {
     () => Array.from(new Set(tasks.filter((t) => t.status === "running").map((t) => t.postId))),
     [tasks]
   );
+  /* 发出去过的稿子：标题行挂一枚「已发布」贴纸，防止重复发布 */
+  const publishedIds = React.useMemo(
+    () => Array.from(new Set(tasks.filter((t) => t.status === "success").map((t) => t.postId))),
+    [tasks]
+  );
   const runningCount = tasks.filter((t) => t.status === "running").length;
   const editing = posts.find((p) => p.id === editingId);
 
@@ -164,12 +187,12 @@ function App() {
           view={view}
           scope={scope}
           counts={counts}
-          total={posts.length}
           runningCount={runningCount}
           queueCount={tasks.length}
           platforms={platforms}
-          onScope={openScope}
-          onQueue={openQueue}
+          onScope={(k) => leaveGuard(() => openScope(k))}
+          onQueue={() => leaveGuard(openQueue)}
+          onNew={(type) => leaveGuard(() => newPost(type))}
           onSettings={() => setSettingsOpen(true)}
         />
         <div className="w-stage">
@@ -180,6 +203,7 @@ function App() {
               query={query}
               sort={sort}
               runningIds={runningIds}
+              publishedIds={publishedIds}
               onOpen={openPost}
               onDelete={deletePost}
               onNew={newPost}
@@ -195,7 +219,6 @@ function App() {
                 <header className="w-head">
                   <div className="w-headline">
                     <h1 className="w-h1">发布队列</h1>
-                    <span className="w-hmeta">{tasks.length} 个发布动作 · 发布事实只此一处</span>
                   </div>
                 </header>
                 <div className="w-scroll">
@@ -209,7 +232,8 @@ function App() {
             <EditorView
               post={editing}
               onChange={changePost}
-              onBack={() => setView("library")}
+              onDirty={setEditorDirty}
+              onBack={() => leaveGuard(() => setView("library"))}
               onPublish={() => {
                 /* 打开发布弹层：按「该类型的默认平台」预选（拿不到凭据的不算） */
                 const want = defaults[editing.type] || [];
@@ -246,7 +270,32 @@ function App() {
         />
       )}
 
-      <FloatingPill tasks={tasks} onClick={openQueue} />
+      {/* 未保存离开确认：内容都还在内存里，但交互按真实产品的三选一来演示 */}
+      {pendingLeave && (
+        <div className="m-overlay" onClick={() => setPendingLeave(null)}>
+          <div className="m-mini" role="alertdialog" aria-label="未保存提示" data-screen-label="未保存确认" onClick={(e) => e.stopPropagation()}>
+            <h3>有未保存的改动</h3>
+            <p>「{editing ? (editing.title || "未命名稿子") : ""}」的改动还没有保存，离开后会丢失。要怎么处理？</p>
+            <div className="m-mini-foot">
+              <button className="m-btn-plain" onClick={() => setPendingLeave(null)}>取消</button>
+              <button
+                className="m-btn-danger"
+                onClick={() => { const a = pendingLeave; setPendingLeave(null); setEditorDirty(false); a(); }}
+              >
+                不保存并离开
+              </button>
+              <button
+                className="m-btn-primary"
+                onClick={() => { const a = pendingLeave; setPendingLeave(null); setEditorDirty(false); a(); }}
+              >
+                保存并离开
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <FloatingPill tasks={tasks} onClick={() => leaveGuard(openQueue)} />
     </div>
   );
 }

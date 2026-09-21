@@ -36,7 +36,7 @@
           "path": "directions/mosaic/index.html",
           "createdAt": "2026-09-12T15:59:46.263Z",
           "status": "needs-review",
-          "subtitle": "骨架重做：四列 bento → 左栏 + 单列表（预览弹窗、栏底设置）",
+          "subtitle": "中性工作台 + 主题修补 + 全卡片 + 素材可管理 + 引用解壳 + 粘贴保焦 + 离开确认",
           "viewport": {
             "width": 1440,
             "height": 900
@@ -46,5 +46,5 @@
     }
   },
   "createdAt": "2026-09-12T15:59:46.188Z",
-  "updatedAt": "2026-09-19T03:52:05.637Z"
+  "updatedAt": "2026-09-21T15:08:41.102Z"
 }

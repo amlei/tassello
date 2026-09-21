@@ -90,6 +90,7 @@
     "packages/server": {
       "name": "@tassello/server",
       "dependencies": {
+        "@tassello/cdp": "workspace:*",
         "@tassello/db": "workspace:*",
         "@tassello/platform-core": "workspace:*",
         "@tassello/platform-wechat": "workspace:*",

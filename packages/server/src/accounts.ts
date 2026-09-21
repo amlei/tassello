@@ -3,6 +3,7 @@ import { getPrisma } from "@tassello/db";
 import { PLATFORM_METAS, getAdapter } from "@tassello/platform-core";
 import type { AccountDTO, PlatformDTO } from "@tassello/shared";
 import { fileSecretBox } from "./secrets";
+import { syncBrowserProfile } from "./profile";
 
 function toAccountDTO(a: {
   id: string; platformId: string; state: string; failReason: string | null;
@@ -62,24 +63,15 @@ async function upsertAccount(
   return prisma.platformAccount.create({ data: { platformId, ...base } });
 }
 
+/** 获取 = 导入用户已登录的浏览器 Profile → 自动校验。登录不发生在本应用内 */
 export async function acquireAccount(platformId: string): Promise<AccountDTO> {
-  const adapter = getAdapter(platformId);
-  if (!adapter) throw new Error(`平台 ${platformId} 的适配器尚未接入`);
   const prisma = getPrisma();
-  const row = await prisma.platformAccount.findFirst({ where: { platformId }, orderBy: { updatedAt: "desc" } });
-  let profile: unknown = {};
-  if (row) {
-    try {
-      profile = JSON.parse(row.profile);
-    } catch {}
+  const sync = await syncBrowserProfile();
+  if (!sync.ok) {
+    const saved = await upsertAccount(platformId, { state: "fail", failReason: sync.message });
+    return toAccountDTO(saved);
   }
-  const result = await adapter.account.acquire({ secrets: fileSecretBox, log: () => {} });
-  const saved = await upsertAccount(platformId, {
-    state: result.state,
-    failReason: result.failReason,
-    profile: result.profile ?? profile,
-  });
-  return toAccountDTO(saved);
+  return verifyAccount(platformId);
 }
 
 export async function verifyAccount(platformId: string): Promise<AccountDTO> {
@@ -112,4 +104,21 @@ export async function verifyAccount(platformId: string): Promise<AccountDTO> {
     authExpiresAt: result.authExpiresAt,
   });
   return toAccountDTO(saved);
+}
+
+let bootVerifyStarted = false;
+
+/** 每次启动自动校验：对所有已有账号且适配器就绪的平台各跑一次 verify。
+ *  后台异步执行不阻塞启动；进程内只跑一次；单平台失败不影响其他平台 */
+export function verifyAllAccountsOnBoot(): void {
+  if (bootVerifyStarted) return;
+  bootVerifyStarted = true;
+  void (async () => {
+    try {
+      const prisma = getPrisma();
+      const rows = await prisma.platformAccount.findMany();
+      const platformIds = [...new Set(rows.map((r) => r.platformId))].filter((id) => !!getAdapter(id));
+      await Promise.all(platformIds.map((id) => verifyAccount(id).catch(() => {})));
+    } catch {} // 启动校验绝不影响应用可用性（如首启表未建）
+  })();
 }

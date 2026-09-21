@@ -10,11 +10,12 @@ import { TasksView } from "./tasks";
 import { FloatingPill } from "./bits";
 
 export function QueueScreen({
-  tasks: initialTasks, postMins, platforms,
+  tasks: initialTasks, postMins, platforms, counts,
 }: {
   tasks: TaskDTO[];
   postMins: { id: string; type: string; title: string }[];
   platforms: PlatformDTO[];
+  counts: Record<string, number>;
 }) {
   const router = useRouter();
   const [tasks, setTasks] = React.useState(initialTasks);
@@ -39,7 +40,7 @@ export function QueueScreen({
 
   return (
     <div className="flex h-screen min-h-0 overflow-hidden" data-screen-label="发布队列">
-      <Rail active="queue" counts={{}} runningCount={runningCount} queueCount={tasks.length} platforms={platforms} />
+      <Rail active="queue" counts={counts} runningCount={runningCount} queueCount={tasks.length} platforms={platforms} />
       <div className="mx-auto flex min-h-0 w-full max-w-[1560px] flex-1 flex-col">
         <header className="flex flex-none flex-wrap items-end gap-4 px-[34px] pb-4 pt-[26px]">
           <div className="flex min-w-0 items-baseline gap-3">

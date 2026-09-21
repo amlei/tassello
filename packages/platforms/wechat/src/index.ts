@@ -88,21 +88,12 @@ export const wechatAdapter: PlatformAdapter<WechatProfile> = {
   account: {
     profileSchema: wechatProfileSchema,
 
-    async acquire() {
-      // 打开 mp 后台（不关），等用户扫码登录；登录态落在共享 profile 里
-      await withPage("wechat", { url: MP_HOME, keepOpen: true, activate: true }, async () => {});
-      return {
-        state: "fail" as const,
-        failReason: "已打开公众号后台：扫码登录后回工作台点「重新校验」",
-      };
-    },
-
     async verify(acct, ctx) {
       const profile = (acct.profile ?? {}) as WechatProfile;
       ctx.log("wechat.verify.start");
-      /* 打开 mp 后台等它就绪（登录态下有跳转），再读会话信息 */
+      /* headless 打开 mp 后台等它就绪（登录态下有跳转），再读会话信息 */
       try {
-        const r = await withPage("wechat", { url: MP_HOME, keepOpen: false, activate: false }, (cdp, sid) =>
+        const r = await withPage("wechat", { url: MP_HOME, keepOpen: false, activate: false, mode: "headless" }, (cdp, sid) =>
           waitForMpReady(cdp, sid),
         );
         if (!r.loggedIn) return { state: "fail", failReason: "公众号后台未登录，请在浏览器里扫码登录" };

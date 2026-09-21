@@ -3,7 +3,7 @@
 /** 正文里的插图记号：![说明](asset://id)，独占一行时落成图块 */
 export const ASSET_IMG_RE = /^!\[([^\]]*)\]\(asset:\/\/([^)]+)\)$/;
 
-export type RenderAsset = { id: string; color?: string | null };
+export type RenderAsset = { id: string; color?: string | null; path?: string | null };
 
 export function escHtml(s: string): string {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -16,11 +16,15 @@ export function wrapTags(escaped: string, color: string): string {
   );
 }
 
-/** 正文里的图块：编辑器里不可编辑 figure，预览里是同一份 HTML */
-export function figHtml(id: string, alt: string, color: string): string {
+/** 正文里的图块：编辑器里不可编辑 figure，预览里是同一份 HTML。
+ *  有真实文件的素材渲染 <img>；无 path 的历史素材回退色块 */
+export function figHtml(id: string, alt: string, color: string, path?: string | null): string {
+  const img = path
+    ? '<img class="m-fig-img" src="/api/assets/' + id + '/raw" alt="' + escHtml(alt || "配图") + '" draggable="false">'
+    : "";
   return (
     '<figure class="m-fig" contenteditable="false" data-asset="' + id + '" data-alt="' + escHtml(alt || "配图") +
-    '" style="background:' + color + '"><span class="m-fig-lb">' + escHtml(alt || "配图") +
+    '" style="background:' + color + '">' + img + '<span class="m-fig-lb">' + escHtml(alt || "配图") +
     '</span><button type="button" class="m-fig-del" aria-label="移除这张图">×</button></figure>'
   );
 }
@@ -40,7 +44,7 @@ export function mdToHtml(body: string, color: string, assets?: RenderAsset[]): s
     if (m) {
       flush();
       const im = list.find((x) => x.id === m[2]);
-      out.push(figHtml(m[2]!, m[1] || "配图", im?.color || "#E4E0D4"));
+      out.push(figHtml(m[2]!, m[1] || "配图", im?.color || "var(--onda-hover)", im?.path));
     } else if (!line.trim()) {
       flush();
     } else {

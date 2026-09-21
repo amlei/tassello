@@ -1,6 +1,6 @@
-/* library.jsx — 工作台主界面：左侧栏（类型为主，其余次要入口在其下）+ 内容列表
-   设计意图：类型是「颜色 + 筛选维度」，不再是四条并行滚动的轨道。
-   一条列表可以有多长，工作台就能装多少内容。 */
+/* library.jsx — 工作台主界面：左侧栏（四类型 + 发布队列）+ 统一卡片网格
+   设计意图：四种内容共用一个卡片壳，封面各自长脸；
+   类型是颜色与筛选维度，不再是布局结构。 */
 
 /* "09-12 14:02" → 09121402：同一年内比较够用；跨年要换成真时间戳 */
 function stamp(s) {
@@ -15,7 +15,7 @@ const SORTS = [
 ];
 
 /* ---------- 左侧栏 ---------- */
-function Sidebar({ view, scope, counts, total, runningCount, queueCount, platforms, onScope, onQueue, onSettings }) {
+function Sidebar({ view, scope, counts, runningCount, queueCount, platforms, onScope, onQueue, onNew, onSettings }) {
   const active = view === "queue" ? "queue" : scope;
   /* 凭据缺了才提醒：全拿到的时候设置这一行不带任何噪音 */
   const missing = platforms.filter((p) => p.state !== "ok").length;
@@ -29,7 +29,10 @@ function Sidebar({ view, scope, counts, total, runningCount, queueCount, platfor
         </div>
       </div>
 
-      {/* 第一组：四种内容类型。它们是日常主路径，所以排在最上面、字号最大 */}
+      {/* 新建内容：弹出四类型菜单，建好直达编辑器 */}
+      <NewContentMenu onNew={onNew} />
+
+      {/* 第一组：四种内容类型。它们是日常主路径，所以排在最上面 */}
       <nav className="w-nav" aria-label="内容类型">
         {TYPE_ORDER.map((k) => {
           const t = TYPES[k];
@@ -41,7 +44,7 @@ function Sidebar({ view, scope, counts, total, runningCount, queueCount, platfor
               aria-current={on ? "page" : undefined}
               onClick={() => onScope(k)}
             >
-              <span className="w-sq" style={{ background: on ? "#fff" : t.color }}></span>
+              <span className="w-sq" style={{ background: t.color }}></span>
               <span>{t.zh}</span>
               <span className="w-navn">{String(counts[k]).padStart(2, "0")}</span>
             </button>
@@ -52,20 +55,11 @@ function Sidebar({ view, scope, counts, total, runningCount, queueCount, platfor
       {/* 第二组：跨类型的入口，放在四类之下、字号收一档 */}
       <nav className="w-navsub" aria-label="其他入口">
         <button
-          className={"w-navitem" + (active === "all" ? " on" : "")}
-          aria-current={active === "all" ? "page" : undefined}
-          onClick={() => onScope("all")}
-        >
-          <span className="w-sq"></span>
-          <span>全部稿子</span>
-          <span className="w-navn">{String(total).padStart(2, "0")}</span>
-        </button>
-        <button
           className={"w-navitem" + (active === "queue" ? " on" : "")}
           aria-current={active === "queue" ? "page" : undefined}
           onClick={onQueue}
         >
-          <span className="w-sq"></span>
+          <span className="w-sq" style={{ background: "var(--green)" }}></span>
           <span>发布队列</span>
           {runningCount > 0
             ? <span className="w-badge">{runningCount}</span>
@@ -85,13 +79,38 @@ function Sidebar({ view, scope, counts, total, runningCount, queueCount, platfor
   );
 }
 
-/* ---------- 主区头部：标题 + 搜索 + 排序 + 新建 ---------- */
-function ViewHead({ title, meta, query, onQuery, sort, onSort, scope, onNew, onNewMenu }) {
+/* 新建内容菜单：主按钮交互蓝，菜单里四类型各带色块 */
+function NewContentMenu({ onNew }) {
+  const [open, setOpen] = React.useState(false);
+  return (
+    <div className="w-sort">
+      <button className="w-newall" onClick={() => setOpen((v) => !v)} aria-expanded={open} aria-haspopup="menu">
+        <IcPlus size={14} /> 新建内容
+      </button>
+      {open && (
+        <React.Fragment>
+          <button className="w-backdrop" onClick={() => setOpen(false)} aria-label="关闭新建菜单"></button>
+          <div className="w-menu left" role="menu" style={{ top: "calc(100% + 8px)", left: 0, right: "auto" }}>
+            {TYPE_ORDER.map((k) => (
+              <button key={k} className="w-menuitem" role="menuitem" onClick={() => { setOpen(false); onNew(k); }}>
+                <span className="w-sq" style={{ background: TYPES[k].color }}></span>
+                {TYPES[k].zh}
+                <span className="w-navn" style={{ marginLeft: "auto" }}>{TYPES[k].en}</span>
+              </button>
+            ))}
+          </div>
+        </React.Fragment>
+      )}
+    </div>
+  );
+}
+
+/* ---------- 主区头部：标题 + 搜索 + 排序 + 新建（scope 恒为某一类型，新建直达） ---------- */
+function ViewHead({ title, meta, query, onQuery, sort, onSort, scope, onNew }) {
   const [sortOpen, setSortOpen] = React.useState(false);
-  const [newOpen, setNewOpen] = React.useState(false);
   const searchRef = React.useRef(null);
   const cur = SORTS.find((s) => s.id === sort) || SORTS[0];
-  const t = scope === "all" ? null : TYPES[scope];
+  const t = TYPES[scope];
 
   /* ⌘K / Ctrl+K 直接落到搜索框：内容一多，键盘是唯一还快的入口 */
   React.useEffect(() => {
@@ -100,7 +119,7 @@ function ViewHead({ title, meta, query, onQuery, sort, onSort, scope, onNew, onN
         e.preventDefault();
         if (searchRef.current) searchRef.current.focus();
       }
-      if (e.key === "Escape") { setSortOpen(false); setNewOpen(false); }
+      if (e.key === "Escape") setSortOpen(false);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -153,30 +172,9 @@ function ViewHead({ title, meta, query, onQuery, sort, onSort, scope, onNew, onN
           )}
         </div>
 
-        <div className="w-sort">
-          <button
-            className="w-new"
-            style={{ background: t ? t.color : "var(--ink)" }}
-            onClick={() => (t ? onNew(scope) : setNewOpen((v) => !v))}
-            aria-expanded={t ? undefined : newOpen}
-          >
-            <IcPlus size={14} /> 新建{t ? t.zh : ""}
-            {!t && <IcChevron size={12} />}
-          </button>
-          {!t && newOpen && (
-            <React.Fragment>
-              <button className="w-backdrop" onClick={() => setNewOpen(false)} aria-label="关闭新建菜单"></button>
-              <div className="w-menu" role="menu">
-                {TYPE_ORDER.map((k) => (
-                  <button key={k} className="w-menuitem" role="menuitem" onClick={() => { setNewOpen(false); onNew(k); }}>
-                    <span className="w-sq" style={{ background: TYPES[k].color }}></span>
-                    {TYPES[k].zh}
-                  </button>
-                ))}
-              </div>
-            </React.Fragment>
-          )}
-        </div>
+        <button className="w-new" style={{ background: t.color }} onClick={() => onNew(scope)}>
+          <IcPlus size={14} /> 新建{t.zh}
+        </button>
       </div>
     </header>
   );
@@ -186,7 +184,7 @@ function ViewHead({ title, meta, query, onQuery, sort, onSort, scope, onNew, onN
 function RowActions({ post, onDelete, solid }) {
   const [confirming, setConfirming] = React.useState(false);
   return (
-    <div className={solid ? "w-tileacts" : "w-rowacts"}>
+    <div className={solid ? "w-tileacts" : "w-tileacts"} onClick={(e) => e.stopPropagation()}>
       <button
         className={"w-icon" + (confirming ? " confirm" : "")}
         title={confirming ? "再点一次删除" : "删除这篇稿子"}
@@ -204,44 +202,85 @@ function RowActions({ post, onDelete, solid }) {
   );
 }
 
-/* ---------- 行：文章、音频，以及「全部稿子」里的任意类型 ---------- */
-function PostRow({ post, showKind, live, onOpen, onDelete }) {
-  const t = TYPES[post.type];
+/* ---------- 封面角标：「发布中」钉在封面左下角 ---------- */
+function CoverLive({ live }) {
+  if (!live) return null;
+  return (
+    <span className="w-livepill"><i></i>发布中</span>
+  );
+}
+
+/* 「已发布」贴纸：标题行的小徽标，提示这篇发出去过，防止重复发布 */
+function PublishedBadge({ published }) {
+  if (!published) return null;
+  return (
+    <span className="w-pubbadge"><IcCheck size={9} />已发布</span>
+  );
+}
+
+/* 卡片标题行：标题两行截断 + 日期 / 可选附加信息 / 已发布 */
+function TileTitleMeta({ post, extra, published }) {
+  return (
+    <div className="w-tilemain">
+      <h3 className="w-tiletitle">{post.title || "未命名稿子"}</h3>
+      <div className="w-tilemeta">
+        <span>{post.updated}</span>
+        {extra ? <span>{extra}</span> : null}
+        <PublishedBadge published={!!published} />
+      </div>
+    </div>
+  );
+}
+
+/* ---------- 文章卡：三行摘要直接当封面 ---------- */
+function ArticleTile({ post, live, published, onOpen, onDelete }) {
   const excerpt = plainSummary(post.body);
   return (
-    <article
-      className="w-row"
-      tabIndex={0}
-      role="button"
-      onClick={() => onOpen(post.id)}
-      onKeyDown={(e) => { if (e.key === "Enter") onOpen(post.id); }}
-    >
-      {showKind && (
-        <span className="w-kind">
-          <span className="w-sq" style={{ background: t.color }}></span>
-          <span className="w-kindtxt">{t.en}</span>
-        </span>
-      )}
-      <div className="w-rowmain">
-        <h3 className="w-rowtitle">{post.title || "未命名稿子"}</h3>
-        <p className="w-rowexcerpt">{excerpt || "还没写内容，点开继续。"}</p>
+    <article className="w-tile" tabIndex={0} role="button" onClick={() => onOpen(post.id)} onKeyDown={(e) => { if (e.key === "Enter") onOpen(post.id); }}>
+      <div className="w-coverwrap">
+        <div className="w-cover" aria-hidden="true">
+          <span className={"w-covertext" + (excerpt ? "" : " empty")}>{excerpt || "还没写内容"}</span>
+          <CoverLive live={live} />
+        </div>
+        <RowActions post={post} onDelete={onDelete} solid />
       </div>
-      {live && <span className="w-live"><i></i>发布中</span>}
-      <div className="w-rowmeta">
-        <span>{post.updated}</span>
-        {post.duration
-          ? <span className="w-dur" style={{ color: t.color }}><IcPlay size={8} /> {post.duration}</span>
-          : <span>{post.images ? post.images.length + " 图 · " : ""}{post.body.length} 字</span>}
-      </div>
-      <RowActions post={post} onDelete={onDelete} />
+      <TileTitleMeta post={post} published={published} />
     </article>
   );
 }
 
-/* ---------- 格子：贴图用拼贴封面，视频用 16:9 封面 ---------- */
-function ImageTile({ post, onOpen, onDelete, dnd }) {
+/* ---------- 音频卡：摘要封面 + 青色三角 + 时长 ---------- */
+function AudioTile({ post, live, published, onOpen, onDelete }) {
+  const excerpt = plainSummary(post.body);
+  return (
+    <article className="w-tile" tabIndex={0} role="button" onClick={() => onOpen(post.id)} onKeyDown={(e) => { if (e.key === "Enter") onOpen(post.id); }}>
+      <div className="w-coverwrap">
+        <div className="w-cover" aria-hidden="true">
+          <span className={"w-covertext audio" + (excerpt ? "" : " empty")}>{excerpt || "还没写内容"}</span>
+          <span className="w-audiotri"></span>
+          <span className="w-coverdur">{post.duration || "00:00"}</span>
+          <CoverLive live={live} />
+        </div>
+        <RowActions post={post} onDelete={onDelete} solid />
+      </div>
+      <TileTitleMeta post={post} extra={post.duration || "00:00"} published={published} />
+    </article>
+  );
+}
+
+/* ---------- 贴图卡：2×2 拼贴封面，张数写在角上 ---------- */
+function ImageTile({ post, live, published, onOpen, onDelete, dnd }) {
   const imgs = post.images || [];
-  const cells = [0, 1, 2, 3].map((i) => imgs[i % Math.max(imgs.length, 1)]);
+  const n = imgs.length;
+  const shown = n === 0 ? [undefined, undefined, undefined, undefined] : imgs.slice(0, 4);
+  /* 1 张独占，2 张左右各半，3 张第一张横跨，4 张各占一格 */
+  const cellStyle = (im, i) => {
+    const st = { background: im ? im.color : "var(--line)" };
+    if (n === 1) { st.gridColumn = "span 2"; st.gridRow = "span 2"; }
+    else if (n === 2) { st.gridRow = "span 2"; }
+    else if (n === 3 && i === 0) { st.gridColumn = "span 2"; }
+    return st;
+  };
   const cls = "w-tile"
     + (dnd && dnd.dragId === post.id ? " dragging" : "")
     + (dnd && dnd.pressing === post.id ? " pressing" : "");
@@ -258,58 +297,42 @@ function ImageTile({ post, onOpen, onDelete, dnd }) {
     >
       <div className="w-coverwrap">
         <div className="w-mosaic" aria-hidden="true">
-          {cells.map((im, i) => (<i key={i} style={{ background: im ? im.color : "#E4E0D4" }}></i>))}
-          <span className="w-count">{imgs.length} 张</span>
+          {shown.map((im, i) => (<i key={im ? im.id : i} style={cellStyle(im, i)}></i>))}
+          <CoverLive live={live} />
         </div>
         <RowActions post={post} onDelete={onDelete} solid />
       </div>
-      <div className="w-tilemain">
-        <h3 className="w-tiletitle">{post.title || "未命名稿子"}</h3>
-        <div className="w-tilemeta">
-          <span>{post.updated}</span>
-          <span>{post.body.length} 字</span>
-        </div>
-      </div>
+      <TileTitleMeta post={post} published={published} />
     </article>
   );
 }
 
-function VideoTile({ post, onOpen, onDelete }) {
+/* ---------- 视频卡：16:9 封面 + 播放三角 + 时长（时长只出现在封面上，不重复） ---------- */
+function VideoTile({ post, live, published, onOpen, onDelete }) {
   return (
     <article className="w-tile" tabIndex={0} role="button" onClick={() => onOpen(post.id)} onKeyDown={(e) => { if (e.key === "Enter") onOpen(post.id); }}>
       <div className="w-coverwrap">
-        <div className="w-vcover" aria-hidden="true">
-          <span className="badge">封面占位</span>
-          <span className="tri"></span>
-          <span className="dur">{post.duration || "00:00"}</span>
+        <div className="w-cover v" aria-hidden="true">
+          <span className="w-vtri"></span>
+          <span className="w-coverdur">{post.duration || "00:00"}</span>
+          <CoverLive live={live} />
         </div>
         <RowActions post={post} onDelete={onDelete} solid />
       </div>
-      <div className="w-tilemain">
-        <h3 className="w-tiletitle">{post.title || "未命名稿子"}</h3>
-        <div className="w-tilemeta">
-          <span>{post.updated}</span>
-          <span>{post.duration}</span>
-        </div>
-      </div>
+      <TileTitleMeta post={post} published={published} />
     </article>
   );
 }
 
-/* ---------- 主视图 ---------- */
-function LibraryView({ scope, posts, query, sort, runningIds, onOpen, onDelete, onNew, onQuery, onSort, onReorder }) {
-  const t = scope === "all" ? null : TYPES[scope];
-  const counts = React.useMemo(() => {
-    const c = { article: 0, image: 0, video: 0, audio: 0 };
-    posts.forEach((p) => { c[p.type] = (c[p.type] || 0) + 1; });
-    return c;
-  }, [posts]);
+/* ---------- 主视图：四种类型全部以卡片呈现 ---------- */
+function LibraryView({ scope, posts, query, sort, runningIds, publishedIds, onOpen, onDelete, onNew, onQuery, onSort, onReorder }) {
+  const t = TYPES[scope];
 
   /* 过滤 + 排序：O(n) + O(n log n)。列表再长也是这个量级，
      真正的天花板在 DOM 节点数上，所以过千条要换成窗口化渲染。 */
   const list = React.useMemo(() => {
     const q = query.trim().toLowerCase();
-    let out = scope === "all" ? posts.slice() : posts.filter((p) => p.type === scope);
+    let out = posts.filter((p) => p.type === scope);
     if (q) out = out.filter((p) => (p.title + " " + p.body).toLowerCase().indexOf(q) >= 0);
     out.sort((a, b) => {
       /* 自定义顺序 = 数组本身的顺序（拖动排序后停在档）；sort 稳定，返回 0 即保持原序 */
@@ -321,20 +344,14 @@ function LibraryView({ scope, posts, query, sort, runningIds, onOpen, onDelete, 
     return out;
   }, [posts, scope, query, sort]);
 
-  const title = t ? t.zh : "全部稿子";
-
   /* 长按拖动排序只开在贴图上：其它类型的顺序由时间决定，手动排没有意义。
      搜索中、或按标题排的时候也先关掉 —— 那时顺序不是用户排的。 */
   const orderable = scope === "image" && sort !== "title" && !query.trim();
   const meta = [
     list.length + " 篇",
-    t ? t.en : "ALL TYPES",
+    t.en,
     query.trim() ? "筛选「" + query.trim() + "」" : null,
-    orderable ? "长按方块可拖动排序" : null,
   ].filter(Boolean).join(" · ");
-
-  const grid = scope === "image" || scope === "video";
-  const showKind = scope === "all";
 
   const dnd = useLongPressReorder({
     ids: orderable ? list.map((p) => p.id) : [],
@@ -347,11 +364,20 @@ function LibraryView({ scope, posts, query, sort, runningIds, onOpen, onDelete, 
     return dnd.order.map((id) => byId.get(id)).filter(Boolean);
   })();
 
+  const renderTile = (p) => {
+    const live = runningIds.indexOf(p.id) >= 0;
+    const published = publishedIds.indexOf(p.id) >= 0;
+    if (p.type === "video") return <VideoTile key={p.id} post={p} live={live} published={published} onOpen={onOpen} onDelete={onDelete} />;
+    if (p.type === "image") return <ImageTile key={p.id} post={p} live={live} published={published} onOpen={onOpen} onDelete={onDelete} dnd={orderable ? dnd : null} />;
+    if (p.type === "audio") return <AudioTile key={p.id} post={p} live={live} published={published} onOpen={onOpen} onDelete={onDelete} />;
+    return <ArticleTile key={p.id} post={p} live={live} published={published} onOpen={onOpen} onDelete={onDelete} />;
+  };
+
   return (
-    <div className="w-view" data-screen-label={t ? "内容库 · " + t.zh : "内容库 · 全部稿子"}>
+    <div className="w-view" data-screen-label={"内容库 · " + t.zh}>
       <div className="w-canvas">
         <ViewHead
-          title={title}
+          title={t.zh}
           meta={meta}
           query={query}
           onQuery={onQuery}
@@ -363,30 +389,12 @@ function LibraryView({ scope, posts, query, sort, runningIds, onOpen, onDelete, 
         <div className="w-scroll">
           {list.length === 0 && (
             <div className="w-empty">
-              {query.trim() ? "没有匹配「" + query.trim() + "」的稿子 — 换个词，或清空搜索" : "这里还没有内容 — 点右上角新建一篇"}
+              {query.trim() ? "没有匹配「" + query.trim() + "」的稿子" : "还没有内容"}
             </div>
           )}
-          {!grid && (
-            <div className="w-list">
-              {list.map((p) => (
-                <PostRow
-                  key={p.id}
-                  post={p}
-                  showKind={showKind}
-                  live={runningIds.indexOf(p.id) >= 0}
-                  onOpen={onOpen}
-                                    onDelete={onDelete}
-                />
-              ))}
-            </div>
-          )}
-          {grid && (
-            <div className={"w-grid" + (dnd.dragId ? " reordering" : "")} ref={dnd.gridRef}>
-              {shown.map((p) => (p.type === "video"
-                ? <VideoTile key={p.id} post={p} onOpen={onOpen} onDelete={onDelete} />
-                : <ImageTile key={p.id} post={p} onOpen={onOpen} onDelete={onDelete} dnd={orderable ? dnd : null} />))}
-            </div>
-          )}
+          <div className={"w-grid" + (dnd.dragId ? " reordering" : "")} ref={dnd.gridRef}>
+            {shown.map(renderTile)}
+          </div>
         </div>
       </div>
     </div>

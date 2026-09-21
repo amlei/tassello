@@ -50,7 +50,8 @@ const PLATFORMS = [
     account: { name: "九漾", kind: "个人号", uid: "即刻 ID 9A3F7C", until: "2026-10-20", checked: "09-14 11:03", lands: "直接发一条动态" } },
   { id: "bili",      name: "B站",        char: "B",  color: "#00A1D6", state: "fail", link: "www.bilibili.com/video/",    supports: ["article", "image", "video"],
     account: null, accountError: "登录态已过期（08-30 失效），需要重新登录 B站 账号" },
-  { id: "x",         name: "X",          char: "X",  color: "#16130E", state: "fail", link: "x.com/i/status/",            supports: ["article", "image", "video"],
+  /* X 是单色品牌：品牌色跟主题翻转（亮色黑标 / 深色白标），见 index.html 的 --plat-x */
+  { id: "x",         name: "X",          char: "X",  color: "var(--plat-x)", fg: "var(--plat-x-fg)", state: "fail", link: "x.com/i/status/",            supports: ["article", "image", "video"],
     account: null, accountError: "授权被平台撤销，需要重新登录 X 账号" },
   { id: "zhihu",     name: "知乎",       char: "知", color: "#0084FF", state: "ok",   link: "zhuanlan.zhihu.com/p/",      supports: ["article", "image", "video"],
     account: { name: "九漾 Onda", kind: "机构号授权", uid: "zhuanlan.zhihu.com/people/onda", until: "2026-12-08", checked: "09-16 08:30", lands: "存成一篇专栏草稿，发布按钮在知乎后台" } },

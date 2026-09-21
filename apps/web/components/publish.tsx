@@ -81,7 +81,7 @@ export function PublishSheet({
               <span className="font-mono text-[12px] text-ink2">
                 {selected.length ? `将创建 ${selected.length} 个发布任务 · 不阻塞当前操作` : "至少点亮一个平台"}
               </span>
-              <Button variant="ghost" className="ml-auto rounded-full px-4 py-2 text-[13.5px] font-bold text-ink2 hover:text-ink" onPress={onClose}>
+              <Button variant="ghost" className="ml-auto rounded-full border-2 border-line bg-transparent px-4 py-2 text-[13.5px] font-bold text-ink2 data-[hovered=true]:bg-ink data-[hovered=true]:text-paper" onPress={onClose}>
                 取消
               </Button>
               <Button

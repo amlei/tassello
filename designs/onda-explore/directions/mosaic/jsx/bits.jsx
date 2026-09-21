@@ -78,17 +78,18 @@ function escHtml(s) {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-/* #标签 包成 span（颜色随内容类型），字号字重都不动 */
+/* #标签 包成 span（颜色随内容类型），字号字重都不动。
+   contenteditable="false"：标签是完整 token —— 光标落在它后面时，
+   新输入的文字会出现在标签外，不会被继续吞进标签里。 */
 function wrapTags(escaped, color) {
   return escaped.replace(/(#[^\s#，。！？；：,.!?;:]+)/g, (m) =>
-    '<span class="m-tag" style="color:' + color + ";background:" + color + '1A">' + m + "</span>");
+    '<span class="m-tag" contenteditable="false" style="color:' + color + ";background:" + color + '1A">' + m + "</span>");
 }
 
 /* 正文里的图块：在编辑器里是 figure（不可编辑），在预览里是同一份 HTML */
 function figHtml(id, alt, color) {
   return '<figure class="m-fig" contenteditable="false" data-asset="' + id + '" data-alt="' + escHtml(alt || "配图") +
-    '" style="background:' + color + '"><span class="m-fig-lb">' + escHtml(alt || "配图") +
-    '</span><button type="button" class="m-fig-del" aria-label="移除这张图">×</button></figure>';
+    '" style="background:' + color + '"><button type="button" class="m-fig-del" aria-label="移除这张图">×</button></figure>';
 }
 
 /* 纯文本正文 → HTML：段落 + #标签 + 独占一行的插图 */
@@ -106,7 +107,7 @@ function mdToHtml(body, color, assets) {
     if (m) {
       flush();
       const im = list.find((x) => x.id === m[2]);
-      out.push(figHtml(m[2], m[1] || "配图", im ? im.color : "#E4E0D4"));
+      out.push(figHtml(m[2], m[1] || "配图", im ? im.color : "#B8B6B0"));
     } else if (!line.trim()) {
       flush();
     } else {
@@ -149,6 +150,7 @@ function highlightTags(root, color) {
       if (part.charAt(0) === "#") {
         const span = document.createElement("span");
         span.className = "m-tag";
+        span.setAttribute("contenteditable", "false");
         span.style.color = color;
         span.style.background = color + "1A";
         span.textContent = part;

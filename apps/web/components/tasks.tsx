@@ -157,7 +157,7 @@ export function TasksView({
                 <span className="block h-3.5 w-3.5 flex-none rounded" style={{ background: t0.color }} />
                 <Button
                   variant="ghost"
-                  className="min-w-0 max-w-[38%] flex-[0_1_auto] truncate border-none bg-transparent p-0 text-left text-[15px] font-bold tracking-[-0.2px] text-ink data-[hovered=true]:underline"
+                  className="min-w-0 max-w-[38%] flex-[0_1_auto] truncate border-none bg-transparent p-0 text-left text-[15px] font-bold tracking-[-0.2px] text-ink data-[hovered=true]:bg-transparent data-[hovered=true]:underline"
                   style={{ justifyContent: "flex-start" }}
                   onPress={() => g.post && onOpen(g.post.id)}
                 >
@@ -182,7 +182,7 @@ export function TasksView({
               {problems.map((p) => {
                 const pf = platforms.find((x) => x.id === p.platformId);
                 return (
-                  <div className="mt-[9px] flex w-fit max-w-full items-center gap-[9px] rounded-[11px] border border-[#F2C2D1] bg-[#FDF1F4] px-3 py-2 text-error" key={p.id}>
+                  <div className="mt-[9px] flex w-fit max-w-full items-center gap-[9px] rounded-[11px] border border-error/30 bg-error/10 px-3 py-2 text-error" key={p.id}>
                     <IcAlert size={13} />
                     <span className="min-w-0 truncate text-[12.5px] leading-normal"><b className="font-black">{pf ? pf.name : p.platformId}</b> · {p.failReason}</span>
                     <Button variant="ghost" className="inline-flex flex-none items-center gap-[5px] rounded-full border border-error bg-card px-[11px] py-[3px] font-mono text-[11px] font-bold text-error data-[hovered=true]:bg-error data-[hovered=true]:text-white" onPress={() => onRetry(p.id)}><IcRetry size={11} /> 重试</Button>
