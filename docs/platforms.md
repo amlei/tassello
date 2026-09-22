@@ -1,7 +1,7 @@
 # 平台矩阵与验证记录
 
 > 通道选型依据 + 真机验证记录。验证环境：macOS + Chrome + tassello 专用 profile
-> （`~/Library/Application Support/tassello/chrome-profile`，由日常 Chrome 会话种子 + 手动登录），2026-09-19。
+> （`~/.local/share/tassello/chrome-profile`，由日常 Chrome 会话种子 + 手动登录），2026-09-19。
 
 ## 1. 平台矩阵（15 平台）
 
@@ -66,7 +66,7 @@
 
 ## 3. 共性工程结论
 
-1. **登录态迁移可行**：`Cookies(+journal)` + `Local Storage` + `Session Storage` + `Local State` + `Preferences` 拷贝到专用 profile 后，微博/知乎/公众号会话全部存活（macOS 下 cookie 加密密钥在用户 Keychain，同机同 Chrome 有效）。生产流程仍定为：专用 profile + 每平台手动登录一次。
+1. **登录态迁移可行**：`Cookies(+journal)` + `Local Storage` + `Session Storage` + `Local State` + `Preferences` 拷贝到专用 profile 后，微博/知乎/公众号会话全部存活（macOS 下 cookie 加密密钥在用户 Keychain，同机同 Chrome 有效）。生产流程即此：**「重新获取账号」= 用日常 Chrome 的 Default profile 覆盖应用专用 profile（先停应用侧 Chrome 释放文件锁）→ 自动校验**；覆盖后仍失效说明源 Cookie 真过期，才落到打开浏览器人工登录的兜底。
 2. **verify 两派**：JSON 接口派（微博/知乎/xhs-creator，页面上下文 fetch 即可）与 DOM 派（公众号）。差异收在平台包内部，接口层统一为「返回 profile 片段」。
 3. **profile 非只读**：session token（公众号）、capabilities（xhs permissions）都会变，verify 必须把刷新写回 `PlatformAccount.profile`。
 4. **Chrome 136+ 限制**：默认 user-data-dir 禁止远程调试端口；专用 profile 是硬前提，不是偏好。

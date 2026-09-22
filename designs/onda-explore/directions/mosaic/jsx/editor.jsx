@@ -1,18 +1,18 @@
-/* editor.jsx — 编辑器：写作区 + 实时预览 + 手动保存（保存按钮自身表达状态） */
+/* editor.jsx — 编辑器：写作区 + 实时预览 + 自动保存（停手 2.5s 落一次）+ 手动保存 */
 function EditorView({ post, onChange, onBack, onPublish, onDirty }) {
   const t = TYPES[post.type];
   const [saveState, setSaveState] = React.useState("saved"); // saved | dirty | saving
   const dirtyRef = React.useRef(false);
+  const autoTimer = React.useRef(null);
 
   /* 脏状态上报给外层：未保存离开时的确认弹窗靠它 */
   React.useEffect(() => {
     if (onDirty) onDirty(saveState === "dirty");
   }, [saveState]);
 
-  const markDirty = () => { dirtyRef.current = true; setSaveState("dirty"); };
-
-  /* 手动保存：与自动保存同一套脏标记流程，⌘S / Ctrl+S 也能触发 */
+  /* 手动保存：⌘S / Ctrl+S / 点按钮都能插队，顺手取消排着的自动保存 */
   const saveNow = () => {
+    window.clearTimeout(autoTimer.current);
     if (saveState === "saving") return;
     dirtyRef.current = false;
     setSaveState("saving");
@@ -20,6 +20,15 @@ function EditorView({ post, onChange, onBack, onPublish, onDirty }) {
       setSaveState("saved");
     }, 500);
   };
+
+  const markDirty = () => {
+    dirtyRef.current = true;
+    setSaveState("dirty");
+    /* 停止输入 2.5s 后自动保存一次；再输入就重新计时 */
+    window.clearTimeout(autoTimer.current);
+    autoTimer.current = window.setTimeout(saveNow, 2500);
+  };
+  React.useEffect(() => () => window.clearTimeout(autoTimer.current), []);
 
   /* ⌘S / Ctrl+S 触发手动保存 */
   React.useEffect(() => {
@@ -57,11 +66,26 @@ function EditorView({ post, onChange, onBack, onPublish, onDirty }) {
   };
   /* 从素材区删除一张图：素材收走，正文里引用它的图块一并清掉 */
   const deleteImage = (id) => {
+    if ((post.images || []).length <= 1) return; /* 至少保留一张 */
     const figRe = new RegExp('<figure[^>]*data-asset="' + id + '"[^>]*>[\\s\\S]*?</figure>', "g");
     const lineRe = new RegExp("^!\\[[^\\]]*\\]\\(asset://" + id + "\\)\\s*$", "gm");
     setField("bodyHtml", (post.bodyHtml || "").replace(figRe, ""));
     setField("body", (post.body || "").replace(lineRe, ""));
     setField("images", (post.images || []).filter((im) => im.id !== id));
+  };
+  /* 清空图片素材：最少保留一张（第一张），清掉的图在正文里的引用一并移除 */
+  const clearImages = () => {
+    const list = post.images || [];
+    if (list.length <= 1) return;
+    let html = post.bodyHtml || "";
+    let body = post.body || "";
+    list.slice(1).forEach((im) => {
+      html = html.replace(new RegExp('<figure[^>]*data-asset="' + im.id + '"[^>]*>[\\s\\S]*?</figure>', "g"), "");
+      body = body.replace(new RegExp("^!\\[[^\\]]*\\]\\(asset://" + im.id + "\\)\\s*$", "gm"), "");
+    });
+    setField("bodyHtml", html);
+    setField("body", body);
+    setField("images", [list[0]]);
   };
   /* 新增图片素材：追加到末尾 —— 数组尾部插入是摊销 O(1)，第一格的「+」永远不动（其余格位也不变） */
   const addImage = () => {
@@ -132,6 +156,7 @@ function EditorView({ post, onChange, onBack, onPublish, onDirty }) {
               onAddImage={addImage}
               onReorderImages={reorderImages}
               onDeleteImage={deleteImage}
+              onClearImages={clearImages}
               onDeleteMedia={deleteMedia}
               onUploadMedia={uploadMedia}
             />
@@ -863,7 +888,7 @@ const IMG_GAP = 8;
    「+」固定在第一个格位，缩略图按住 220ms 拎起、其余格子实时让位、松手落位；
    每格右上角一枚 ×（悬停出现），删除时正文里引用它的图块一并清掉；
    超出一行时给一个收起/展开 icon，默认收起。 */
-function ImageAssets({ images, color, onAdd, onReorder, onDelete }) {
+function ImageAssets({ images, color, onAdd, onReorder, onDelete, onClear }) {
   const list = images || [];
   const [expanded, setExpanded] = React.useState(false);
   const [overflow, setOverflow] = React.useState(false);
@@ -895,6 +920,14 @@ function ImageAssets({ images, color, onAdd, onReorder, onDelete }) {
         <span className="sq" style={{ background: color }}></span>
         <span className="t">图片素材</span>
         <span className="n">{list.length} 张</span>
+        <button
+          className="m-assetclear"
+          disabled={list.length <= 1}
+          onClick={onClear}
+          title={list.length <= 1 ? "至少保留一张" : "清空全部图片（保留第一张）"}
+        >
+          清空
+        </button>
       </div>
       <div className="m-imgwrap">
         <div
@@ -944,10 +977,10 @@ function ImageAssets({ images, color, onAdd, onReorder, onDelete }) {
 /* 类型素材区：统一放在标题之上，尺寸收到一条，不与正文抢版面。
    文章不在这里挂素材 —— 它的图直接落在正文行间（见 insertImage / paste）。
    视频 / 音频的文件可删（回到「未上传」，可再传）；贴图的每一张都可删。 */
-function AssetSection({ post, color, onAddImage, onReorderImages, onDeleteImage, onDeleteMedia, onUploadMedia }) {
+function AssetSection({ post, color, onAddImage, onReorderImages, onDeleteImage, onClearImages, onDeleteMedia, onUploadMedia }) {
   if (post.type === "article") return null;
   if (post.type === "image") {
-    return <ImageAssets images={post.images} color={color} onAdd={onAddImage} onReorder={onReorderImages} onDelete={onDeleteImage} />;
+    return <ImageAssets images={post.images} color={color} onAdd={onAddImage} onReorder={onReorderImages} onDelete={onDeleteImage} onClear={onClearImages} />;
   }
   if (post.type === "video") {
     return (
@@ -956,6 +989,9 @@ function AssetSection({ post, color, onAddImage, onReorderImages, onDeleteImage,
           <span className="sq" style={{ background: color }}></span>
           <span className="t">视频素材</span>
           <span className="n">{post.media === false ? "未上传" : (post.duration || "00:00")}</span>
+          {post.media !== false && (
+            <button className="m-assetclear" onClick={onDeleteMedia} title="移除这个视频">清空</button>
+          )}
         </div>
         {post.media === false ? (
           <button className="m-uploadslot box" onClick={onUploadMedia} aria-label="上传视频">
@@ -965,7 +1001,6 @@ function AssetSection({ post, color, onAddImage, onReorderImages, onDeleteImage,
           <div className="m-mediabox">
             <div className="m-cover">
               <button className="m-playbig" aria-label="预览视频"><IcPlay size={14} /></button>
-              <span className="dur">{post.duration || "00:00"}</span>
             </div>
             <div className="w-tileacts">
               <button className="w-icon" title="删除这个视频" aria-label="删除视频素材" onClick={onDeleteMedia}><IcX size={11} /></button>
@@ -982,6 +1017,9 @@ function AssetSection({ post, color, onAddImage, onReorderImages, onDeleteImage,
           <span className="sq" style={{ background: color }}></span>
           <span className="t">音频素材</span>
           <span className="n">{post.media === false ? "未上传" : (post.duration || "00:00")}</span>
+          {post.media !== false && (
+            <button className="m-assetclear" onClick={onDeleteMedia} title="移除这条音频">清空</button>
+          )}
         </div>
         {post.media === false ? (
           <button className="m-uploadslot slim" onClick={onUploadMedia} aria-label="上传音频">

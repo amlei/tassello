@@ -36,7 +36,7 @@
           "path": "directions/mosaic/index.html",
           "createdAt": "2026-09-12T15:59:46.263Z",
           "status": "needs-review",
-          "subtitle": "中性工作台 + 主题修补 + 全卡片 + 素材可管理 + 引用解壳 + 粘贴保焦 + 离开确认",
+          "subtitle": "中性工作台 + 主题修补 + 全卡片 + 素材管理 + 弹窗删稿 + 自动保存",
           "viewport": {
             "width": 1440,
             "height": 900
@@ -46,5 +46,5 @@
     }
   },
   "createdAt": "2026-09-12T15:59:46.188Z",
-  "updatedAt": "2026-09-21T15:08:41.102Z"
+  "updatedAt": "2026-09-22T23:44:26.593Z"
 }

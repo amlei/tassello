@@ -5,14 +5,13 @@
 import React from "react";
 import { useRouter } from "next/navigation";
 import { TYPE_META, type ContentType, type PlatformDTO, type PostDTO, type TaskDTO } from "@tassello/shared";
-import { AlertDialog, Button, Dropdown, SearchField, Tooltip } from "@heroui/react";
-import { Check as ReiconCheck } from "reicon-react";
-import { Check } from "reicon-react";
+import { AlertDialog, Button, Dropdown, SearchField } from "@heroui/react";
 import { fmtDate, fmtTime } from "./bits";
 import { FloatingPill } from "./bits";
 import { api } from "./api";
 import { Rail } from "./rail";
-import { IcPlus, IcSort, IcX } from "./icons";
+import { useLongPressReorder } from "./dnd";
+import { Add, Check, Sort, X } from "reicon-react";
 
 export const SORTS = [
   { id: "recent", label: "最近更新" },
@@ -69,7 +68,7 @@ function ViewHead({
           onChange={onQuery}
           className="[&_.heroui-input]:bg-card"
         >
-          <SearchField.Group className="w-[210px] rounded-full border border-line bg-card px-3.5 py-2 focus-within:border-accent">
+          <SearchField.Group className="w-[210px] rounded-full border border-line bg-card px-3.5 py-2 transition-[width] focus-within:w-[290px] focus-within:border-accent">
             <SearchField.SearchIcon className="text-ink3" />
             <SearchField.Input
               ref={searchRef}
@@ -82,7 +81,7 @@ function ViewHead({
 
         <Dropdown>
           <Button variant="ghost" className="gap-[7px] rounded-full border border-line bg-card px-[15px] py-2 text-[13.5px] font-bold text-ink data-[hovered=true]:bg-hover">
-            <IcSort size={13} /> {cur.label}
+            <Sort size={13} strokeWidth={3.3} /> {cur.label}
           </Button>
           <Dropdown.Popover placement="bottom right">
             <Dropdown.Menu
@@ -100,38 +99,41 @@ function ViewHead({
         </Dropdown>
 
         <Button
-          className="gap-2 whitespace-nowrap rounded-full px-[18px] py-[9px] text-sm font-black text-white"
+          className="gap-2 whitespace-nowrap rounded-full px-[18px] py-[9px] text-sm font-black text-white transition-[translate,filter] duration-150 data-[hovered=true]:-translate-y-0.5 data-[hovered=true]:brightness-105"
           style={{ background: t.color }}
           onPress={() => onNew(scope)}
         >
-          <IcPlus size={14} /> 新建{t.zh}
+          <Add size={14} strokeWidth={3.3} /> 新建{t.zh}
         </Button>
       </div>
     </header>
   );
 }
 
-/* ---------- 行内动作：删除只负责发起，确认走弹窗（与常规软件一致） ---------- */
+/* ---------- 行内动作：删除只负责发起，确认走弹窗（原型 RowActions 同构） ---------- */
 function RowActions({ post, onAskDelete, solid }: { post: PostDTO; onAskDelete: (post: PostDTO) => void; solid?: boolean }) {
-  const base = solid
-    ? "h-[27px] w-[27px] rounded-[9px] bg-white/95 shadow-[0_1px_4px_rgba(15,15,15,0.12)] opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
-    : "h-[30px] w-[30px] rounded-lg bg-card opacity-0 group-hover:opacity-100 focus-visible:opacity-100";
   return (
     <div
-      className={solid ? "absolute right-[7px] top-[7px] z-[2] flex gap-1.5" : "flex flex-none items-center gap-1.5"}
+      className={
+        "w-tileacts flex gap-1.5 opacity-0 transition-opacity duration-150 group-focus-within:opacity-100 group-hover:opacity-100 " +
+        (solid ? "absolute right-[19px] top-[19px] z-[2]" : "relative flex-none items-center")
+      }
       onClick={(e) => e.stopPropagation()}
     >
-      <Tooltip delay={200}>
-        <Button
-          isIconOnly
-          aria-label={`删除 ${post.title || "未命名"}`}
-          variant="ghost"
-          className={base + " border border-line text-ink2 data-[hovered=true]:bg-hover data-[hovered=true]:text-ink"}
-          onPress={() => onAskDelete(post)}
-        >
-          <IcX size={11} />
-        </Button>
-      </Tooltip>
+      <button
+        type="button"
+        className={
+          "flex items-center justify-center border border-line text-ink2 transition-colors " +
+          (solid
+            ? "h-[27px] w-[27px] rounded-[9px] media-x bg-white/95 shadow-[0_1px_4px_rgba(15,15,15,0.12)] hover:bg-hover hover:text-ink"
+            : "h-[30px] w-[30px] rounded-lg media-x bg-card hover:bg-hover hover:text-ink")
+        }
+        title="删除这篇稿子"
+        aria-label={`删除 ${post.title || "未命名"}`}
+        onClick={() => onAskDelete(post)}
+      >
+        <X size={11} strokeWidth={4} />
+      </button>
     </div>
   );
 }
@@ -151,7 +153,7 @@ function PublishedBadge({ published }: { published: boolean }) {
   if (!published) return null;
   return (
     <span className="inline-flex h-[16px] items-center gap-1 rounded-full bg-green/10 px-2 font-mono text-[10px] font-bold leading-none text-green">
-      <Check size={9} aria-hidden="true" />
+      <Check size={9} strokeWidth={4} aria-hidden="true" />
       已发布
     </span>
   );
@@ -159,8 +161,10 @@ function PublishedBadge({ published }: { published: boolean }) {
 
 /* 静态布局用内联样式锁定（HeroUI 按钮基础样式会压过工具类），hover 交给 data-attr 类。
    whitespace-normal：HeroUI 按钮自带 nowrap，不放开换行的话摘要/标题的 line-clamp 全部失效 */
-const TILE_CLS =
-  "w-full gap-2.5 whitespace-normal break-words rounded-[14px] transition-[transform,box-shadow] data-[hovered=true]:-translate-y-1 data-[hovered=true]:shadow-[0_3px_10px_rgba(15,15,15,0.07)]";
+const TILE_CLS = "w-full gap-2.5 whitespace-normal break-words rounded-[14px]";
+/* 悬浮起浮作用在整卡（原型 .w-tile:hover）—— 行内删除钮跟着卡片一起动，不会钉死在原地 */
+const TILE_HOVER =
+  "rounded-[14px] transition-[translate,box-shadow] duration-200 hover:-translate-y-1 hover:shadow-[0_3px_10px_rgba(15,15,15,0.07)]";
 const TILE_STYLE: React.CSSProperties = {
   display: "flex",
   flexDirection: "column",
@@ -174,13 +178,13 @@ const TILE_STYLE: React.CSSProperties = {
   borderColor: "var(--color-line)",
 };
 
-function TileTitleMeta({ post, extra, published }: { post: PostDTO; extra: string; published?: boolean }) {
+function TileTitleMeta({ post, extra, published }: { post: PostDTO; extra?: string; published?: boolean }) {
   return (
     <span className="flex min-w-0 flex-col gap-1">
       <span className="line-clamp-2 min-h-[2.7em] text-[15px] font-bold leading-[1.35] tracking-[-0.2px] text-ink">{post.title || "未命名稿子"}</span>
       <span className="flex h-[16px] items-center gap-[9px] font-mono text-[10.5px] leading-none text-ink2">
         <span>{fmtDate(post.updatedAt)}</span>
-        <span>{extra}</span>
+        {extra ? <span>{extra}</span> : null}
         <PublishedBadge published={!!published} />
       </span>
     </span>
@@ -199,7 +203,7 @@ function ArticleTile({
   const t = TYPE_META[post.type];
   const excerpt = plainSummary(post.body);
   return (
-    <div className="group relative">
+    <div className={"group relative " + TILE_HOVER}>
       <Button variant="ghost" className={TILE_CLS + " text-left"} style={TILE_STYLE} onPress={() => onOpen(post.id)} aria-label={post.title || "未命名稿子"}>
         <span className="relative block w-full">
           <span className="relative block aspect-[16/10] overflow-hidden rounded-[10px] bg-hover">
@@ -225,7 +229,7 @@ function AudioTile({
 }) {
   const excerpt = plainSummary(post.body);
   return (
-    <div className="group relative">
+    <div className={"group relative " + TILE_HOVER}>
       <Button variant="ghost" className={TILE_CLS + " text-left"} style={TILE_STYLE} onPress={() => onOpen(post.id)} aria-label={post.title || "未命名稿子"}>
         <span className="relative block w-full">
           <span className="relative block aspect-[16/10] overflow-hidden rounded-[10px] bg-hover">
@@ -242,22 +246,41 @@ function AudioTile({
   );
 }
 
+type TileDnd = ReturnType<typeof useLongPressReorder> | null;
+
+/* 贴图卡：2×2 拼贴封面；自定义顺序档下长按可拖拽排序（其余格 FLIP 让位） */
 function ImageTile({
-  post, live, published, onOpen, onAskDelete,
+  post, live, published, onOpen, onAskDelete, dnd,
 }: {
   post: PostDTO;
   live: boolean;
   published: boolean;
   onOpen: (id: string) => void;
   onAskDelete: (post: PostDTO) => void;
+  dnd?: TileDnd;
 }) {
   const imgs = post.assets;
   const n = imgs.length;
   const shown: (typeof imgs)[number][] | undefined[] = n === 0 ? [undefined, undefined, undefined, undefined] : imgs.slice(0, 4);
   const span = (i: number) => (n === 1 ? "col-span-2 row-span-2" : n === 2 ? "row-span-2" : n === 3 && i === 0 ? "col-span-2" : "");
+  const dragging = !!dnd && dnd.dragId === post.id;
   return (
-    <div className="group relative">
-      <Button variant="ghost" className={TILE_CLS + " text-left"} style={TILE_STYLE} onPress={() => onOpen(post.id)} aria-label={post.title || "未命名稿子"}>
+    <div
+      className={
+        "group relative " + TILE_HOVER +
+        (dnd?.pressing === post.id ? " scale-[.975]" : "") +
+        (dragging ? " z-[12] [transition:none] cursor-grabbing shadow-[0_14px_40px_rgba(15,15,15,0.2)] rounded-[14px]" : "")
+      }
+      ref={dnd ? (el) => { dnd.register(post.id, el); } : undefined}
+      onPointerDown={dnd ? (e) => dnd.onTilePointerDown(e, post.id) : undefined}
+    >
+      <Button
+        variant="ghost"
+        className={TILE_CLS + " text-left"}
+        style={TILE_STYLE}
+        onPress={() => { if (dnd && dnd.shouldSuppressClick()) return; onOpen(post.id); }}
+        aria-label={(post.title || "未命名稿子") + (dnd ? "，长按可拖动排序" : "")}
+      >
         <span className="relative block w-full">
         <span className="relative grid aspect-[16/10] grid-cols-2 grid-rows-2 gap-[3px] overflow-hidden rounded-[10px] bg-hover" aria-hidden="true">
           {shown.map((im, i) => (
@@ -273,7 +296,7 @@ function ImageTile({
         </span>
         <TileTitleMeta post={post} extra={`${post.body.length} 字`} published={published} />
       </Button>
-      <RowActions post={post} onAskDelete={onAskDelete} solid />
+      {!dragging && <RowActions post={post} onAskDelete={onAskDelete} solid />}
     </div>
   );
 }
@@ -288,7 +311,7 @@ function VideoTile({
   onAskDelete: (post: PostDTO) => void;
 }) {
   return (
-    <div className="group relative">
+    <div className={"group relative " + TILE_HOVER}>
       <Button variant="ghost" className={TILE_CLS + " text-left"} style={TILE_STYLE} onPress={() => onOpen(post.id)} aria-label={post.title || "未命名稿子"}>
         <span className="relative block w-full">
           <span className="relative flex aspect-video items-center justify-center overflow-hidden rounded-[10px] bg-hover" aria-hidden="true">
@@ -297,7 +320,8 @@ function VideoTile({
             <CoverLive live={live} />
           </span>
         </span>
-        <TileTitleMeta post={post} extra={post.durationSec ? fmtTime(post.durationSec) : "00:00"} published={published} />
+        {/* 时长只出现在封面上，不重复（原型 VideoTile 同款） */}
+        <TileTitleMeta post={post} published={published} />
       </Button>
       <RowActions post={post} onAskDelete={onAskDelete} solid />
     </div>
@@ -339,7 +363,7 @@ export function LibraryScreen({
     ? Math.round(tasks.filter((x) => x.status === "running").reduce((sum, x) => sum + x.progress, 0) / runningCount)
     : 0;
 
-  /* 删除确认：行内 X 只负责发起，确认走弹窗（鼠标移开不再丢状态） */
+  /* 删除确认：行内 × 只负责发起，确认走弹窗（Esc / 点背景取消） */
   const [deleteTarget, setDeleteTarget] = React.useState<PostDTO | null>(null);
   const onAskDelete = (post: PostDTO) => setDeleteTarget(post);
 
@@ -371,19 +395,45 @@ export function LibraryScreen({
     return out;
   }, [list, sort]);
 
+  /* 长按拖动排序只开在贴图上：其它类型的顺序由时间决定，手动排没有意义。
+     搜索中、或按标题排的时候也先关掉 —— 那时顺序不是用户排的。 */
+  const orderable = type === "image" && sort !== "title" && !query.trim();
+  const dnd = useLongPressReorder({
+    ids: orderable ? sorted.map((p) => p.id) : [],
+    onCommit: (ids) => {
+      /* 排序档切到「自定义顺序」，否则下一次排序会把顺序抹掉；
+         本类型内 manualOrder 按新数组顺序重排（与服务端占槽语义一致），随后落库 */
+      setSort("manual");
+      setPosts((ps) => {
+        const ordered = ps.slice().sort((a, b) => a.manualOrder - b.manualOrder);
+        const picked = new Set(ids);
+        const byId = new Map(ordered.map((p) => [p.id, p]));
+        const queue = ids.slice();
+        const next = ordered.map((p) => (picked.has(p.id) ? byId.get(queue.shift()!)! : p));
+        return next.map((p, i) => ({ ...p, manualOrder: i }));
+      });
+      void api.updatePost(ids[0]!, { order: ids }).catch(() => {});
+    },
+  });
+  /* 拖拽预演：预览顺序按 id 回填，其余格实时让位（FLIP 在 dnd 内做） */
+  const shown = (() => {
+    if (!orderable || !dnd.order) return sorted;
+    const byId = new Map(sorted.map((p) => [p.id, p]));
+    const reordered = dnd.order.map((id) => byId.get(id)).filter(Boolean) as PostDTO[];
+    return reordered.length === sorted.length ? reordered : sorted;
+  })();
+
   const meta = [
     `${sorted.length} 篇`,
     t.en,
     query.trim() ? `筛选「${query.trim()}」` : null,
   ].filter(Boolean).join(" · ");
 
-  const shown = sorted;
-
   const renderTile = (p: PostDTO) => {
     const live = runningIds.includes(p.id);
     const published = publishedIds.has(p.id);
     if (p.type === "video") return <VideoTile key={p.id} post={p} live={live} published={published} onOpen={openPost} onAskDelete={onAskDelete} />;
-    if (p.type === "image") return <ImageTile key={p.id} post={p} live={live} published={published} onOpen={openPost} onAskDelete={onAskDelete} />;
+    if (p.type === "image") return <ImageTile key={p.id} post={p} live={live} published={published} onOpen={openPost} onAskDelete={onAskDelete} dnd={orderable ? dnd : undefined} />;
     if (p.type === "audio") return <AudioTile key={p.id} post={p} live={live} published={published} onOpen={openPost} onAskDelete={onAskDelete} />;
     return <ArticleTile key={p.id} post={p} live={live} published={published} onOpen={openPost} onAskDelete={onAskDelete} />;
   };
@@ -408,12 +458,13 @@ export function LibraryScreen({
               {query.trim() ? `没有匹配「${query.trim()}」的稿子 — 换个词，或清空搜索` : "这里还没有内容 — 点右上角新建一篇"}
             </div>
           )}
-          <div className="relative grid grid-cols-[repeat(auto-fill,minmax(212px,1fr))] gap-3.5">
+          <div className={"relative grid grid-cols-[repeat(auto-fill,minmax(212px,1fr))] gap-3.5" + (dnd.dragId ? " cursor-grabbing" : "")} ref={orderable ? dnd.gridRef : undefined}>
             {shown.map(renderTile)}
           </div>
         </div>
       </div>
 
+      {/* 删除确认：Esc / 点背景取消（AlertDialog 原生处理） */}
       <AlertDialog>
         <AlertDialog.Backdrop isOpen={!!deleteTarget} onOpenChange={(o) => { if (!o) setDeleteTarget(null); }}>
           <AlertDialog.Container>

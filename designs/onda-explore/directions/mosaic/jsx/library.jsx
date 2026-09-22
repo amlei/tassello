@@ -180,23 +180,20 @@ function ViewHead({ title, meta, query, onQuery, sort, onSort, scope, onNew }) {
   );
 }
 
-/* ---------- 行内动作：删除要点一次确认 ---------- */
-function RowActions({ post, onDelete, solid }) {
-  const [confirming, setConfirming] = React.useState(false);
+/* ---------- 行内动作：删除只负责发起，确认走弹窗 ---------- */
+function RowActions({ post, onAskDelete, solid }) {
   return (
-    <div className={solid ? "w-tileacts" : "w-tileacts"} onClick={(e) => e.stopPropagation()}>
+    <div className="w-tileacts" onClick={(e) => e.stopPropagation()}>
       <button
-        className={"w-icon" + (confirming ? " confirm" : "")}
-        title={confirming ? "再点一次删除" : "删除这篇稿子"}
-        aria-label={confirming ? "确认删除" : "删除 " + (post.title || "未命名")}
-        onMouseLeave={() => setConfirming(false)}
+        className="w-icon"
+        title="删除这篇稿子"
+        aria-label={"删除 " + (post.title || "未命名")}
         onClick={(e) => {
           e.stopPropagation();
-          if (confirming) onDelete(post.id);
-          else setConfirming(true);
+          onAskDelete(post);
         }}
       >
-        {confirming ? "删除？" : <IcX size={11} />}
+        <IcX size={11} />
       </button>
     </div>
   );
@@ -233,7 +230,7 @@ function TileTitleMeta({ post, extra, published }) {
 }
 
 /* ---------- 文章卡：三行摘要直接当封面 ---------- */
-function ArticleTile({ post, live, published, onOpen, onDelete }) {
+function ArticleTile({ post, live, published, onOpen, onAskDelete }) {
   const excerpt = plainSummary(post.body);
   return (
     <article className="w-tile" tabIndex={0} role="button" onClick={() => onOpen(post.id)} onKeyDown={(e) => { if (e.key === "Enter") onOpen(post.id); }}>
@@ -242,7 +239,7 @@ function ArticleTile({ post, live, published, onOpen, onDelete }) {
           <span className={"w-covertext" + (excerpt ? "" : " empty")}>{excerpt || "还没写内容"}</span>
           <CoverLive live={live} />
         </div>
-        <RowActions post={post} onDelete={onDelete} solid />
+        <RowActions post={post} onAskDelete={onAskDelete} solid />
       </div>
       <TileTitleMeta post={post} published={published} />
     </article>
@@ -250,7 +247,7 @@ function ArticleTile({ post, live, published, onOpen, onDelete }) {
 }
 
 /* ---------- 音频卡：摘要封面 + 青色三角 + 时长 ---------- */
-function AudioTile({ post, live, published, onOpen, onDelete }) {
+function AudioTile({ post, live, published, onOpen, onAskDelete }) {
   const excerpt = plainSummary(post.body);
   return (
     <article className="w-tile" tabIndex={0} role="button" onClick={() => onOpen(post.id)} onKeyDown={(e) => { if (e.key === "Enter") onOpen(post.id); }}>
@@ -261,7 +258,7 @@ function AudioTile({ post, live, published, onOpen, onDelete }) {
           <span className="w-coverdur">{post.duration || "00:00"}</span>
           <CoverLive live={live} />
         </div>
-        <RowActions post={post} onDelete={onDelete} solid />
+        <RowActions post={post} onAskDelete={onAskDelete} solid />
       </div>
       <TileTitleMeta post={post} extra={post.duration || "00:00"} published={published} />
     </article>
@@ -269,7 +266,7 @@ function AudioTile({ post, live, published, onOpen, onDelete }) {
 }
 
 /* ---------- 贴图卡：2×2 拼贴封面，张数写在角上 ---------- */
-function ImageTile({ post, live, published, onOpen, onDelete, dnd }) {
+function ImageTile({ post, live, published, onOpen, onAskDelete, dnd }) {
   const imgs = post.images || [];
   const n = imgs.length;
   const shown = n === 0 ? [undefined, undefined, undefined, undefined] : imgs.slice(0, 4);
@@ -300,7 +297,7 @@ function ImageTile({ post, live, published, onOpen, onDelete, dnd }) {
           {shown.map((im, i) => (<i key={im ? im.id : i} style={cellStyle(im, i)}></i>))}
           <CoverLive live={live} />
         </div>
-        <RowActions post={post} onDelete={onDelete} solid />
+        <RowActions post={post} onAskDelete={onAskDelete} solid />
       </div>
       <TileTitleMeta post={post} published={published} />
     </article>
@@ -308,7 +305,7 @@ function ImageTile({ post, live, published, onOpen, onDelete, dnd }) {
 }
 
 /* ---------- 视频卡：16:9 封面 + 播放三角 + 时长（时长只出现在封面上，不重复） ---------- */
-function VideoTile({ post, live, published, onOpen, onDelete }) {
+function VideoTile({ post, live, published, onOpen, onAskDelete }) {
   return (
     <article className="w-tile" tabIndex={0} role="button" onClick={() => onOpen(post.id)} onKeyDown={(e) => { if (e.key === "Enter") onOpen(post.id); }}>
       <div className="w-coverwrap">
@@ -317,7 +314,7 @@ function VideoTile({ post, live, published, onOpen, onDelete }) {
           <span className="w-coverdur">{post.duration || "00:00"}</span>
           <CoverLive live={live} />
         </div>
-        <RowActions post={post} onDelete={onDelete} solid />
+        <RowActions post={post} onAskDelete={onAskDelete} solid />
       </div>
       <TileTitleMeta post={post} published={published} />
     </article>
@@ -327,6 +324,14 @@ function VideoTile({ post, live, published, onOpen, onDelete }) {
 /* ---------- 主视图：四种类型全部以卡片呈现 ---------- */
 function LibraryView({ scope, posts, query, sort, runningIds, publishedIds, onOpen, onDelete, onNew, onQuery, onSort, onReorder }) {
   const t = TYPES[scope];
+  /* 删除确认：卡片上的 × 只负责发起，这里集中弹窗确认 */
+  const [deleteTarget, setDeleteTarget] = React.useState(null);
+  React.useEffect(() => {
+    if (!deleteTarget) return undefined;
+    const onKey = (e) => { if (e.key === "Escape") setDeleteTarget(null); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [deleteTarget]);
 
   /* 过滤 + 排序：O(n) + O(n log n)。列表再长也是这个量级，
      真正的天花板在 DOM 节点数上，所以过千条要换成窗口化渲染。 */
@@ -367,10 +372,11 @@ function LibraryView({ scope, posts, query, sort, runningIds, publishedIds, onOp
   const renderTile = (p) => {
     const live = runningIds.indexOf(p.id) >= 0;
     const published = publishedIds.indexOf(p.id) >= 0;
-    if (p.type === "video") return <VideoTile key={p.id} post={p} live={live} published={published} onOpen={onOpen} onDelete={onDelete} />;
-    if (p.type === "image") return <ImageTile key={p.id} post={p} live={live} published={published} onOpen={onOpen} onDelete={onDelete} dnd={orderable ? dnd : null} />;
-    if (p.type === "audio") return <AudioTile key={p.id} post={p} live={live} published={published} onOpen={onOpen} onDelete={onDelete} />;
-    return <ArticleTile key={p.id} post={p} live={live} published={published} onOpen={onOpen} onDelete={onDelete} />;
+    const askDelete = setDeleteTarget;
+    if (p.type === "video") return <VideoTile key={p.id} post={p} live={live} published={published} onOpen={onOpen} onAskDelete={askDelete} />;
+    if (p.type === "image") return <ImageTile key={p.id} post={p} live={live} published={published} onOpen={onOpen} onAskDelete={askDelete} dnd={orderable ? dnd : null} />;
+    if (p.type === "audio") return <AudioTile key={p.id} post={p} live={live} published={published} onOpen={onOpen} onAskDelete={askDelete} />;
+    return <ArticleTile key={p.id} post={p} live={live} published={published} onOpen={onOpen} onAskDelete={askDelete} />;
   };
 
   return (
@@ -397,6 +403,25 @@ function LibraryView({ scope, posts, query, sort, runningIds, publishedIds, onOp
           </div>
         </div>
       </div>
+
+      {/* 删除确认：与实现的 AlertDialog 同构 —— 取消 / 删除，Esc 或点背景取消 */}
+      {deleteTarget && (
+        <div className="m-overlay" onClick={() => setDeleteTarget(null)}>
+          <div className="m-mini" role="alertdialog" aria-label="删除确认" data-screen-label="删除确认" onClick={(e) => e.stopPropagation()}>
+            <h3>删除这篇稿子？</h3>
+            <p>「{deleteTarget.title || "未命名"}」将被删除，此操作不可撤销。</p>
+            <div className="m-mini-foot">
+              <button className="m-btn-plain" onClick={() => setDeleteTarget(null)}>取消</button>
+              <button
+                className="m-btn-error"
+                onClick={() => { const t = deleteTarget; setDeleteTarget(null); onDelete(t.id); }}
+              >
+                删除
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

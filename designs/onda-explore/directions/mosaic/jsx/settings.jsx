@@ -90,7 +90,7 @@ function AccountPop({ p, side, style, onReacquire, onClose }) {
         <div className="w-acctpop-body">
           <p className="w-accterr"><IcAlert size={12} /> {p.accountError}</p>
           <button className="w-relink" onClick={() => onReacquire(p.id)}>
-            <IcRetry size={11} /> 重新获取{String(p.name)}账号
+            <IcRetry size={11} /> 重新获取
           </button>
         </div>
       ) : (

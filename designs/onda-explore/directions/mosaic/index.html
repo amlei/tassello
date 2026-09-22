@@ -176,6 +176,10 @@ input,textarea{font-family:inherit}
 .m-assethead .sq{width:13px;height:13px;border-radius:4px}
 .m-assethead .t{font-size:13px;font-weight:700}
 .m-assethead .n{font-family:var(--mono);font-size:11px;color:var(--ink2)}
+/* 清空：钉在素材头部最右，次要动作的克制样式 */
+.m-assetclear{margin-left:auto;border:none;background:transparent;border-radius:999px;padding:4px 12px;font-size:12px;font-weight:700;color:var(--ink2);transition:background .15s,color .15s}
+.m-assetclear:hover{background:var(--hover);color:var(--ink)}
+.m-assetclear:disabled{opacity:.4;cursor:default}
 /* 缩略图一行排开：放不下时给一个收起/展开 icon，默认收起 */
 .m-imgwrap{display:flex;align-items:center;gap:10px}
 .m-imgrow{display:flex;flex:1;min-width:0;flex-wrap:nowrap;gap:8px;overflow:hidden}
@@ -184,8 +188,7 @@ input,textarea{font-family:inherit}
 .m-imgrow:not(.open){-webkit-mask-image:linear-gradient(to right,#000 calc(100% - 40px),transparent);mask-image:linear-gradient(to right,#000 calc(100% - 40px),transparent)}
 /* 拖动中放开裁切：拎起来的缩略图要能跟着指针走出那一行 */
 .m-imgrow.reordering{overflow:visible;-webkit-mask-image:none;mask-image:none}
-.m-imgcell{position:relative;flex:0 0 auto;width:72px;height:72px;border-radius:10px;display:flex;flex-direction:column;align-items:flex-end;justify-content:flex-end;gap:3px;padding:6px;cursor:grab;transition:transform .18s,box-shadow .18s,opacity .18s}
-.m-imgcell:hover{transform:translateY(-2px)}
+.m-imgcell{position:relative;flex:0 0 auto;width:72px;height:72px;border-radius:10px;display:flex;flex-direction:column;align-items:flex-end;justify-content:flex-end;gap:3px;padding:6px;cursor:grab;transition:box-shadow .18s,opacity .18s}
 .m-imgcell.dragging{cursor:grabbing;z-index:12;transition:none;transform-origin:50% 50%;box-shadow:var(--shadow-pop)}
 .m-imgcell.over{box-shadow:0 0 0 3px var(--paper),0 0 0 5px var(--accent)}
 .m-imgcell.add{background:var(--card);border:1.5px dashed var(--ink3);color:var(--ink2);align-items:center;justify-content:center;cursor:pointer}
@@ -209,7 +212,6 @@ input,textarea{font-family:inherit}
 .m-uploadslot:hover{border-color:var(--ink);color:var(--ink)}
 /* 视频封面：铺满写作列（上限 560px），封面是素材区的主角 */
 .m-cover{width:100%;max-width:560px;aspect-ratio:16/9;border-radius:12px;background:var(--ink);position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden}
-.m-cover .dur{position:absolute;bottom:10px;right:12px;color:#fff;font-family:var(--mono);font-size:11px}
 .m-playbig{width:46px;height:46px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;border:none;transition:transform .15s}
 .m-playbig:hover{transform:scale(1.08)}
 /* 音频播放条：与封面同一条内容宽度，媒体件保持深炭底，不随主题翻转（与实现一致） */
@@ -374,11 +376,15 @@ input,textarea{font-family:inherit}
 .m-btn-danger:hover{background:var(--error-soft)}
 .m-btn-primary{border:none;background:var(--accent);color:#fff;border-radius:999px;padding:10px 20px;font-size:13.5px;font-weight:700;transition:filter .15s}
 .m-btn-primary:hover{filter:brightness(1.06)}
+.m-btn-error{border:none;background:var(--error);color:#fff;border-radius:999px;padding:10px 20px;font-size:13.5px;font-weight:700;transition:filter .15s}
+.m-btn-error:hover{filter:brightness(1.06)}
 .m-pill .sqs{display:flex;gap:4px}
 .m-pill .sqs i{width:10px;height:10px;border-radius:3px;display:block;animation:m-pulse 1.1s infinite}
 .m-pill .sqs i:nth-child(2){animation-delay:.18s}
 .m-pill .sqs i:nth-child(3){animation-delay:.36s}
 .m-pill .mono{font-family:var(--mono);font-size:12px;color:#9AF0C9}
+/* 深色主题下浮条是浅底，薄荷绿换成产品绿才看得清 */
+[data-theme="dark"] .m-pill .mono{color:var(--green)}
 
 @keyframes m-pulse{0%,100%{opacity:1}50%{opacity:.35}}
 @keyframes m-fade{from{opacity:0}to{opacity:1}}
@@ -496,7 +502,6 @@ body.w-dragging,body.w-dragging *{user-select:none;cursor:grabbing}
 [data-theme="dark"] .w-tileacts .w-icon{background:rgba(37,37,37,.94)}
 .w-icon{width:30px;height:30px;border:1px solid var(--line);border-radius:9px;background:var(--card);color:var(--ink2);display:flex;align-items:center;justify-content:center;transition:background .15s,color .15s}
 .w-icon:hover{background:var(--hover);color:var(--ink)}
-.w-icon.confirm{width:auto;padding:0 10px;background:var(--error);border-color:var(--error);color:#fff;font-family:var(--mono);font-size:11px;font-weight:800}
 
 /* ---------- 设置：外观 + 平台账号 + 默认发布名单 ---------- */
 .w-set{width:780px;max-height:calc(100vh - 72px);display:flex;flex-direction:column;position:relative}

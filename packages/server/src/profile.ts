@@ -1,60 +1,88 @@
-/* profile —— 浏览器登录态导入：把用户已登录的 Chrome Profile 复制到本应用的专用 Profile。
-   登录永远发生在用户自己的浏览器里，本应用不承担登录；导入后校验/发布直接使用其中的 Cookie */
+/* profile —— 重新获取账号的底层动作：用日常 Chrome 的登录态覆盖应用专用 profile。
+   应用的登录信息本就取自日常 Chrome（见 docs/platforms.md 迁移验证），Cookie 失效后
+   重新覆盖复制才是有效解；逐个平台重新扫码没有意义。 */
 import fs from "node:fs";
 import path from "node:path";
-import os from "node:os";
-import { resolveChromeProfileDir, shutdownBrowser } from "@tassello/cdp";
+import { spawnSync } from "node:child_process";
+import { getDefaultChromeUserDataDirs, resolveChromeProfileDir, resetConnection } from "@tassello/cdp";
 
-/** 用户日常浏览器（Chrome）的 User Data 目录，可用环境变量覆盖 */
-function sourceUserdataDir(): string {
-  if (process.env.TASSELLO_SOURCE_CHROME_DIR) return process.env.TASSELLO_SOURCE_CHROME_DIR;
-  const home = os.homedir();
-  switch (process.platform) {
-    case "darwin":
-      return path.join(home, "Library", "Application Support", "Google", "Chrome");
-    case "win32":
-      return path.join(home, "AppData", "Local", "Google", "Chrome", "User Data");
-    default:
-      return path.join(home, ".config", "google-chrome");
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** 登录信息源头：日常 Chrome 的 profile。多 profile 用户用 TASSELLO_SOURCE_CHROME_PROFILE 指定 */
+function sourceProfileDir(): string {
+  if (process.env.TASSELLO_SOURCE_CHROME_PROFILE) {
+    return path.resolve(process.env.TASSELLO_SOURCE_CHROME_PROFILE);
+  }
+  return path.join(getDefaultChromeUserDataDirs()[0]!, "Default");
+}
+
+/** 应用专用 profile（CDP 发布用的那个）里跑着的 Chrome 必须先停：
+ *  Cookie 是 SQLite 文件锁着的，且 Chrome 退出时会回写，覆盖结果会被冲掉 */
+async function stopAppChrome(): Promise<void> {
+  resetConnection();
+  spawnSync("pkill", ["-f", `--user-data-dir=${resolveChromeProfileDir()}`]);
+  // 等进程真正退出、文件锁释放
+  for (let i = 0; i < 10; i += 1) {
+    const alive = spawnSync("pgrep", ["-f", `--user-data-dir=${resolveChromeProfileDir()}`]);
+    if (alive.status !== 0) return;
+    await sleep(200);
   }
 }
 
-/** 拷贝时跳过的缓存目录（体积大头，与登录态无关） */
-const SKIP_DIRS = new Set([
-  "Cache", "Cache_Data", "Code Cache", "GPUCache", "GrShaderCache", "ShaderCache",
-  "Service Worker", "Media Cache", "optimization_guide_model_store", "Crashpad", "Safe Browsing",
-]);
+/** 用日常 Chrome 的 Default profile 覆盖应用专用 profile 的登录态文件。
+ *  返回复制了的相对路径清单；源不存在/没有 Cookies 时抛错（调用方走人工登录兜底） */
+export async function refreshAppProfileFromDefault(): Promise<{ copied: string[] }> {
+  const src = sourceProfileDir();
+  if (!fs.existsSync(src)) {
+    throw new Error(`日常 Chrome 的 profile 不存在：${src}`);
+  }
+  const dstRoot = resolveChromeProfileDir();
+  const dstProfile = path.join(dstRoot, "Default");
+  fs.mkdirSync(dstProfile, { recursive: true });
 
-function copyProfileContents(src: string, dest: string): void {
-  fs.cpSync(src, dest, {
-    recursive: true,
-    force: true,
-    filter: (from) => {
-      const rel = path.relative(src, from);
-      if (!rel) return true;
-      const top = rel.split(path.sep)[0]!;
-      // User Data 根层只保留 Local State（Cookie 解密密钥所在）与 Default 目录
-      if (top !== "Default" && top !== "Local State") return false;
-      return !SKIP_DIRS.has(path.basename(from));
-    },
-  });
+  await stopAppChrome();
+
+  const copied: string[] = [];
+  const cpFile = (rel: string) => {
+    const from = path.join(src, rel);
+    if (!fs.existsSync(from)) return;
+    const to = path.join(dstProfile, rel);
+    fs.mkdirSync(path.dirname(to), { recursive: true });
+    fs.copyFileSync(from, to);
+    copied.push(rel);
+  };
+  const cpDir = (rel: string) => {
+    const from = path.join(src, rel);
+    if (!fs.existsSync(from)) return;
+    fs.cpSync(from, path.join(dstProfile, rel), { recursive: true, force: true });
+    copied.push(`${rel}/`);
+  };
+
+  // Local State：os_crypt 的密钥绑定（macOS 走 Keychain，同机同用户可解）
+  const localState = path.join(path.dirname(src), "Local State");
+  if (fs.existsSync(localState)) {
+    fs.copyFileSync(localState, path.join(dstRoot, "Local State"));
+    copied.push("Local State");
+  }
+  // 登录态：Cookies（Chrome 96+ 在 Network/ 下）+ Local Storage + Session Storage
+  for (const rel of ["Network/Cookies", "Network/Cookies-journal", "Network/Cookies-wal", "Cookies", "Cookies-journal", "Cookies-wal"]) {
+    cpFile(rel);
+  }
+  cpDir("Local Storage");
+  cpDir("Session Storage");
+
+  if (!copied.some((c) => c.includes("Cookies"))) {
+    throw new Error("日常 Chrome 的 profile 里没有可复制的 Cookies");
+  }
+  return { copied };
 }
 
-/** 导入：关停本应用浏览器 → 清空专用 Profile → 复制用户 Chrome 的 Local State + Default Profile */
+/** acquire 用的入口：把结果折叠成 {ok, message}，失败原因直接给 UI 展示 */
 export async function syncBrowserProfile(): Promise<{ ok: boolean; message?: string }> {
-  const src = sourceUserdataDir();
-  const dest = resolveChromeProfileDir();
-  if (!fs.existsSync(path.join(src, "Local State")) || !fs.existsSync(path.join(src, "Default"))) {
-    return { ok: false, message: "未找到已登录的 Chrome Profile（需要本机装有 Chrome 并登录过平台）" };
-  }
-  // 同一 Profile 只能被一个 Chrome 实例占用：先关停本应用的浏览器
-  shutdownBrowser();
   try {
-    fs.rmSync(dest, { recursive: true, force: true });
-    fs.mkdirSync(dest, { recursive: true });
-    copyProfileContents(src, dest);
-    return { ok: true };
+    const { copied } = await refreshAppProfileFromDefault();
+    return { ok: true, message: copied.join("、") };
   } catch (e) {
-    return { ok: false, message: `导入 Profile 失败：${e instanceof Error ? e.message : String(e)}` };
+    return { ok: false, message: e instanceof Error ? e.message : String(e) };
   }
 }

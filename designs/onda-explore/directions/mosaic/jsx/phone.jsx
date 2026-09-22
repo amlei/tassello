@@ -120,7 +120,6 @@ function PhoneCard({ post, paneRef, onScroll, more }) {
         <span className="av" style={{ background: t.color }}>九</span>
         <div>
           <div className="who">九漾小记</div>
-          <div className="when">刚刚 · 来自 Onda 工作台</div>
         </div>
       </div>
       <h2 className="m-phone-title">{post.title || "未命名"}</h2>

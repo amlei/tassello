@@ -9,13 +9,7 @@ import { Rail } from "./rail";
 import { EditorView } from "./editor";
 import { PublishSheet } from "./publish";
 import { FloatingPill } from "./bits";
-
-function fmtClock(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
-}
+import { Button, Modal } from "@heroui/react";
 
 export function EditorScreen({
   post: initialPost, platforms: initialPlatforms, settings: initialSettings, counts, initialTasks,
@@ -31,10 +25,11 @@ export function EditorScreen({
   const [platforms, setPlatforms] = React.useState(initialPlatforms);
   const [settings, setSettings] = React.useState(initialSettings);
   const [saveState, setSaveState] = React.useState<"saved" | "dirty" | "saving">("saved");
-  const [savedAt, setSavedAt] = React.useState(() => fmtClock(initialPost.updatedAt));
   const [tasks, setTasks] = React.useState(initialTasks);
   const [sheetOpen, setSheetOpen] = React.useState(false);
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
+  /* 未保存离开确认：pendingLeave 存放被拦下的动作 */
+  const [pendingLeave, setPendingLeave] = React.useState<(() => void) | null>(null);
 
   const dirtyRef = React.useRef(false);
   const saveTimer = React.useRef<number | null>(null);
@@ -47,7 +42,8 @@ export function EditorScreen({
     return () => clearInterval(timer);
   }, []);
 
-  /* 保存：900ms 防抖自动保存 + ⌘S；切换/发布前先冲刷落库 */
+  /* 保存：停手 2.5s 自动保存一次（再输入重新计时）；手动保存 / ⌘S 随时插队并取消排队的自动保存；
+     切换/发布前先冲刷落库 */
   const saveNow = React.useCallback(async (): Promise<boolean> => {
     if (saveTimer.current) { window.clearTimeout(saveTimer.current); saveTimer.current = null; }
     const pending = pendingPatch.current;
@@ -59,7 +55,6 @@ export function EditorScreen({
       if (pendingPatch.current === pending) pendingPatch.current = null;
       if (!pendingPatch.current) {
         dirtyRef.current = false;
-        setSavedAt(fmtClock(new Date().toISOString()));
         setSaveState("saved");
       } else {
         setSaveState("dirty");
@@ -80,17 +75,39 @@ export function EditorScreen({
     dirtyRef.current = true;
     const prev = pendingPatch.current;
     pendingPatch.current = prev && prev.id === id ? { id, patch: { ...prev.patch, ...patch } } : { id, patch };
-    saveTimer.current = window.setTimeout(() => { void saveNow(); }, 900);
+    saveTimer.current = window.setTimeout(() => { void saveNow(); }, 2500);
   }, [saveNow]);
 
-  const back = () => {
-    void (async () => {
-      for (let i = 0; i < 3 && dirtyRef.current; i += 1) {
-        if (!(await saveNow())) return;
-      }
-      router.push(`/library/${post.type}`);
-      router.refresh();
-    })();
+  /* 离开守卫：脏着就拦下动作弹三选一；真·离开页面（刷新 / 关闭）走 beforeunload 原生确认 */
+  const leaveGuard = React.useCallback((action: () => void) => {
+    if (dirtyRef.current) setPendingLeave(() => action);
+    else action();
+  }, []);
+  React.useEffect(() => {
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (!dirtyRef.current) return;
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, []);
+  const go = (href: string) => { router.push(href); router.refresh(); };
+  const confirmLeave = async (save: boolean) => {
+    const action = pendingLeave;
+    setPendingLeave(null);
+    if (!action) return;
+    if (save) {
+      const ok = await saveNow();
+      if (!ok) return; /* 保存失败留在编辑器，脏状态原样保留 */
+    } else if (saveTimer.current) {
+      /* 不保存：取消排着的自动保存，改动随离开丢弃 */
+      window.clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+      pendingPatch.current = null;
+    }
+    dirtyRef.current = false; /* 放行 beforeunload */
+    action();
   };
 
   /* 素材操作 */
@@ -103,14 +120,14 @@ export function EditorScreen({
       const before = new Set(post.assets.map((a) => a.id));
       const updated = await api.uploadMedia(postId, "image", file);
       setPost((p) => (p && p.id === postId ? updated : p));
-      setSavedAt(fmtClock(new Date().toISOString()));
       const created = updated.assets.find((a) => !before.has(a.id));
       return created ? { id: created.id, color: created.color ?? "var(--onda-hover)", path: created.path } : null;
     } catch {
       return null;
     }
   };
-  const removeImageAsset = (postId: string, assetId: string) => {
+  /** 删除素材（图片/视频/音频通用）：本地收走 + API 落库 */
+  const removeAsset = (postId: string, assetId: string) => {
     mutateAssets(postId, (as) => as.filter((a) => a.id !== assetId));
     void api.removeAsset(postId, assetId);
   };
@@ -134,7 +151,6 @@ export function EditorScreen({
     try {
       const updated = await api.uploadMedia(postId, kind, file);
       setPost((p) => (p && p.id === postId ? updated : p));
-      setSavedAt(fmtClock(new Date().toISOString()));
     } catch {}
   };
 
@@ -172,18 +188,18 @@ export function EditorScreen({
         runningCount={runningCount}
         queueCount={tasks.length}
         platforms={platforms}
+        guard={leaveGuard}
       />
       <div className="flex min-h-0 w-full flex-1 flex-col">
         <EditorView
           post={post}
           saveState={saveState}
-          savedAt={savedAt}
           onChangeField={(k, v) => patchPost(post.id, { [k]: v })}
           onUploadImage={(file) => uploadImageForInsert(post.id, file)}
-          onRemoveAsset={(assetId) => removeImageAsset(post.id, assetId)}
+          onRemoveAsset={(assetId) => removeAsset(post.id, assetId)}
           onMoveImage={(from, to) => moveImageAsset(post.id, from, to)}
           onUploadMedia={(kind, file) => uploadMedia(post.id, kind, file)}
-          onBack={back}
+          onBack={() => leaveGuard(() => go(`/library/${post.type}`))}
           onPublish={() => void openPublishSheet()}
           onSave={() => void saveNow()}
         />
@@ -201,7 +217,43 @@ export function EditorScreen({
         />
       )}
 
-      <FloatingPill running={runningCount} avg={avgProgress} onClick={() => router.push("/queue")} />
+      <FloatingPill running={runningCount} avg={avgProgress} onClick={() => leaveGuard(() => go("/queue"))} />
+
+      {/* 未保存离开确认：三选一（取消 / 不保存并离开 / 保存并离开） */}
+      {pendingLeave && (
+        <Modal>
+          <Modal.Backdrop isOpen onOpenChange={(o) => { if (!o) setPendingLeave(null); }}>
+            <Modal.Container>
+              <Modal.Dialog className="max-w-[440px] rounded-2xl bg-paper p-6 shadow-[0_14px_40px_rgba(15,15,15,0.14)]" role="alertdialog" aria-label="未保存提示">
+                <Modal.Heading className="text-[17px] font-bold tracking-[-0.2px]">有未保存的改动</Modal.Heading>
+                <p className="mt-2 text-[13.5px] leading-[1.7] text-ink2">「{post.title || "未命名稿子"}」的改动还没有保存，离开后会丢失。要怎么处理？</p>
+                <div className="mt-[22px] flex items-center justify-end gap-2.5">
+                  <Button
+                    variant="ghost"
+                    className="rounded-full px-3.5 py-2 text-[13.5px] font-bold text-ink2 data-[hovered=true]:bg-hover data-[hovered=true]:text-ink"
+                    onPress={() => setPendingLeave(null)}
+                  >
+                    取消
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    className="rounded-full px-3.5 py-2 text-[13.5px] font-bold text-error data-[hovered=true]:bg-error/10"
+                    onPress={() => void confirmLeave(false)}
+                  >
+                    不保存并离开
+                  </Button>
+                  <Button
+                    className="rounded-full bg-accent px-5 py-2 text-[13.5px] font-bold text-white data-[hovered=true]:brightness-105"
+                    onPress={() => void confirmLeave(true)}
+                  >
+                    保存并离开
+                  </Button>
+                </div>
+              </Modal.Dialog>
+            </Modal.Container>
+          </Modal.Backdrop>
+        </Modal>
+      )}
     </div>
   );
 }

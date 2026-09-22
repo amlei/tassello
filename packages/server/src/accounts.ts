@@ -1,6 +1,7 @@
 /* accounts —— 平台列表（meta + 账号合并）、acquire、verify 编排 */
 import { getPrisma } from "@tassello/db";
 import { PLATFORM_METAS, getAdapter } from "@tassello/platform-core";
+import { withPage } from "@tassello/cdp";
 import type { AccountDTO, PlatformDTO } from "@tassello/shared";
 import { fileSecretBox } from "./secrets";
 import { syncBrowserProfile } from "./profile";
@@ -65,13 +66,30 @@ async function upsertAccount(
 
 /** 获取 = 导入用户已登录的浏览器 Profile → 自动校验。登录不发生在本应用内 */
 export async function acquireAccount(platformId: string): Promise<AccountDTO> {
+  const adapter = getAdapter(platformId);
+  if (!adapter) throw new Error(`平台 ${platformId} 的适配器尚未接入`);
   const prisma = getPrisma();
   const sync = await syncBrowserProfile();
   if (!sync.ok) {
     const saved = await upsertAccount(platformId, { state: "fail", failReason: sync.message });
     return toAccountDTO(saved);
   }
-  return verifyAccount(platformId);
+  const verified = await verifyAccount(platformId);
+  if (verified.state === "ok") return verified;
+  /* 覆盖后仍失效：源头 Cookie 真过期了 → 打开平台登录页人工兜底，
+     登录发生在应用浏览器里，完成后回工作台点「重新校验」 */
+  const loginUrl = adapter.meta.loginUrl;
+  if (loginUrl) {
+    await withPage(platformId, { url: loginUrl, keepOpen: true, activate: true }, async () => {});
+    await upsertAccount(platformId, {
+      state: "fail",
+      failReason: `导入的登录态已失效。已打开${adapter.meta.name}登录页：登录后回工作台点「重新校验」`,
+    });
+    return toAccountDTO(
+      (await prisma.platformAccount.findFirst({ where: { platformId }, orderBy: { updatedAt: "desc" } }))!,
+    );
+  }
+  return verified;
 }
 
 export async function verifyAccount(platformId: string): Promise<AccountDTO> {

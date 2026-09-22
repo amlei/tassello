@@ -78,7 +78,7 @@ export const PLATFORM_MARKS: Record<string, { viewBox: string; paths: { d: strin
 };
 
 export function PlatformMark({
-  id, char, size, tone = "lit", imgScale = 1,
+  id, char, size, tone = "lit", imgScale = 1, className,
 }: {
   id: string;
   char: string;
@@ -86,6 +86,8 @@ export function PlatformMark({
   tone?: "lit" | "dim" | "off";
   /** 图片型标记的放大系数（app 图标内含留白，小格子中需放大才可读）；SVG 不受影响 */
   imgScale?: number;
+  /** 尺寸/边距工具类：HeroUI 按钮会用 .button svg 强制 16px，需要显式覆盖 */
+  className?: string;
 }) {
   const img = PLATFORM_IMAGE_MARKS[id];
   if (img) {
@@ -103,13 +105,13 @@ export function PlatformMark({
     }
     return (
       // eslint-disable-next-line @next/next/no-img-element
-      <img src={img} width={imgSize} height={imgSize} alt="" aria-hidden="true" style={style} />
+      <img src={img} width={imgSize} height={imgSize} alt="" aria-hidden="true" style={style} className={className} />
     );
   }
   const mark = PLATFORM_MARKS[id];
   if (!mark) return <span>{char}</span>;
   return (
-    <svg width={size} height={size} viewBox={mark.viewBox} fill="currentColor" aria-hidden="true" style={{ display: "block" }}>
+    <svg width={size} height={size} viewBox={mark.viewBox} fill="currentColor" aria-hidden="true" style={{ display: "block" }} className={className}>
       {mark.paths.map((p, i) =>
         p.stroke ? (
           <path key={i} d={p.d} fill="none" stroke="currentColor" strokeWidth={p.width ?? 2} strokeLinecap="round" />

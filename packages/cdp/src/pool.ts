@@ -13,12 +13,20 @@ import {
   waitForChromeDebugPort,
 } from "./cdp";
 
-/** 专用 Chrome profile（生产位置；TASSELLO_CHROME_PROFILE 可覆盖） */
+/** 应用数据目录：TASSELLO_DATA_DIR 优先，默认 ~/.local/share/tassello。
+ *  cdp 不依赖 @tassello/db（避免把 prisma 拖进浏览器层），故此处镜像 packages/db/src/paths.ts 的同一套解析 */
+function resolveDataDir(): string {
+  const override = process.env.TASSELLO_DATA_DIR?.trim();
+  if (override) return path.resolve(override);
+  return path.join(/*turbopackIgnore: true*/ os.homedir(), ".local", "share", "tassello");
+}
+
+/** 专用 Chrome profile：默认落在应用数据目录下（~/.local/share/tassello/chrome-profile），
+ *  不放 ~/Library/Application Support；TASSELLO_CHROME_PROFILE 可直接覆盖 profile 路径 */
 export function resolveChromeProfileDir(): string {
-  return (
-    process.env.TASSELLO_CHROME_PROFILE ??
-    path.join(/*turbopackIgnore: true*/ os.homedir(), "Library", "Application Support", "tassello", "chrome-profile")
-  );
+  const override = process.env.TASSELLO_CHROME_PROFILE?.trim();
+  if (override) return path.resolve(override);
+  return path.join(resolveDataDir(), "chrome-profile");
 }
 
 function findChrome(): string {

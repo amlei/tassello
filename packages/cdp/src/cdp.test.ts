@@ -14,6 +14,7 @@ import {
   gracefulKillChrome,
   getFreePort,
   openPageSession,
+  resolveChromeProfileDir,
   resolveSharedChromeProfileDir,
   waitForChromeDebugPort,
 } from "./index.ts";
@@ -212,6 +213,21 @@ test("resolveSharedChromeProfileDir supports env overrides, WSL paths, and defau
     profileDirName: "demo-profile",
   });
   assert.match(fallback, /demo-app[\\/]demo-profile$/);
+});
+
+test("resolveChromeProfileDir lives under the app data dir and honors env overrides", (t) => {
+  useEnv(t, { TASSELLO_CHROME_PROFILE: "/tmp/custom-chrome-profile", TASSELLO_DATA_DIR: null });
+  assert.equal(resolveChromeProfileDir(), path.resolve("/tmp/custom-chrome-profile"));
+
+  useEnv(t, { TASSELLO_CHROME_PROFILE: null, TASSELLO_DATA_DIR: "/tmp/custom-data" });
+  assert.equal(resolveChromeProfileDir(), path.join(path.resolve("/tmp/custom-data"), "chrome-profile"));
+
+  useEnv(t, { TASSELLO_CHROME_PROFILE: null, TASSELLO_DATA_DIR: null });
+  assert.equal(
+    resolveChromeProfileDir(),
+    path.join(os.homedir(), ".local", "share", "tassello", "chrome-profile"),
+  );
+  assert.doesNotMatch(resolveChromeProfileDir(), /Library[\\/]Application Support/);
 });
 
 test("findExistingChromeDebugPort reads DevToolsActivePort and validates it against a live endpoint", async (t) => {

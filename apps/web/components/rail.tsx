@@ -3,12 +3,13 @@
 
 import React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { TYPE_META, TYPE_ORDER, type AppSettings, type ContentType, type PlatformDTO } from "@tassello/shared";
 import { api } from "./api";
 import { MosaicLogo } from "./bits";
 import { SettingsSheet } from "./settings";
-import { IcPlus, IcSettings } from "./icons";
 import { Button, Dropdown } from "@heroui/react";
+import { Add, Tuning2 } from "reicon-react";
 
 export function Rail({
   active,
@@ -16,14 +17,26 @@ export function Rail({
   runningCount,
   queueCount,
   platforms,
+  guard,
 }: {
   active: string;
   counts: Record<string, number>;
   runningCount: number;
   queueCount: number;
   platforms: PlatformDTO[];
+  /** 导航守卫（编辑器脏状态时由外层弹确认）：包住所有会离开当前页的入口 */
+  guard?: (nav: () => void) => void;
 }) {
+  const router = useRouter();
   const missing = platforms.filter((p) => p.status === "active" && (!p.account || p.account.state !== "ok")).length;
+  /* guard 存在时接管 Link：先过守卫，放行后再编程式跳转 */
+  const guardedNav = (href: string) =>
+    guard
+      ? (e: React.MouseEvent) => {
+          e.preventDefault();
+          guard(() => router.push(href));
+        }
+      : undefined;
 
   const navItem = (on: boolean, small = false) =>
     `grid w-full grid-cols-[14px_minmax(0,1fr)_auto] items-center gap-2.5 rounded-[10px] border border-transparent px-2.5 text-left font-bold text-ink transition-colors hover:bg-hover data-[on=true]:bg-selected ${
@@ -40,14 +53,14 @@ export function Rail({
         </div>
       </div>
 
-      <NewContentDropdown />
+      <NewContentDropdown guard={guard} />
 
       <nav className="flex flex-col gap-[3px]" aria-label="内容类型">
         {TYPE_ORDER.map((k) => {
           const t = TYPE_META[k];
           const on = active === k;
           return (
-            <Link key={k} href={`/library/${k}`} className={navItem(on)} data-on={on} aria-current={on ? "page" : undefined}>
+            <Link key={k} href={`/library/${k}`} className={navItem(on)} data-on={on} onClick={guardedNav(`/library/${k}`)} aria-current={on ? "page" : undefined}>
               <span className="block h-3.5 w-3.5 rounded" style={{ background: t.color }} />
               <span>{t.zh}</span>
               <span className="font-mono text-[11.5px] font-semibold text-ink2">{String(counts[k] ?? 0).padStart(2, "0")}</span>
@@ -55,7 +68,7 @@ export function Rail({
           );
         })}
         <div className="mt-0.5 flex flex-col gap-[3px] border-t border-line pt-3" aria-label="其他入口">
-          <Link href="/queue" className={navItem(active === "queue")} data-on={active === "queue"} aria-current={active === "queue" ? "page" : undefined}>
+          <Link href="/queue" className={navItem(active === "queue")} data-on={active === "queue"} onClick={guardedNav("/queue")} aria-current={active === "queue" ? "page" : undefined}>
             <span className="block h-3.5 w-3.5 rounded bg-green" />
             <span>发布队列</span>
             {runningCount > 0
@@ -73,17 +86,24 @@ export function Rail({
 }
 
 /* 新建内容：弹出四类型菜单，建好直达编辑器 */
-function NewContentDropdown() {
+function NewContentDropdown({ guard }: { guard?: (nav: () => void) => void }) {
   return (
     <Dropdown>
       <Button
         fullWidth
         className="rounded-[10px] bg-accent px-0 text-white font-bold [--button-bg-hover:#1b78d2] [--button-bg-pressed:#2383e2] [--button-fg-hover:#ffffff]"
       >
-        <IcPlus size={14} /> 新建内容
+        <Add size={14} strokeWidth={3.3} /> 新建内容
       </Button>
       <Dropdown.Popover placement="right top">
-        <Dropdown.Menu onAction={(k) => { void api.createPost(String(k)).then((post) => { window.location.href = `/editor/${post.id}`; }); }} aria-label="选择要新建的内容类型">
+        <Dropdown.Menu
+          onAction={(k) => {
+            const nav = () => { void api.createPost(String(k)).then((post) => { window.location.href = `/editor/${post.id}`; }); };
+            if (guard) guard(nav);
+            else nav();
+          }}
+          aria-label="选择要新建的内容类型"
+        >
           {TYPE_ORDER.map((k) => {
             const t = TYPE_META[k];
             return (
@@ -162,7 +182,7 @@ function SettingsGate({ missing }: { missing: number }) {
         onPress={() => void openSheet()}
         aria-haspopup="dialog"
       >
-        <IcSettings size={15} />
+        <Tuning2 size={15} strokeWidth={2.4} />
         <span>{loading ? "设置…" : "设置"}</span>
         {missing > 0 && <span className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-error px-1.5 font-mono text-[10.5px] font-bold text-white">{missing}</span>}
       </Button>

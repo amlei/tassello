@@ -18,7 +18,7 @@
 | UI | **Next.js**（bun init）+ **HeroUI v3** + **reicon-react** | UI 复刻 Mosaic 方向 |
 | 桌面壳 | **Electron**（可选宿主） | main / preload 用 TS；网页模式可脱离壳独立运行 |
 | 类型检查 | **tsgo**（@typescript/native-preview，即 TS7） | 仅 typecheck；运行时由 bun（服务层）与 Electron（壳）承担 |
-| 数据 | **Prisma + SQLite** | 本地单用户；库文件路径 `TASSELLO_DATA_DIR`（默认 `~/.local/share/tassello`）。驱动用 `@prisma/adapter-libsql`（better-sqlite3 在 Bun 下不可用，见 oven-sh/bun#4290） |
+| 数据 | **Prisma + SQLite** | 本地单用户；数据目录 `TASSELLO_DATA_DIR`（默认 `~/.local/share/tassello`），库文件与专用 Chrome profile 都放在这里。驱动用 `@prisma/adapter-libsql`（better-sqlite3 在 Bun 下不可用，见 oven-sh/bun#4290） |
 | 发布通道 | 官方 API + **Chrome CDP** + RSS（二期） | CDP 是主通道，API 是增强 |
 
 ## 3. 总体架构
@@ -202,7 +202,7 @@ export type PlatformMeta = {
 ## 7. CDP 封装层（packages/cdp）
 
 - 移植 `baoyu-chrome-cdp`（launch / discover / waitForDebugPort / CdpConnection / openPageSession 全套），外加一层**浏览器会话池**：
-  - 共享 Chrome profile：`~/Library/Application Support/tassello/chrome-profile`（生产位置，已初始化并登录验证）
+  - 共享 Chrome profile：`~/.local/share/tassello/chrome-profile`（= `TASSELLO_DATA_DIR` 下，`TASSELLO_CHROME_PROFILE` 可覆盖；已初始化并登录验证）
   - 按平台互斥占用：同一时刻一个平台一个 page session，发布与 verify 排队
   - 登录态生命周期：每平台手动登录一次 → verify 定期校验（对应账号卡「最近校验」）→ fail 时 UI 提示重登
 - **工程铁律**：小红书等 Vue 站点的页面对象是响应式 Proxy，直接序列化会炸。封装层只提供 `evaluateScalar`（只允许标量/纯数组出页面），禁止把页面对象直接带回 Node 侧。

@@ -158,8 +158,22 @@
   to { opacity: 1; transform: scale(1) translateY(0); }
 }
 @keyframes m-rise {
-  from { opacity: 0; transform: translateX(-50%) translateY(24px); }
-  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+  from { opacity: 0; transform: translateY(-24px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* 发布浮条钉在顶部，自上落下入场；深色主题下浮条是浅底，薄荷绿换成产品绿才看得清 */
+[data-theme="dark"] .pill-mono {
+  color: var(--color-green);
+}
+
+/* 素材删除钮（视频封面/音频条右上、内容卡片行内）：深色主题下换深炭底（原型 [data-theme=dark] .w-tileacts .w-icon） */
+[data-theme="dark"] .media-x {
+  background: rgba(37, 37, 37, 0.94);
+}
+[data-theme="dark"] .media-x:hover,
+[data-theme="dark"] .media-x[data-hovered="true"] {
+  background: var(--color-hover);
 }
 @keyframes q-wave {
   0%, 100% { transform: translateX(-3%); }

@@ -3,10 +3,10 @@ import type { PlatformMeta } from "@tassello/shared";
 import type { PlatformAdapter } from "./types";
 
 export const PLATFORM_METAS: PlatformMeta[] = [
-  { id: "wechat", name: "微信公众号", char: "微", color: "#07C160", link: "https://mp.weixin.qq.com/cgi-bin/appmsg?t=media/appmsg_edit&action=edit&fakeid=", supports: ["article", "image", "video", "audio"], authMode: "api", autoSubmit: false, lands: "内容进这个号的草稿箱，群发要你去公众号后台点一次", status: "active" },
+  { id: "wechat", name: "微信公众号", char: "微", color: "#07C160", link: "https://mp.weixin.qq.com/cgi-bin/appmsg?t=media/appmsg_edit&action=edit&fakeid=", loginUrl: "https://mp.weixin.qq.com/", supports: ["article", "image", "video", "audio"], authMode: "cdp", autoSubmit: false, lands: "内容进这个号的草稿箱，群发要你去公众号后台点一次", status: "active" },
   // 文章（头条文章编辑器）链路已实现但产品上暂不开放——supports 不含 article，
   // weiboAdapter 内保留 publishArticle 实现，开放时把 "article" 加回即可
-  { id: "weibo", name: "微博", char: "博", color: "#FF8200", link: "https://weibo.com/detail/", supports: ["image", "video"], authMode: "cdp", autoSubmit: true, lands: "自动发送成一条微博（未开通长文，正文限 500 字）", status: "active" },
+  { id: "weibo", name: "微博", char: "博", color: "#FF8200", link: "https://weibo.com/detail/", loginUrl: "https://weibo.com/login.php", supports: ["image", "video"], authMode: "cdp", autoSubmit: true, lands: "自动发送成一条微博（未开通长文，正文限 500 字）", status: "active" },
   { id: "xhs", name: "小红书", char: "红", color: "#FF2442", link: "https://www.xiaohongshu.com/explore/", supports: ["article", "image", "video"], authMode: "cdp", autoSubmit: false, lands: "进创作者中心，发完可以在小红书里继续改", status: "planned" },
   { id: "jike", name: "即刻", char: "即", color: "#FFD400", fg: "#16130E", link: "https://web.okjike.com/originalPost/", supports: ["article", "image", "video"], authMode: "cdp", autoSubmit: false, lands: "直接发一条动态", status: "planned" },
   { id: "bili", name: "B站", char: "B", color: "#00A1D6", link: "https://www.bilibili.com/video/", supports: ["article", "image", "video"], authMode: "cdp", autoSubmit: false, lands: "进投稿页，需要你确认封面与分区后提交", status: "planned" },

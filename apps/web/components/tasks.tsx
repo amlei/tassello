@@ -4,9 +4,8 @@
 import React from "react";
 import { STAGE_LABELS, TYPE_META, type PlatformDTO, type TaskDTO } from "@tassello/shared";
 import { Button, Link as OndaLink } from "@heroui/react";
-import { Check as ReiconCheck } from "reicon-react";
-import { IcAlert, IcRetry } from "./icons";
 import { PlatformMark } from "./platform-icons";
+import { Alert, Check, Refresh } from "reicon-react";
 
 function PlatformTile({
   task, platform, onRetry, onConfirm,
@@ -46,7 +45,7 @@ function PlatformTile({
     const tile = (
       <span className={TILE + " cursor-pointer"} style={{ background: pc, color: fg }}>
         {body}
-        <span className="absolute right-[-6px] top-[-6px] z-[3] flex h-[19px] w-[19px] items-center justify-center rounded-[7px] border-2 border-white text-white" style={{ background: "var(--color-green)" }}><ReiconCheck size={11} strokeWidth={2.4} /></span>
+        <span className="absolute right-[-6px] top-[-6px] z-[3] flex h-[19px] w-[19px] items-center justify-center rounded-[7px] border-2 border-white text-white" style={{ background: "var(--color-green)" }}><Check size={10} strokeWidth={4} /></span>
       </span>
     );
     if (!task.url) {
@@ -60,7 +59,7 @@ function PlatformTile({
         aria-label={`${p.name} 已发布，点击访问`}
       >
         {body}
-        <span className="absolute right-[-6px] top-[-6px] z-[3] flex h-[19px] w-[19px] items-center justify-center rounded-[7px] border-2 border-white text-white" style={{ background: "var(--color-green)" }}><ReiconCheck size={11} strokeWidth={2.4} /></span>
+        <span className="absolute right-[-6px] top-[-6px] z-[3] flex h-[19px] w-[19px] items-center justify-center rounded-[7px] border-2 border-white text-white" style={{ background: "var(--color-green)" }}><Check size={10} strokeWidth={4} /></span>
       </OndaLink>
     );
   }
@@ -96,7 +95,7 @@ function PlatformTile({
         aria-label={`${p.name} 发布失败，点击重试`}
       >
         {body}
-        <span className="absolute right-[-6px] top-[-6px] z-[3] flex h-[19px] w-[19px] items-center justify-center rounded-[7px] border-2 border-white text-white" style={{ background: "var(--color-error)" }}><IcAlert size={10} /></span>
+        <span className="absolute right-[-6px] top-[-6px] z-[3] flex h-[19px] w-[19px] items-center justify-center rounded-[7px] border-2 border-white text-white" style={{ background: "var(--color-error)" }}><Alert size={10} strokeWidth={4} /></span>
       </Button>
     </span>
   );
@@ -183,9 +182,9 @@ export function TasksView({
                 const pf = platforms.find((x) => x.id === p.platformId);
                 return (
                   <div className="mt-[9px] flex w-fit max-w-full items-center gap-[9px] rounded-[11px] border border-error/30 bg-error/10 px-3 py-2 text-error" key={p.id}>
-                    <IcAlert size={13} />
+                    <Alert size={13} strokeWidth={3.3} />
                     <span className="min-w-0 truncate text-[12.5px] leading-normal"><b className="font-black">{pf ? pf.name : p.platformId}</b> · {p.failReason}</span>
-                    <Button variant="ghost" className="inline-flex flex-none items-center gap-[5px] rounded-full border border-error bg-card px-[11px] py-[3px] font-mono text-[11px] font-bold text-error data-[hovered=true]:bg-error data-[hovered=true]:text-white" onPress={() => onRetry(p.id)}><IcRetry size={11} /> 重试</Button>
+                    <Button variant="ghost" className="inline-flex flex-none items-center gap-[5px] rounded-full border border-error bg-card px-[11px] py-[3px] font-mono text-[11px] font-bold text-error data-[hovered=true]:bg-error data-[hovered=true]:text-white" onPress={() => onRetry(p.id)}><Refresh size={11} strokeWidth={3.3} /> 重试</Button>
                   </div>
                 );
               })}

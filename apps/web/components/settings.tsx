@@ -4,9 +4,8 @@
 import React from "react";
 import { TYPE_META, TYPE_ORDER, type PlatformDTO, type ContentType, type AppSettings } from "@tassello/shared";
 import { Button, Modal, Popover } from "@heroui/react";
+import { Alert, Check, Refresh, X } from "reicon-react";
 import { ChevronLeft, ChevronRight } from "reicon-react";
-import { Check as ReiconCheck } from "reicon-react";
-import { IcAlert, IcRetry, IcX } from "./icons";
 import { PLATFORM_IMAGE_MARKS, PLATFORM_MARKS, PlatformMark } from "./platform-icons";
 import { ThemeSwitcher } from "./theme";
 
@@ -75,7 +74,7 @@ function AccountRow({
             boxShadow: "0 1px 2px rgba(15,15,15,0.04)",
           }}
           className={
-            "gap-2.5 rounded-[10px] text-left transition-[border-color] data-[hovered=true]:border-[#DEDCD8]"
+            "gap-2.5 rounded-[12px] text-left transition-[border-color] data-[hovered=true]:border-[#DEDCD8]"
           }
         >
           <AccountMark p={p} off={off} />
@@ -111,25 +110,26 @@ function AccountPopBody({
 }) {
   const off = p.status !== "active" || !p.account || p.account.state !== "ok";
   const a = p.account;
+  /* 原型 .w-relink：通栏 accent 主按钮（重新获取 / 重新校验共用一套动作样式） */
   const relinkCls =
-    "inline-flex flex-none items-center gap-[5px] rounded-full border border-line bg-card px-2.5 py-[3px] font-mono text-[10.5px] font-bold text-ink data-[hovered=true]:bg-hover data-[disabled=true]:opacity-50";
+    "w-full flex-none items-center justify-center gap-1.5 rounded-full border-none bg-accent px-3.5 py-[9px] text-[13px] font-bold text-white transition-[filter] duration-150 data-[hovered=true]:brightness-105 data-[disabled=true]:opacity-50";
   return (
     <div className="p-4">
       <div className="flex items-center gap-[9px] border-b border-line pb-3">
         <AccountMark p={p} off={off} />
         <span className="min-w-0 flex-1 text-sm font-bold tracking-[-0.2px]">{p.name}</span>
         <StatusChip p={p} busy={busy} />
-        <Button isIconOnly variant="ghost" className="h-[22px] w-[22px] min-w-0 rounded-lg border border-line bg-card text-ink2 data-[hovered=true]:bg-hover data-[hovered=true]:text-ink" onPress={onClose} aria-label="关闭账号信息"><IcX size={11} /></Button>
+        <Button isIconOnly variant="ghost" className="h-[22px] w-[22px] min-w-0 rounded-lg border border-line bg-card text-ink2 data-[hovered=true]:bg-hover data-[hovered=true]:text-ink" onPress={onClose} aria-label="关闭账号信息"><X size={11} strokeWidth={4} /></Button>
       </div>
       {p.status !== "active" ? (
         <div className="flex flex-col gap-3.5 pt-3.5">
-          <p className="flex items-start gap-2 text-[12.5px] leading-[1.65] text-error"><IcAlert size={12} /> 适配器尚未接入（二期），先把账号矩阵摆在这里。</p>
+          <p className="flex items-start gap-2 text-[12.5px] leading-[1.65] text-error"><Alert size={12} strokeWidth={3.3} /> 适配器尚未接入（二期），先把账号矩阵摆在这里。</p>
         </div>
       ) : off ? (
         <div className="flex flex-col gap-3.5 pt-3.5">
-          <p className="flex items-start gap-2 text-[12.5px] leading-[1.65] text-error"><IcAlert size={12} /> {a?.failReason || "凭据未获取"}</p>
+          <p className="flex items-start gap-2 text-[12.5px] leading-[1.65] text-error"><Alert size={12} strokeWidth={3.3} /> {a?.failReason || "凭据未获取"}</p>
           <Button variant="ghost" isDisabled={busy} className={relinkCls} onPress={() => onAcquire(p.id)}>
-            <IcRetry size={11} /> {busy ? "处理中…" : `重新获取${p.name}账号`}
+            <Refresh size={11} strokeWidth={3.3} /> {busy ? "处理中…" : "重新获取"}
           </Button>
         </div>
       ) : (
@@ -159,7 +159,7 @@ function AccountPopBody({
             </div>
           </dl>
           <Button variant="ghost" isDisabled={busy} className={relinkCls} onPress={() => onVerify(p.id)}>
-            <IcRetry size={11} /> {busy ? "校验中…" : "重新校验"}
+            <Refresh size={11} strokeWidth={3.3} /> {busy ? "校验中…" : "重新校验"}
           </Button>
         </div>
       )}
@@ -179,8 +179,6 @@ export function SettingsSheet({
   onAcquire: (id: string) => void;
   onClose: () => void;
 }) {
-  const okCount = platforms.filter((p) => p.status === "active" && p.account?.state === "ok").length;
-  const activeCount = platforms.filter((p) => p.status === "active").length;
   const [popId, setPopId] = React.useState<string | null>(null);
 
   return (
@@ -192,18 +190,20 @@ export function SettingsSheet({
             aria-label="设置"
             data-screen-label="设置"
           >
-            <div className="flex max-h-[calc(100vh-72px)] min-h-0 w-full flex-col px-[30px] pb-6 pt-[26px]" onClick={(e) => e.stopPropagation()}>
+            <div className="relative flex max-h-[calc(100vh-72px)] min-h-0 w-full flex-col px-[34px] pb-[28px] pt-[30px]" onClick={(e) => e.stopPropagation()}>
               <div className="mb-1.5 flex items-center gap-3.5">
-                <Modal.Heading className="text-[20px] font-bold tracking-[-0.3px]">设置</Modal.Heading>
-                <span className="ml-auto font-mono text-[13px] text-ink2">{okCount}/{activeCount} 已获取</span>
+                <Modal.Heading className="text-[22px] font-bold tracking-[-0.2px]">设置</Modal.Heading>
               </div>
 
-              <div className="scroll-thin relative mt-2 min-h-0 flex-1 overflow-auto pb-11 pr-1.5">
+              <div className="scroll-thin relative mt-2 min-h-0 flex-1 overflow-auto pb-[64px] pr-1.5">
                 <section>
-                  <h4 className="mb-3.5 flex items-center gap-2.5 text-[15px] font-bold tracking-[-0.2px]">外观</h4>
-                  <ThemeSwitcher />
+                  {/* 外观：标题与主题切换器同一行，切换器靠右（原型 w-sethead） */}
+                  <div className="flex items-center justify-between gap-3.5">
+                    <h4 className="text-[15px] font-bold tracking-[-0.2px]">外观</h4>
+                    <ThemeSwitcher />
+                  </div>
                 </section>
-                <section className="mt-[26px]">
+                <section className="mt-[30px] border-t border-line pt-[26px]">
                   <h4 className="mb-3.5 flex items-center gap-2.5 text-[15px] font-bold tracking-[-0.2px]">平台账号</h4>
                   <div className="grid grid-cols-[repeat(2,minmax(0,1fr))] gap-2.5">
                     {platforms.map((p, i) => (
@@ -221,7 +221,8 @@ export function SettingsSheet({
                   </div>
                 </section>
 
-                <section className="mt-[26px] border-t border-line pt-[26px]">
+                {/* 二、默认发布名单：每种稿子挑一次，发布弹层就按这份名单预选（原型 m-typerows） */}
+                <section className="mt-[30px] border-t border-line pt-[26px]">
                   <h4 className="mb-3.5 flex items-center gap-2.5 text-[15px] font-bold tracking-[-0.2px]">默认发布平台</h4>
                   <div className="flex flex-col">
                     {TYPE_ORDER.map((k) => {
@@ -243,19 +244,33 @@ export function SettingsSheet({
                                 : on
                                   ? { background: p.color, color: p.fg || "#fff" }
                                   : { background: p.color + "2E", color: p.fg ? "var(--color-ink)" : p.color };
-                               return (
-                                 <Button
-                                   key={p.id}
-                                    className="relative flex h-[38px] w-[38px] items-center justify-center rounded-xl p-0 text-sm font-black data-[hovered=true]:-translate-y-[3px]"
-                                   style={skin}
-                                   onPress={() => (off ? onAcquireAndSetDefault(k, p.id) : onToggleDefault(k, p.id))}
-                                   aria-label={p.name + (p.status !== "active" ? " · 尚未接入" : off ? " · 凭据未获取" : on ? ` · 已是${t.zh}的默认平台` : ` · 点一下设为${t.zh}的默认平台`)}
-                                 >
-                                    <PlatformMark id={p.id} char={p.char} size={20} imgScale={1.4} tone={off ? "off" : on ? "lit" : "dim"} />
-                                    {on && !off && <span className="absolute -right-[5px] -top-[5px] flex h-4 w-4 items-center justify-center rounded-[5px] border-2 border-white bg-accent text-white"><ReiconCheck size={10} strokeWidth={2.4} /></span>}
-                                   {off && p.status === "active" && <span className="absolute bottom-[-5px] right-[-5px] flex h-4 w-4 items-center justify-center rounded-[5px] border border-line bg-card text-ink2"><IcRetry size={9} /></span>}
-                                 </Button>
-                               );
+                              return (
+                                <span key={p.id} title={p.name + (off ? ` · 获取失败，点一下重新获取并设为${t.zh}的默认平台` : on ? ` · 已是${t.zh}的默认平台` : ` · 点一下设为${t.zh}的默认平台`)} className="inline-flex">
+                                  <Button
+                                    className={
+                                      "relative flex h-[38px] w-[38px] items-center justify-center rounded-[12px] p-0 shadow-[0_1px_2px_rgba(15,15,15,0.04)] transition-[translate,transform,box-shadow] duration-150 data-[off=true]:shadow-none" +
+                                      (off ? "" : " data-[hovered=true]:-translate-y-[3px]")
+                                    }
+                                    style={{ ...skin, transform: "none" }}
+                                    data-off={off}
+                                    onPress={() => (off ? onAcquireAndSetDefault(k, p.id) : onToggleDefault(k, p.id))}
+                                    aria-label={p.name}
+                                  >
+                                    <PlatformMark id={p.id} char={p.char} size={20} imgScale={1.4} tone={off ? "off" : on ? "lit" : "dim"} className="m-0 h-5 w-5" />
+                                    {on && !off && (
+                                      /* 选中勾：原型 .m-platico.sm .m-platck，16px 圆角 5，偏移 -5px，无白边 */
+                                      <span className="absolute -right-[5px] -top-[5px] z-[2] flex h-4 w-4 animate-pop items-center justify-center rounded-[5px] bg-accent text-white">
+                                        <Check className="m-0 h-[9px] w-[9px]" strokeWidth={4} />
+                                      </span>
+                                    )}
+                                    {off && p.status === "active" && (
+                                      <span className="absolute -bottom-[5px] -right-[5px] z-[2] flex h-4 w-4 items-center justify-center rounded-[5px] border border-line bg-card text-ink2">
+                                        <Refresh className="m-0 h-[9px] w-[9px]" />
+                                      </span>
+                                    )}
+                                  </Button>
+                                </span>
+                              );
                             })}
                           </div>
                         </div>
@@ -263,12 +278,12 @@ export function SettingsSheet({
                     })}
                   </div>
                 </section>
+
               </div>
 
-              {/* 悬浮完成钮：盖在滚动区右下角，滚动区底部衬一条渐隐 */}
-              <span className="pointer-events-none absolute inset-x-0 bottom-0 z-[5] h-14 rounded-b-[20px] bg-gradient-to-t from-paper from-30% to-transparent" aria-hidden="true" />
+              {/* 完成钮：绝对定位在滚动区右下（原型 .w-set .m-sheet-foot：padding 0 34px 22px） */}
               <Button
-                className="absolute bottom-4 right-5 z-[6] rounded-full bg-accent px-5 py-2.5 text-[13px] font-bold text-white shadow-[0_8px_22px_rgba(15,15,15,0.2)] data-[hovered=true]:brightness-105"
+                className="absolute bottom-[22px] right-[34px] z-[6] rounded-full bg-accent px-[26px] py-[11px] text-[15px] font-bold text-white transition-[filter] duration-150 data-[hovered=true]:brightness-105"
                 onPress={onClose}
               >
                 完成

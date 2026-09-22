@@ -5,14 +5,12 @@ import React from "react";
 import { TYPE_META, type PostDTO } from "@tassello/shared";
 import { useLongPressReorder } from "./dnd";
 import { AudioBar, fmtTime } from "./bits";
-import { Button } from "@heroui/react";
-import { X } from "reicon-react";
+import { Button, ToggleButton, ToggleButtonGroup } from "@heroui/react";
 import { PreviewColumn } from "./phone";
 import {
-  IcArrowLeft, IcCaret, IcChevron, IcFormatBold, IcFormatDivider, IcFormatHeading,
-  IcFormatImage, IcFormatItalic, IcFormatLink, IcFormatListOl, IcFormatListUl, IcFormatQuote,
-  IcFormatRedo, IcFormatStrike, IcFormatUnderline, IcFormatUndo, IcPlus, IcSend,
-} from "./icons";
+  Add, ArrowLeft, Bold, ChevronDown, ChevronUp, Hashtag, Image, Italic, Link, List, Minus,
+  OrderedList, QuoteDown, Redo, Send, Underline, UnderlineX, Undo, X,
+} from "reicon-react";
 
 export const ASSET_IMG_RE = /^!\[([^\]]*)\]\(asset:\/\/([^)]+)\)$/;
 
@@ -756,53 +754,75 @@ function EditToolbar({ onCommand, onImage }: { onCommand: (kind: string) => void
     document.addEventListener("mousedown", away);
     return () => document.removeEventListener("mousedown", away);
   }, [menu]);
-  const items: ({ k: string; ic: React.ReactNode; caret?: boolean; on?: boolean; title: string; run: () => void } | { sep: true })[] = [
-    { k: "heading", ic: <IcFormatHeading />, caret: true, on: on.h1 || on.h2 || on.h3, title: "标题 1 / 2 / 3", run: () => setMenu((v) => !v) },
-    { k: "bold", ic: <IcFormatBold />, title: "加粗", run: () => onCommand("bold") },
-    { k: "italic", ic: <IcFormatItalic />, title: "斜体", run: () => onCommand("italic") },
-    { k: "underline", ic: <IcFormatUnderline />, title: "下划线", run: () => onCommand("underline") },
-    { k: "strike", ic: <IcFormatStrike />, title: "删除线", run: () => onCommand("strikeThrough") },
-    { k: "quote", ic: <IcFormatQuote />, title: "引用（再点一次回正文）", run: () => onCommand("blockquote") },
-    { sep: true },
-    { k: "ul", ic: <IcFormatListUl />, title: "无序列表", run: () => onCommand("ul") },
-    { k: "ol", ic: <IcFormatListOl />, title: "有序列表", run: () => onCommand("ol") },
-    { k: "hr", ic: <IcFormatDivider />, title: "插入分隔线", run: () => onCommand("hr") },
-    { sep: true },
-    { k: "link", ic: <IcFormatLink />, title: "插入链接", run: () => onCommand("link") },
-    { k: "img", ic: <IcFormatImage />, title: "在光标处插入配图（也可直接粘贴图片）", run: onImage },
-    { sep: true },
-    { k: "undo", ic: <IcFormatUndo />, title: "撤销", run: () => onCommand("undo") },
-    { k: "redo", ic: <IcFormatRedo />, title: "重做", run: () => onCommand("redo") },
+  /* 工具栏：HeroUI ToggleButtonGroup（受控多选）；命令键（undo/redo/hr/link/img）不落选中，
+     heading 只负责开关标题菜单；选中态最终由 selectionchange 回流的 on 驱动 */
+  const selectedKeys = React.useMemo(() => {
+    const keys = new Set<string>();
+    for (const k of ["bold", "italic", "underline", "strike", "quote", "ul", "ol"] as const) {
+      if (on[k]) keys.add(k);
+    }
+    if (on.h1 || on.h2 || on.h3) keys.add("heading");
+    return keys;
+  }, [on]);
+
+  const TOGGLE_KEYS = ["bold", "italic", "underline", "strike", "quote", "ul", "ol"];
+  const handleSelectionChange = (keys: Set<unknown> | "all") => {
+    if (keys === "all") return;
+    const next = new Set(keys);
+    const diff = [...next].filter((k) => !selectedKeys.has(String(k)))
+      .concat([...selectedKeys].filter((k) => !next.has(k)));
+    const key = String(diff[0] ?? "");
+    if (!key) return;
+    if (key === "heading") { setMenu((v) => !v); return; }
+    if (key === "img") { onImage(); return; }
+    onCommand(key);
+    /* execCommand 不一定触发 selectionchange：切换键先乐观翻转，随后由 selectionchange 校准 */
+    if (TOGGLE_KEYS.includes(key)) setOn((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const items: { id: string; ic: React.ReactNode; title: string }[] = [
+    { id: "heading", ic: <span className="text-[15px] font-black leading-none">H</span>, title: "标题 1 / 2 / 3" },
+    { id: "bold", ic: <Bold size={16} strokeWidth={3.3} />, title: "加粗" },
+    { id: "italic", ic: <Italic size={16} strokeWidth={3.3} />, title: "斜体" },
+    { id: "underline", ic: <Underline size={16} strokeWidth={3.3} />, title: "下划线" },
+    { id: "strike", ic: <UnderlineX size={16} strokeWidth={3.3} />, title: "删除线" },
+    { id: "quote", ic: <QuoteDown size={16} strokeWidth={3.3} />, title: "引用（再点一次回正文）" },
+    { id: "ul", ic: <List size={16} strokeWidth={3.3} />, title: "无序列表" },
+    { id: "ol", ic: <OrderedList size={16} strokeWidth={3.3} />, title: "有序列表" },
+    { id: "hr", ic: <Minus size={16} strokeWidth={3.3} />, title: "插入分隔线" },
+    { id: "link", ic: <Link size={16} strokeWidth={3.3} />, title: "插入链接" },
+    { id: "img", ic: <Image size={16} strokeWidth={3.3} />, title: "在光标处插入配图（也可直接粘贴图片）" },
+    { id: "undo", ic: <Undo size={16} strokeWidth={3.3} />, title: "撤销" },
+    { id: "redo", ic: <Redo size={16} strokeWidth={3.3} />, title: "重做" },
   ];
+  const sepsAfter = new Set(["quote", "ol", "img"]);
+
   return (
-    <div className="relative mb-3.5 flex w-full items-center justify-between gap-0.5 rounded-[12px] border border-line bg-card px-2 py-[5px]" role="toolbar" aria-label="编辑工具栏" ref={barRef}>
-      {items.map((it, i) => ("sep" in it && it.sep ? (
-        <span key={`sep${i}`} className="h-5 w-[1.5px] flex-none rounded-sm bg-line" aria-hidden="true" />
-      ) : (
-        (() => {
-          const item = it as { k: string; ic: React.ReactNode; caret?: boolean; on?: boolean; title: string; run: () => void };
-          return (
-            <button
-              key={item.k}
-              type="button"
-              className={
-                "inline-flex h-8 items-center justify-center gap-px rounded-[10px] text-ink transition-colors hover:bg-hover " +
-                (item.caret ? "w-[46px] " : "w-9 ") +
-                ((item.on != null ? item.on : on[item.k]) ? "bg-selected text-ink" : "")
-              }
-              title={item.title}
+    <div className="relative mb-3.5 flex w-full items-center rounded-[12px] border border-line bg-card px-2 py-[5px]" role="toolbar" aria-label="编辑工具栏" ref={barRef}>
+      <ToggleButtonGroup
+        selectionMode="multiple"
+        selectedKeys={selectedKeys}
+        onSelectionChange={handleSelectionChange}
+        aria-label="格式"
+        className="flex w-full items-center justify-between gap-0.5"
+      >
+        {items.map((item) => (
+          <React.Fragment key={item.id}>
+            <ToggleButton
+              id={item.id}
+              variant="ghost"
+              isIconOnly
               aria-label={item.title}
-              aria-expanded={item.caret ? menu : undefined}
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={(e) => { e.preventDefault(); item.run(); }}
+              aria-expanded={menu}
+              className="m-0 inline-flex h-8 w-9 items-center justify-center rounded-[10px] p-0 text-ink transition-colors [--toggle-button-bg:transparent] [--toggle-button-bg-hover:var(--color-hover)] [--toggle-button-bg-pressed:var(--color-hover)] [--toggle-button-bg-selected:var(--color-selected)] [--toggle-button-bg-selected-hover:var(--color-selected)] [--toggle-button-bg-selected-pressed:var(--color-selected)] data-[selected=true]:bg-selected data-[selected=true]:text-ink"
             >
               {item.ic}
-              {item.caret && <IcCaret size={9} />}
-            </button>
-          );
-        })()
-      )))}
-      {menu && (
+            </ToggleButton>
+            {sepsAfter.has(item.id) && <ToggleButtonGroup.Separator className="h-5 w-[1.5px] flex-none rounded-sm bg-line" />}
+          </React.Fragment>
+        ))}
+      </ToggleButtonGroup>
+            {menu && (
         <div className="absolute left-0 top-[calc(100%+6px)] z-20 flex min-w-[132px] flex-col gap-0.5 rounded-xl border border-line bg-card p-1.5 shadow-[0_10px_30px_rgba(15,15,15,0.12)] animate-pop" role="menu">
           {[
             { k: "h1", label: "标题 1" },
@@ -832,13 +852,14 @@ const IMG_W = 72;
 const IMG_GAP = 8;
 
 function ImageAssets({
-  images, color, onUploadFiles, onMove, onDelete,
+  images, color, onUploadFiles, onMove, onDelete, onClear,
 }: {
   images: { id: string; path?: string; color?: string | null }[];
   color: string;
   onUploadFiles: (files: File[]) => Promise<void>;
   onMove: (from: number, to: number) => void;
   onDelete: (id: string) => void;
+  onClear: () => void;
 }) {
   const list = images || [];
   const [expanded, setExpanded] = React.useState(false);
@@ -887,6 +908,18 @@ function ImageAssets({
         <span className="text-[13px] font-black">图片素材</span>
         <span className="font-mono text-[11px] text-ink2">{list.length} 张 · 长按拖拽换顺序</span>
         {busy && <span className="font-mono text-[11px] text-ink2">上传中…</span>}
+        {/* 清空：钉在素材头部最右；最少保留一张，所以只有一张时灰着 */}
+        <span className="ml-auto" title={list.length <= 1 ? "至少保留一张" : "清空全部图片（保留第一张）"}>
+          <Button
+            variant="ghost"
+            className="h-auto min-w-0 rounded-full px-3 py-1 text-xs font-bold text-ink2 data-[disabled=true]:opacity-40 data-[hovered=true]:bg-hover data-[hovered=true]:text-ink"
+            isDisabled={list.length <= 1}
+            onPress={onClear}
+            aria-label="清空图片素材"
+          >
+            清空
+          </Button>
+        </span>
       </div>
       <div className="flex items-center gap-2.5">
         {/* 拖拽进行中放开裁剪：被拖的格子要能甩出素材条外，否则拖到边缘就被「吃掉」。
@@ -916,14 +949,14 @@ function ImageAssets({
             onPress={() => inputRef.current?.click()}
             aria-label="上传图片素材"
           >
-            <IcPlus size={16} />
+            <Add size={16} strokeWidth={3.3} />
           </Button>
           {view.map((im) => (
             <div
               key={im.id}
               ref={(el) => dnd.register(im.id, el)}
               className={
-                "group relative flex h-[72px] w-[72px] flex-none flex-col items-end justify-end gap-[3px] overflow-hidden rounded-[10px] p-1.5 cursor-grab transition-[transform,box-shadow] hover:-translate-y-0.5" +
+                "group relative flex h-[72px] w-[72px] flex-none flex-col items-end justify-end gap-[3px] overflow-hidden rounded-[10px] p-1.5 cursor-grab transition-[box-shadow]" +
                 (dnd.pressing === im.id ? " scale-[.97]" : "") +
                 (dnd.dragId === im.id ? " z-[5] cursor-grabbing shadow-[0_10px_24px_rgba(15,15,15,0.2)] [transition:none] [touch-action:none]" : "")
               }
@@ -963,7 +996,7 @@ function ImageAssets({
             aria-label={expanded ? "收起素材" : "展开全部素材"}
             aria-expanded={expanded}
           >
-            <IcChevron size={14} dir={expanded ? "up" : "down"} />
+            expanded ? <ChevronUp size={14} strokeWidth={3.3} /> : <ChevronDown size={14} strokeWidth={3.3} />
           </Button>
         )}
       </div>
@@ -971,16 +1004,17 @@ function ImageAssets({
   );
 }
 
-/** 视频/音频素材区：空态整块可点上传；上传后 hover 右上角替换；预览用真实媒体文件 */
+/** 视频/音频素材区：对齐原型 —— 空态是铺满写作列的上传槽（视频 16:9 大框、音频一行细条），
+ *  有文件后视频铺成深色封面（真实可播），音频是整条播放条 + 行内删除；头部「清空」随时移除文件 */
 function MediaAssetSection({
-  kind, post, color, onUploadMedia,
+  kind, post, color, onUploadMedia, onRemoveMedia,
 }: {
   kind: "video" | "audio";
   post: PostDTO;
   color: string;
   onUploadMedia: (kind: "video" | "audio", file: File) => Promise<void>;
+  onRemoveMedia: (mediaId: string) => void;
 }) {
-  const t = kind === "video" ? { zh: "视频素材", empty: "还没有视频" } : { zh: "音频素材", empty: "还没有音频" };
   const inputRef = React.useRef<HTMLInputElement | null>(null);
   const [busy, setBusy] = React.useState(false);
   const media = post.assets.find((a) => a.kind === kind && a.path);
@@ -1005,66 +1039,78 @@ function MediaAssetSection({
       />
       <div className="mb-2.5 flex items-center gap-[9px]">
         <span className="h-[13px] w-[13px] rounded" style={{ background: color }} />
-        <span className="text-[13px] font-black">{t.zh}</span>
-        <span className="font-mono text-[11px] text-ink2">{fmtTime(post.durationSec ?? 0)}</span>
+        <span className="text-[13px] font-black">{kind === "video" ? "视频素材" : "音频素材"}</span>
+        <span className="font-mono text-[11px] text-ink2">{media ? fmtTime(post.durationSec ?? 0) : "未上传"}</span>
         {busy && <span className="font-mono text-[11px] text-ink2">上传中…</span>}
+        {media && (
+          <span className="ml-auto" title={kind === "video" ? "移除这个视频" : "移除这条音频"}>
+            <Button
+              variant="ghost"
+              className="h-auto min-w-0 rounded-full px-3 py-1 text-xs font-bold text-ink2 data-[hovered=true]:bg-hover data-[hovered=true]:text-ink"
+              onPress={() => onRemoveMedia(media.id)}
+              aria-label={`清空${kind === "video" ? "视频" : "音频"}素材`}
+            >
+              清空
+            </Button>
+          </span>
+        )}
       </div>
       {kind === "video" ? (
         media ? (
-          <div className="group relative w-[196px]">
+          /* 深色封面铺满写作列：真实视频直接播，右上角悬浮一枚删除（原型 m-mediabox + w-tileacts） */
+          <div className="group relative w-full max-w-[560px]">
             <video
               src={`/api/assets/${media.id}/raw`}
               controls
+              controlsList="nodownload"
+              playsInline
               preload="metadata"
-              className="block aspect-video w-[196px] rounded-xl bg-[#4A4740]"
+              className="block aspect-video w-full rounded-xl bg-ink"
             />
-            <div className="absolute right-1.5 top-1.5 z-[5] flex gap-1.5 opacity-0 transition-opacity group-hover:opacity-100">
+            <div className="absolute right-[9px] top-[9px] z-[5] opacity-0 transition-opacity duration-150 group-focus-within:opacity-100 group-hover:opacity-100">
               <Button
+                isIconOnly
                 variant="ghost"
-                isDisabled={busy}
-                className="m-0 h-7 min-w-0 rounded-full border border-line bg-card px-2.5 py-0 font-mono text-[10.5px] font-bold text-ink shadow-[0_1px_4px_rgba(15,15,15,0.18)] data-[hovered=true]:bg-hover"
-                onPress={() => inputRef.current?.click()}
-                aria-label="替换视频"
+                className="media-x h-[30px] w-[30px] min-w-0 rounded-[9px] border border-line bg-card text-ink2 shadow-[0_1px_4px_rgba(15,15,15,0.12)] data-[hovered=true]:text-ink"
+                onPress={() => onRemoveMedia(media.id)}
+                aria-label="删除视频素材"
               >
-                替换
+                <X size={11} strokeWidth={4} />
               </Button>
             </div>
           </div>
         ) : (
           <button
             type="button"
-            className="flex aspect-video w-[196px] flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-ink3 text-ink3 transition-colors hover:border-ink2 hover:text-ink2"
+            className="flex aspect-video w-full max-w-[560px] flex-col items-center justify-center gap-1.5 rounded-xl border-[1.5px] border-dashed border-ink3 bg-card text-[13.5px] font-bold text-ink2 transition-colors hover:border-ink hover:text-ink"
             onClick={() => inputRef.current?.click()}
             aria-label="上传视频"
           >
-            <IcPlus size={18} />
-            <span className="font-mono text-[10.5px]">{t.empty}</span>
+            <Add size={16} strokeWidth={3.3} /> 上传视频
           </button>
         )
       ) : media ? (
-        <div className="group relative max-w-[440px]">
-          <AudioBar src={`/api/assets/${media.id}/raw`} durationSec={post.durationSec} />
-          <div className="absolute right-1.5 top-1.5 z-[5] flex gap-1.5 opacity-0 transition-opacity group-hover:opacity-100">
-            <Button
-              variant="ghost"
-              isDisabled={busy}
-              className="m-0 h-7 min-w-0 rounded-full border border-line bg-card px-2.5 py-0 font-mono text-[10.5px] font-bold text-ink shadow-[0_1px_4px_rgba(15,15,15,0.18)] data-[hovered=true]:bg-hover"
-              onPress={() => inputRef.current?.click()}
-              aria-label="替换音频"
-            >
-              替换
-            </Button>
-          </div>
+        /* 音频：整条播放条 + 行内删除（原型 m-audiowrap，删除钮常驻不悬浮） */
+        <div className="flex w-full max-w-[560px] items-center gap-2.5">
+          <AudioBar src={`/api/assets/${media.id}/raw`} durationSec={post.durationSec} color={color} className="min-w-0 flex-1" />
+          <Button
+            isIconOnly
+            variant="ghost"
+            className="media-x h-[30px] w-[30px] min-w-0 flex-none rounded-[9px] border border-line bg-card text-ink2 data-[hovered=true]:text-ink"
+            onPress={() => onRemoveMedia(media.id)}
+            aria-label="删除音频素材"
+          >
+            <X size={11} strokeWidth={4} />
+          </Button>
         </div>
       ) : (
         <button
           type="button"
-          className="flex aspect-video w-[196px] flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-ink3 text-ink3 transition-colors hover:border-ink2 hover:text-ink2"
+          className="flex w-full max-w-[560px] items-center gap-2.5 rounded-xl border-[1.5px] border-dashed border-ink3 bg-card px-4 py-[14px] text-[13.5px] font-bold text-ink2 transition-colors hover:border-ink hover:text-ink"
           onClick={() => inputRef.current?.click()}
           aria-label="上传音频"
         >
-          <IcPlus size={18} />
-          <span className="font-mono text-[10.5px]">{t.empty}</span>
+          <Add size={16} strokeWidth={3.3} /> 上传音频
         </button>
       )}
     </div>
@@ -1072,12 +1118,14 @@ function MediaAssetSection({
 }
 
 function AssetSection({
-  post, color, onMoveImage, onRemoveImage, onUploadMedia,
+  post, color, onMoveImage, onRemoveImage, onClearImages, onRemoveMedia, onUploadMedia,
 }: {
   post: PostDTO;
   color: string;
   onMoveImage: (from: number, to: number) => void;
   onRemoveImage: (id: string) => void;
+  onClearImages: () => void;
+  onRemoveMedia: (mediaId: string) => void;
   onUploadMedia: (kind: "video" | "audio" | "image", file: File) => Promise<void>;
 }) {
   if (post.type === "article") return null;
@@ -1091,6 +1139,7 @@ function AssetSection({
         }}
         onMove={onMoveImage}
         onDelete={onRemoveImage}
+        onClear={onClearImages}
       />
     );
   }
@@ -1101,6 +1150,7 @@ function AssetSection({
         post={post}
         color={color}
         onUploadMedia={onUploadMedia}
+        onRemoveMedia={onRemoveMedia}
       />
     );
   }
@@ -1109,11 +1159,10 @@ function AssetSection({
 
 /* ---------- EditorView ---------- */
 export function EditorView({
-  post, saveState, savedAt, onChangeField, onUploadImage, onRemoveAsset, onMoveImage, onUploadMedia, onBack, onPublish, onSave,
+  post, saveState, onChangeField, onUploadImage, onRemoveAsset, onMoveImage, onUploadMedia, onBack, onPublish, onSave,
 }: {
   post: PostDTO;
   saveState: "saved" | "dirty" | "saving";
-  savedAt: string;
   onChangeField: (k: "title" | "body" | "bodyHtml", v: string) => void;
   /** 上传图片并返回新素材（正文插图/粘贴：真实文件） */
   onUploadImage: (file: File) => Promise<{ id: string; color: string; path?: string | null } | null>;
@@ -1164,6 +1213,25 @@ export function EditorView({
     else richRef.current?.run(kind);
   };
 
+  /* 两栏各自可滚：底部渐隐提示「下面还有」，滚到底自动收掉 */
+  const writeRef = React.useRef<HTMLDivElement | null>(null);
+  const phoneRef = React.useRef<HTMLDivElement | null>(null);
+  const [more, setMore] = React.useState({ write: false, prev: false });
+  const syncMore = React.useCallback(() => {
+    const need = (el: HTMLElement | null) => !!el && el.scrollHeight - el.scrollTop - el.clientHeight > 4;
+    setMore((m) => {
+      const next = { write: need(writeRef.current), prev: need(phoneRef.current) };
+      return next.write === m.write && next.prev === m.prev ? m : next;
+    });
+  }, []);
+  React.useEffect(() => {
+    syncMore();
+    const raf = requestAnimationFrame(syncMore);
+    const t = window.setTimeout(syncMore, 260);
+    window.addEventListener("resize", syncMore);
+    return () => { cancelAnimationFrame(raf); window.clearTimeout(t); window.removeEventListener("resize", syncMore); };
+  }, [post.id, post.title, post.body, post.bodyHtml, post.durationSec, post.assets.length, syncMore]);
+
   return (
     <div
       className="relative flex h-full flex-col"
@@ -1189,39 +1257,50 @@ export function EditorView({
       }}
     >
       <div className="flex h-[60px] flex-none items-center gap-3.5 bg-card px-7">
-        <Button variant="ghost" className="flex items-center gap-[7px] rounded-full border border-ink3 bg-card px-4 py-2 text-sm font-bold text-ink data-[hovered=true]:bg-hover" onPress={onBack}><IcArrowLeft size={14} /> 返回</Button>
-        <span className="inline-flex items-center gap-2 rounded-full px-3.5 py-2 text-[13px] font-extrabold text-white" style={{ background: t.color }}>
-          <span style={{ width: 10, height: 10, borderRadius: 3, background: "#fff", display: "inline-block" }} />
-          {t.zh} · {t.en}
-        </span>
-        <span className={"flex items-center gap-2 font-mono text-xs text-ink2 " + saveState}>
-          <span className={"h-[9px] w-[9px] rounded-[3px] " + (saveState === "saved" ? "bg-green" : saveState === "dirty" ? "bg-orange" : "bg-blue animate-pulse-soft")} />
-          {saveState === "saved" && `已保存 ${savedAt}`}
-          {saveState === "dirty" && "有未保存改动"}
-          {saveState === "saving" && "保存中…"}
-        </span>
+        <Button variant="ghost" className="flex items-center gap-[7px] rounded-full border border-ink3 bg-card px-4 py-2 text-sm font-bold text-ink data-[hovered=true]:bg-hover" onPress={onBack}><ArrowLeft size={14} strokeWidth={3.3} /> 返回</Button>
+        {/* 一枚按钮表达保存状态：未保存时点亮成主色，其余时候灰着 */}
         <Button
           variant="ghost"
-          className="rounded-full border border-ink3 bg-card px-4 py-1.5 text-[13px] font-bold text-ink data-[hovered=true]:bg-hover"
+          className={
+            "rounded-full px-[18px] py-2 text-sm font-bold transition-[filter] " +
+            (saveState === "dirty"
+              ? "border border-accent bg-accent text-white data-[hovered=true]:brightness-105"
+              : "border border-ink3 bg-card text-ink2")
+          }
           isDisabled={saveState !== "dirty"}
           onPress={onSave}
           aria-label="保存（⌘S）"
         >
-          保存
+          {saveState === "saved" && "已保存"}
+          {saveState === "dirty" && "保存"}
+          {saveState === "saving" && "保存中…"}
         </Button>
         <span className="font-mono text-xs text-ink2">{wordCount} 字</span>
-        <Button className="ml-auto flex items-center gap-2 rounded-full bg-green px-[26px] py-[11px] text-[15px] font-black tracking-[1px] text-white data-[hovered=true]:-translate-y-0.5 data-[hovered=true]:bg-[#069e62]" onPress={onPublish}><IcSend size={15} /> 发布</Button>
+        <Button className="ml-auto flex items-center gap-2 rounded-full bg-green px-[26px] py-[11px] text-[15px] font-black tracking-[1px] text-white transition-[translate,background-color] duration-150 data-[hovered=true]:-translate-y-0.5 data-[hovered=true]:bg-[#069e62]" onPress={onPublish}><Send size={15} strokeWidth={2.9} /> 发布</Button>
       </div>
       <div className="grid min-h-0 flex-1 grid-cols-[1fr_460px]">
         <div className="relative flex min-h-0 overflow-hidden">
-          <div className="scroll-thin min-h-0 flex-1 overflow-auto border-r border-line px-10 py-[34px]">
+          <div className="scroll-thin min-h-0 flex-1 overflow-auto border-r border-line px-10 py-[34px]" ref={writeRef} onScroll={syncMore}>
             <AssetSection
               post={post}
               color={t.color}
               onMoveImage={onMoveImage}
-              onRemoveImage={(id) => { richRef.current?.removeFig(id); onRemoveAsset(id); }}
+              /* 素材区单删：图片类至少保留一张（正文里的删除不受限） */
+              onRemoveImage={(id) => {
+                if (post.type === "image" && post.assets.length <= 1) return;
+                richRef.current?.removeFig(id);
+                onRemoveAsset(id);
+              }}
+              /* 清空图片素材：保留第一张，清掉的图在正文里的引用一并移除 */
+              onClearImages={() => {
+                post.assets.slice(1).forEach((a) => {
+                  richRef.current?.removeFig(a.id);
+                  onRemoveAsset(a.id);
+                });
+              }}
+              onRemoveMedia={onRemoveAsset}
               onUploadMedia={onUploadMedia}
-                  />
+            />
             <EditToolbar onCommand={runCommand} onImage={insertImage} />
             <input
               className="w-full border-b-2 border-transparent bg-transparent pb-3 pt-1 text-[28px] font-bold leading-[1.35] tracking-[-0.4px] text-ink outline-none transition-colors placeholder:text-ink3 focus:border-accent"
@@ -1244,9 +1323,12 @@ export function EditorView({
                 : "开始写正文。用 #标签 标记话题，右侧的预览会实时更新。"}
             />
           </div>
-          <span className="pointer-events-none absolute inset-x-0 bottom-0 z-[4] h-[72px] bg-gradient-to-b from-transparent to-paper opacity-0" aria-hidden="true" />
+          <span
+            className={"pointer-events-none absolute inset-x-0 bottom-0 z-[4] h-[72px] bg-gradient-to-b from-transparent to-paper transition-opacity duration-[280ms] " + (more.write ? "opacity-100" : "opacity-0")}
+            aria-hidden="true"
+          />
         </div>
-        <PreviewColumn post={post} />
+        <PreviewColumn post={post} paneRef={phoneRef} onScroll={syncMore} more={more.prev} />
       </div>
       {(dropping || uploading) && (
         <div className="pointer-events-none absolute inset-0 z-[60] flex items-center justify-center bg-[rgba(35,131,226,0.08)]" aria-live="polite">

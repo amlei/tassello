@@ -3,7 +3,7 @@
 
 import React from "react";
 import { Button } from "@heroui/react";
-import { IcPause, IcPlay } from "./icons";
+import { Pause, Play } from "reicon-react";
 
 export function MosaicLogo({ size = 11 }: { size?: number }) {
   const cells = ["#2FD9A0", "#17C8E0", "#2E7CF6", "#A55EF5", "w", "#2058EE", "#E8369F", "#F7A21B", "#30C974"];
@@ -37,8 +37,16 @@ export function fmtDate(iso: string): string {
   return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
-/** 音频播放器：接真实 <audio> 文件（src 必传），进度/时长/播放态全部来自真实数据 */
-export function AudioBar({ src, durationSec }: { src: string; durationSec?: number | null }) {
+/** 音频播放器：接真实 <audio> 文件（src 必传），进度/时长/播放态全部来自真实数据。
+ *  视觉对齐原型 .m-audiobar：深炭底、青色圆钮（色随内容类型）、进度线同色填充 */
+export function AudioBar({
+  src, durationSec, color = "#0EC3D4", className = "",
+}: {
+  src: string;
+  durationSec?: number | null;
+  color?: string;
+  className?: string;
+}) {
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
   const [playing, setPlaying] = React.useState(false);
   const [cur, setCur] = React.useState(0);
@@ -53,7 +61,7 @@ export function AudioBar({ src, durationSec }: { src: string; durationSec?: numb
     }
   };
   return (
-    <div className="flex max-w-[440px] items-center gap-3 rounded-xl bg-[#4A4740] px-3.5 py-2.5">
+    <div className={"flex items-center gap-3 rounded-xl bg-[#4A4740] px-3.5 py-[11px] " + className}>
       <audio
         ref={audioRef}
         src={src}
@@ -70,12 +78,13 @@ export function AudioBar({ src, durationSec }: { src: string; durationSec?: numb
       <Button
         isIconOnly
         aria-label={playing ? "暂停" : "播放"}
-        className="h-[34px] w-[34px] min-w-0 flex-none rounded-full transition-transform data-[hovered=true]:scale-[1.08]"
+        className="h-[34px] w-[34px] min-w-0 flex-none rounded-full text-[#17323A] transition-transform data-[hovered=true]:scale-[1.08]"
+        style={{ background: color }}
         onPress={toggle}
       >
-        {playing ? <IcPause size={16} /> : <IcPlay size={16} />}
+        {playing ? <Pause size={16} strokeWidth={3} /> : <Play size={16} strokeWidth={3} />}
       </Button>
-      <div className="flex-1">
+      <div className="min-w-0 flex-1">
         <div className="mb-1.5 flex justify-between font-mono text-[10px] text-white/60">
           <span>{fmtTime(cur)}</span>
           <span>{fmtTime(total)}</span>
@@ -94,7 +103,7 @@ export function AudioBar({ src, durationSec }: { src: string; durationSec?: numb
           aria-valuemax={total}
           aria-valuenow={Math.floor(cur)}
         >
-          <i className="absolute inset-y-0 left-0 block rounded-[3px]" style={{ width: `${total ? Math.min(100, (cur / total) * 100) : 0}%` }} />
+          <i className="absolute inset-y-0 left-0 block rounded-[3px]" style={{ width: `${total ? Math.min(100, (cur / total) * 100) : 0}%`, background: color }} />
         </div>
       </div>
     </div>
@@ -113,7 +122,7 @@ export function FloatingPill({
   if (!running) return null;
   return (
     <Button
-      className="fixed bottom-[26px] left-1/2 z-50 -translate-x-1/2 gap-3.5 rounded-full bg-ink px-[22px] py-[13px] text-sm font-bold text-paper shadow-[0_10px_30px_rgba(15,15,15,0.28)] data-[hovered=true]:bg-black"
+      className="pill fixed left-1/2 top-[26px] z-50 -translate-x-1/2 animate-rise gap-3.5 rounded-full bg-ink px-[22px] py-[13px] text-sm font-bold text-paper shadow-[0_10px_30px_rgba(15,15,15,0.28)] data-[hovered=true]:bg-black"
       onPress={onClick}
     >
       <span className="flex gap-1">
@@ -122,7 +131,7 @@ export function FloatingPill({
         <i className="block h-2.5 w-2.5 rounded-[3px] animate-pulse-live [animation-delay:.36s]" style={{ background: "#FD8D11" }} />
       </span>
       正在发布 {running} 个任务
-      <span className="font-mono text-xs text-[#9AF0C9]">{avg}% · 查看队列</span>
+      <span className="pill-mono font-mono text-xs text-[#9AF0C9]">{avg}% · 查看队列</span>
     </Button>
   );
 }
