@@ -122,13 +122,23 @@ function App() {
   const togglePlatform = (id) => {
     setPlatforms((ps) => ps.map((p) => (p.id === id && p.state === "ok" ? { ...p, selected: !p.selected } : p)));
   };
-  /* 获取失败 → 重新获取：模拟重新授权，拿到凭据后即可加入本次发布 */
+  /* 获取失败 → 重新获取：模拟重新授权，拿到凭据后即可加入本次发布。
+     失败平台在种子数据里没有账号对象，凭据卡要渲染账号名/有效期，
+     重新获取时必须补一枚模拟账号，否则卡一开就崩 */
+  const grantAccount = (p) => p.account ? p : {
+    ...p,
+    account: {
+      name: "九漾 Onda", uid: p.name + " ID onda-" + p.id,
+      until: "2027-09-30", checked: "刚刚",
+      lands: p.lands || "直接发布",
+    },
+  };
   const reacquirePlatform = (id) => {
-    setPlatforms((ps) => ps.map((p) => (p.id === id ? { ...p, state: "ok", selected: true } : p)));
+    setPlatforms((ps) => ps.map((p) => (p.id === id ? { ...grantAccount(p), state: "ok", selected: true } : p)));
   };
   /* 设置里的「重新获取」：只补凭据，不改变任何类型的默认名单 */
   const reacquireAccount = (id) => {
-    setPlatforms((ps) => ps.map((p) => (p.id === id ? { ...p, state: "ok" } : p)));
+    setPlatforms((ps) => ps.map((p) => (p.id === id ? { ...grantAccount(p), state: "ok" } : p)));
   };
   const toggleDefault = (type, id) => {
     setDefaults((d) => {
@@ -137,7 +147,7 @@ function App() {
     });
   };
   const acquireDefault = (type, id) => {
-    setPlatforms((ps) => ps.map((p) => (p.id === id ? { ...p, state: "ok" } : p)));
+    setPlatforms((ps) => ps.map((p) => (p.id === id ? { ...grantAccount(p), state: "ok" } : p)));
     setDefaults((d) => ((d[type] || []).indexOf(id) >= 0 ? d : { ...d, [type]: (d[type] || []).concat([id]) }));
   };
 

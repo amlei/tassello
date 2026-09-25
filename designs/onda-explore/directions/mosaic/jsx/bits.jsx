@@ -86,6 +86,11 @@ function wrapTags(escaped, color) {
     '<span class="m-tag" contenteditable="false" style="color:' + color + ";background:" + color + '1A">' + m + "</span>");
 }
 
+/* ==高亮== 包成 mark（荧光笔效果），随主题换底色 */
+function wrapHighlights(escaped) {
+  return escaped.replace(/==([^=\n]+)==/g, '<mark class="m-mark">$1</mark>');
+}
+
 /* 正文里的图块：在编辑器里是 figure（不可编辑），在预览里是同一份 HTML */
 function figHtml(id, alt, color) {
   return '<figure class="m-fig" contenteditable="false" data-asset="' + id + '" data-alt="' + escHtml(alt || "配图") +
@@ -99,7 +104,7 @@ function mdToHtml(body, color, assets) {
   let buf = [];
   const flush = () => {
     if (!buf.length) return;
-    out.push("<p>" + buf.map((l) => wrapTags(escHtml(l), color)).join("<br>") + "</p>");
+    out.push("<p>" + buf.map((l) => wrapHighlights(wrapTags(escHtml(l), color))).join("<br>") + "</p>");
     buf = [];
   };
   (body || "").split("\n").forEach((line) => {
@@ -163,11 +168,12 @@ function highlightTags(root, color) {
   });
 }
 
-/* 行内 Markdown：**加粗** / ~~删除线~~ / *斜体*，在克隆体上做，同样不动正在编辑的 DOM */
+/* 行内 Markdown：**加粗** / ~~删除线~~ / *斜体* / ==高亮==，在克隆体上做，同样不动正在编辑的 DOM */
 function markdownifyInline(root) {
   const rules = [
     { re: /\*\*([^*\n]+)\*\*/g, tag: "b" },
     { re: /~~([^~\n]+)~~/g, tag: "s" },
+    { re: /==([^=\n]+)==/g, tag: "mark", cls: "m-mark" },
     { re: /\*([^*\n]+)\*/g, tag: "i" },
   ];
   rules.forEach((rule) => {
@@ -176,7 +182,7 @@ function markdownifyInline(root) {
     while (walker.nextNode()) {
       const n = walker.currentNode;
       const host = n.parentNode;
-      if (!host || (host.closest && host.closest("b, i, s, a, code, .m-tag, .m-fig"))) continue;
+      if (!host || (host.closest && host.closest("b, i, s, a, code, mark, .m-tag, .m-fig"))) continue;
       if (rule.re.test(n.nodeValue)) { rule.re.lastIndex = 0; hits.push(n); }
       rule.re.lastIndex = 0;
     }
@@ -186,6 +192,7 @@ function markdownifyInline(root) {
       n.nodeValue.replace(rule.re, (m, inner, offset) => {
         if (offset > last) frag.appendChild(document.createTextNode(n.nodeValue.slice(last, offset)));
         const el = document.createElement(rule.tag);
+        if (rule.cls) el.className = rule.cls;
         el.textContent = inner;
         frag.appendChild(el);
         last = offset + m.length;
@@ -197,9 +204,12 @@ function markdownifyInline(root) {
   });
 }
 
-/* 序列化：html 给预览与下次打开用，plain 给列表摘要、搜索与字数用 */
+/* 序列化：html 给预览与下次打开用，plain 给列表摘要、搜索与字数用。
+   clone 先 normalize：光标恢复等操作会把文本节点拆成相邻两截，
+   ==对/星星对 跨节点就匹配不到了 —— 合并后再跑行内规则 */
 function serializeBody(root, color) {
   const clone = root.cloneNode(true);
+  clone.normalize();
   highlightTags(clone, color);
   markdownifyInline(clone);
   return { html: clone.innerHTML, plain: htmlToPlain(root) };

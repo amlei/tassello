@@ -262,19 +262,13 @@
   word-break: break-word;
   overflow-wrap: break-word;
 }
-/* 占位文字浮在文字层之外：否则光标会被它挤到下一行，看着像错位 */
-.m-richbody:empty:before,
-.m-richbody.is-empty:before {
+/* 占位文字（Tiptap Placeholder）：挂在空文档首个段落上，float 出文字流之外不挤光标 */
+.m-richbody p.is-editor-empty:first-child::before {
   content: attr(data-placeholder);
-  position: absolute;
-  top: 0;
-  left: 0;
+  float: left;
+  height: 0;
   color: var(--color-ink3);
   pointer-events: none;
-}
-/* 输入法组字期间内容还没进 plain，is-empty 仍在 —— 占位符必须让位，否则压在组字串上 */
-.m-richbody.is-composing:before {
-  content: none;
 }
 .m-richbody p,
 .m-richbody > div {
@@ -311,8 +305,20 @@
   margin: 0 0 14px;
   padding-left: 24px;
 }
+/* Tailwind preflight 全局去掉了列表标记：正文里要恢复圆点 / 编号 */
+.m-richbody ul {
+  list-style: disc;
+}
+.m-richbody ol {
+  list-style: decimal;
+}
 .m-richbody li {
   margin-bottom: 4px;
+  display: list-item;
+}
+/* Tiptap 的列表项里包着一层 <p>：外层间距归 li，li 内的段落不再另加 margin */
+.m-richbody li > p {
+  margin: 0;
 }
 .m-richbody hr {
   border: none;
@@ -327,6 +333,17 @@
 /* 话题标签：行内色块，颜色由 JS 注入 style */
 .m-tag {
   border-radius: 4px;
+}
+/* ==高亮==：荧光笔效果，随主题换底色 */
+mark.m-mark {
+  background: #ffe9a6;
+  color: inherit;
+  border-radius: 3px;
+  padding: 0 2px;
+}
+[data-theme="dark"] mark.m-mark {
+  background: #4a4023;
+  color: #f3e5b8;
 }
 /* 正文里的配图：写的时候就是一张图，不是一个 markdown 记号 */
 .m-fig {
@@ -380,6 +397,15 @@
 .m-fig-del:hover {
   background: var(--color-ink);
 }
+/* Tiptap：配图块被选中（NodeSelection）时描一圈，看得见它是一整个原子 */
+.m-richbody .m-fig.ProseMirror-selectednode {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+/* Tiptap：块级原子节点旁的宽光标 */
+.m-richbody .ProseMirror-gapcursor::after {
+  border-top-color: var(--color-ink);
+}
 
 /* ---------- 手机预览：与编辑器同一份富文本，只换字号与间距 ---------- */
 .m-phone .m-richbody-phone p {
@@ -413,6 +439,18 @@
 .m-phone .m-richbody-phone ol {
   margin: 0 0 10px;
   padding-left: 20px;
+}
+.m-phone .m-richbody-phone ul {
+  list-style: disc;
+}
+.m-phone .m-richbody-phone ol {
+  list-style: decimal;
+}
+.m-phone .m-richbody-phone li {
+  display: list-item;
+}
+.m-phone .m-richbody-phone li > p {
+  margin: 0;
 }
 .m-phone .m-richbody-phone hr {
   border: none;

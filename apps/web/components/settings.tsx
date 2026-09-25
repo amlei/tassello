@@ -1,12 +1,13 @@
-/* settings —— 平台账号 + 默认发布名单（HeroUI Modal + Popover + 方向 B 视觉） */
+/* settings —— 浏览器选择 + 平台账号 + 默认发布名单（HeroUI Modal + Popover + 方向 B 视觉） */
 "use client";
 
 import React from "react";
-import { TYPE_META, TYPE_ORDER, type PlatformDTO, type ContentType, type AppSettings } from "@tassello/shared";
-import { Button, Modal, Popover } from "@heroui/react";
+import { TYPE_META, TYPE_ORDER, type PlatformDTO, type ContentType, type AppSettings, IMPORT_BROWSERS, type ImportBrowserDTO, type ImportBrowserId } from "@tassello/shared";
+import { AlertDialog, Button, Modal, Popover } from "@heroui/react";
 import { Alert, Check, Refresh, X } from "reicon-react";
-import { ChevronLeft, ChevronRight } from "reicon-react";
+import { ChevronDown, ChevronLeft, ChevronRight } from "reicon-react";
 import { PLATFORM_IMAGE_MARKS, PLATFORM_MARKS, PlatformMark } from "./platform-icons";
+import { ChromeIcon, EdgeIcon } from "./browser-icons";
 import { ThemeSwitcher } from "./theme";
 
 /* 账号行的平台标记：有品牌图标（SVG 或图片）用品牌图标，都没有则回退色块 */
@@ -168,21 +169,31 @@ function AccountPopBody({
 }
 
 export function SettingsSheet({
-  platforms, settings, busyId, onToggleDefault, onAcquireAndSetDefault, onVerify, onAcquire, onClose,
+  platforms, settings, browsers, busyId, onToggleDefault, onAcquireAndSetDefault, onVerify, onAcquire, onImportBrowser, onClose,
 }: {
   platforms: PlatformDTO[];
   settings: AppSettings;
+  /** 导入候选浏览器与检测状态（rail 打开设置时随平台/设置一并拉取） */
+  browsers: ImportBrowserDTO[];
   busyId: string | null;
   onToggleDefault: (type: ContentType, id: string) => void;
   onAcquireAndSetDefault: (type: ContentType, id: string) => void;
   onVerify: (id: string) => void;
   onAcquire: (id: string) => void;
+  onImportBrowser: (id: ImportBrowserId) => void;
   onClose: () => void;
 }) {
   const [popId, setPopId] = React.useState<string | null>(null);
+  /* 获取账号会先关闭工作台浏览器再复制登录态（pkill 不能静默发生）——
+     设置里的两个获取入口都先过这枚确认弹窗，确认后才真正执行 */
+  const [confirmAcquire, setConfirmAcquire] = React.useState<{ platformId: string; type?: ContentType } | null>(null);
+  const browserName = IMPORT_BROWSERS.find((b) => b.id === settings.importBrowser)?.name ?? "所选浏览器";
+  const SelIcon = settings.importBrowser === "edge" ? EdgeIcon : ChromeIcon;
+  const confirmPlatform = platforms.find((p) => p.id === confirmAcquire?.platformId);
 
   return (
-    <Modal>
+    <>
+      <Modal>
       <Modal.Backdrop isOpen onOpenChange={(o) => { if (!o) onClose(); }}>
         <Modal.Container>
           <Modal.Dialog
@@ -204,6 +215,36 @@ export function SettingsSheet({
                   </div>
                 </section>
                 <section className="mt-[30px] border-t border-line pt-[26px]">
+                  {/* 浏览器选择：获取账号时从哪个日常浏览器复制登录态。
+                      切换只落偏好不动数据；再次获取以当前选择整体覆盖（原型 w-selwrap/w-selhint） */}
+                  <div className="flex items-center justify-between gap-3.5">
+                    <h4 className="text-[15px] font-bold tracking-[-0.2px]">浏览器选择</h4>
+                    <span className="relative inline-flex items-center">
+                      <span className="pointer-events-none absolute left-3 flex">
+                        <SelIcon size={14} />
+                      </span>
+                      <select
+                        value={settings.importBrowser}
+                        onChange={(e) => onImportBrowser(e.target.value as ImportBrowserId)}
+                        aria-label="浏览器选择"
+                        className="cursor-pointer appearance-none rounded-full border border-line bg-card py-[6px] pl-[33px] pr-[30px] text-[12px] font-bold text-ink outline-none transition-[border-color] duration-150 hover:border-[#DEDCD8] focus-visible:border-accent"
+                      >
+                        {(browsers.length ? browsers : IMPORT_BROWSERS.map((b) => ({ ...b, detected: true }))).map((b) => (
+                          <option key={b.id} value={b.id} disabled={!b.detected}>
+                            {b.name}{b.detected ? "" : "（未安装）"}
+                          </option>
+                        ))}
+                      </select>
+                      <span className="pointer-events-none absolute right-3 flex text-ink2">
+                        <ChevronDown size={10} strokeWidth={2.4} />
+                      </span>
+                    </span>
+                  </div>
+                  <p className="mt-3 text-[11.5px] leading-[1.7] text-ink3">
+                    获取账号时从这个浏览器复制登录态；再次获取会整体覆盖，以当前选择的为准。
+                  </p>
+                </section>
+                <section className="mt-[30px] border-t border-line pt-[26px]">
                   <h4 className="mb-3.5 flex items-center gap-2.5 text-[15px] font-bold tracking-[-0.2px]">平台账号</h4>
                   <div className="grid grid-cols-[repeat(2,minmax(0,1fr))] gap-2.5">
                     {platforms.map((p, i) => (
@@ -213,9 +254,9 @@ export function SettingsSheet({
                         open={popId === p.id}
                         busy={busyId === p.id}
                         onOpenChange={setPopId}
-                        onVerify={onVerify}
-                        onAcquire={onAcquire}
-                        side={i % 2 === 0 ? "left" : "right"}
+                         onVerify={onVerify}
+                         onAcquire={(id) => setConfirmAcquire({ platformId: id })}
+                         side={i % 2 === 0 ? "left" : "right"}
                       />
                     ))}
                   </div>
@@ -253,7 +294,7 @@ export function SettingsSheet({
                                     }
                                     style={{ ...skin, transform: "none" }}
                                     data-off={off}
-                                    onPress={() => (off ? onAcquireAndSetDefault(k, p.id) : onToggleDefault(k, p.id))}
+                                    onPress={() => (off ? setConfirmAcquire({ platformId: p.id, type: k }) : onToggleDefault(k, p.id))}
                                     aria-label={p.name}
                                   >
                                     <PlatformMark id={p.id} char={p.char} size={20} imgScale={1.4} tone={off ? "off" : on ? "lit" : "dim"} className="m-0 h-5 w-5" />
@@ -293,5 +334,40 @@ export function SettingsSheet({
         </Modal.Container>
       </Modal.Backdrop>
     </Modal>
+
+    {/* 导入确认：与删稿确认同构（Esc / 点背景取消）；按钮走主色 —— 有打断、不毁数据 */}
+    <AlertDialog>
+      <AlertDialog.Backdrop isOpen={!!confirmAcquire} onOpenChange={(o) => { if (!o) setConfirmAcquire(null); }}>
+        <AlertDialog.Container>
+          <AlertDialog.Dialog className="max-w-[420px] rounded-[20px] bg-paper p-6 shadow-[0_14px_40px_rgba(15,15,15,0.14)]" role="alertdialog" aria-label="导入登录态确认">
+            <AlertDialog.Header className="flex items-start gap-3">
+              <AlertDialog.Heading className="text-[17px] font-bold tracking-[-0.2px]">从 {browserName} 导入登录态？</AlertDialog.Heading>
+            </AlertDialog.Header>
+            <AlertDialog.Body className="mt-1.5 text-sm leading-relaxed text-ink2">
+              工作台浏览器会先关闭一次，并以 {browserName} 的登录态整体覆盖后重新校验
+              {confirmPlatform ? `「${confirmPlatform.name}」` : ""}账号；日常浏览器不受影响。
+            </AlertDialog.Body>
+            <AlertDialog.Footer className="mt-5 flex items-center justify-end gap-3">
+              <Button variant="ghost" className="rounded-full px-4 py-2 text-[13.5px] font-bold text-ink2 data-[hovered=true]:bg-hover" onPress={() => setConfirmAcquire(null)}>
+                取消
+              </Button>
+              <Button
+                className="rounded-full bg-accent px-6 py-2.5 text-sm font-bold text-white data-[hovered=true]:brightness-105"
+                onPress={() => {
+                  const c = confirmAcquire;
+                  setConfirmAcquire(null);
+                  if (!c) return;
+                  if (c.type) onAcquireAndSetDefault(c.type, c.platformId);
+                  else onAcquire(c.platformId);
+                }}
+              >
+                导入并校验
+              </Button>
+            </AlertDialog.Footer>
+          </AlertDialog.Dialog>
+        </AlertDialog.Container>
+      </AlertDialog.Backdrop>
+    </AlertDialog>
+    </>
   );
 }

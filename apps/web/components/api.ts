@@ -4,6 +4,7 @@ import type {
   ApiResult,
   AppSettings,
   AssetDTO,
+  ImportBrowserDTO,
   PlatformDTO,
   PostDTO,
   TaskDTO,
@@ -80,6 +81,10 @@ export const api = {
   async getSettings(): Promise<AppSettings> {
     const res = await fetch("/api/settings", { cache: "no-store" });
     return unwrap<AppSettings>(res);
+  },
+  async listImportBrowsers(): Promise<ImportBrowserDTO[]> {
+    const res = await fetch("/api/import-browsers", { cache: "no-store" });
+    return unwrap<ImportBrowserDTO[]>(res);
   },
   async saveSettings(patch: Partial<AppSettings>): Promise<AppSettings> {
     const res = await fetch("/api/settings", {

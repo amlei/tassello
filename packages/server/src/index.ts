@@ -19,3 +19,4 @@ export * from "./settings";
 export * from "./posts";
 export * from "./accounts";
 export * from "./tasks";
+export * from "./profile";

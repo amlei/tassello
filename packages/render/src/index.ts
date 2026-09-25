@@ -16,6 +16,11 @@ export function wrapTags(escaped: string, color: string): string {
   );
 }
 
+/** ==高亮== 包成 mark（荧光笔效果），底色随主题换（见应用侧 globals.css） */
+export function wrapHighlights(escaped: string): string {
+  return escaped.replace(/==([^=\n]+)==/g, '<mark class="m-mark">$1</mark>');
+}
+
 /** 正文里的图块：编辑器里不可编辑 figure，预览里是同一份 HTML。
  *  有真实文件的素材渲染 <img>；无 path 的历史素材回退色块 */
 export function figHtml(id: string, alt: string, color: string, path?: string | null): string {
@@ -36,7 +41,7 @@ export function mdToHtml(body: string, color: string, assets?: RenderAsset[]): s
   let buf: string[] = [];
   const flush = () => {
     if (!buf.length) return;
-    out.push("<p>" + buf.map((l) => wrapTags(escHtml(l), color)).join("<br>") + "</p>");
+    out.push("<p>" + buf.map((l) => wrapHighlights(wrapTags(escHtml(l), color))).join("<br>") + "</p>");
     buf = [];
   };
   for (const line of (body || "").split("\n")) {

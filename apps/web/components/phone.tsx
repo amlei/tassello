@@ -139,14 +139,14 @@ export function PhoneCard({
   const html = post.bodyHtml && post.bodyHtml.trim()
     ? post.bodyHtml
     : "";
-  const tagCount = (post.body.match(/#[^\s#，。]+/g) || []).length;
   return (
-    <div className="relative mx-auto flex h-full max-h-[640px] w-full max-w-[380px] min-h-0 flex-1 flex-col overflow-hidden rounded-[22px] border border-line bg-card shadow-[0_14px_40px_rgba(15,15,15,0.14)]">
+    <div className="m-phone relative mx-auto flex h-full max-h-[640px] w-full max-w-[380px] min-h-0 flex-1 flex-col overflow-hidden rounded-[22px] border border-line bg-card shadow-[0_14px_40px_rgba(15,15,15,0.14)]">
       <div className="flex flex-none items-center gap-[9px] border-b border-line px-5 pb-3.5 pt-[18px]">
         <span className="flex h-[30px] w-[30px] items-center justify-center rounded-[9px] text-[13px] font-black text-white" style={{ background: t.color }}>九</span>
         <div className="text-[13px] font-bold">九漾小记</div>
       </div>
-      <h2 className="mx-5 mt-4 flex-none text-[19px] font-bold leading-[1.4] tracking-[-0.2px]">{post.title || "未命名"}</h2>
+      {/* 没有标题就不渲染占位：预览长得像发出去的样子，空标题不发出去 */}
+      {post.title ? <h2 className="mx-5 mt-4 flex-none text-[19px] font-bold leading-[1.4] tracking-[-0.2px]">{post.title}</h2> : null}
       <div className="relative flex min-h-0 flex-1">
         <div className="min-h-0 flex-1 overflow-auto px-5 pb-2 pt-2.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" ref={paneRef} onScroll={onScroll}>
           <div className="text-sm leading-[1.85] text-ink">
@@ -180,10 +180,6 @@ export function PhoneCard({
           </div>
         );
       })()}
-      <div className="mx-5 mt-2.5 flex flex-none gap-3 border-t border-line pb-5 pt-3 font-mono text-[10px] text-ink2">
-        <span>{post.body.length} 字</span>
-        <span>#话题 {tagCount} 个</span>
-      </div>
     </div>
   );
 }

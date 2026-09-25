@@ -132,10 +132,21 @@ export const publishRequestSchema = z.object({
 
 export const settingsUpdateSchema = z.object({
   defaultTargets: z.partialRecord(z.enum(CONTENT_TYPES), z.array(z.string())).optional(),
+  importBrowser: z.enum(["chrome", "edge"]).optional(),
 });
+
+/* 登录态导入源：获取账号时从哪个日常浏览器复制登录态。
+   全局单选是技术约束（整个 Cookies 库复制 + 单一 os_crypt 密钥），不支持按平台混用 */
+export type ImportBrowserId = "chrome" | "edge";
+export const IMPORT_BROWSERS: { id: ImportBrowserId; name: string }[] = [
+  { id: "chrome", name: "Google Chrome" },
+  { id: "edge", name: "Microsoft Edge" },
+];
+export type ImportBrowserDTO = { id: ImportBrowserId; name: string; detected: boolean };
 
 export type AppSettings = {
   defaultTargets: Record<ContentType, string[]>;
+  importBrowser: ImportBrowserId;
 };
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -145,6 +156,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     video: ["weibo"],
     audio: [],
   },
+  importBrowser: "chrome",
 };
 
 /* ---------- API envelope ---------- */

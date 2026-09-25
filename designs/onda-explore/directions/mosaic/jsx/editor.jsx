@@ -54,12 +54,15 @@ function EditorView({ post, onChange, onBack, onPublish, onDirty }) {
     return im;
   };
   const insertImage = () => { if (richRef.current) richRef.current.insert(); };
-  const runCommand = (kind) => {
+  const runCommand = (kind, url) => {
     if (!richRef.current) return;
     if (kind === "undo") richRef.current.undo();
     else if (kind === "redo") richRef.current.redo();
-    else richRef.current.run(kind);
+    else richRef.current.run(kind, url);
   };
+  /* 链接两步走：点「链接」icon 先存选区并弹输入框，确认后再挂 */
+  const beginLink = () => (richRef.current && richRef.current.beginLink ? richRef.current.beginLink() : false);
+  const cancelLink = () => { if (richRef.current && richRef.current.cancelLink) richRef.current.cancelLink(); };
   /* 移除一张正文配图：删掉那一行记号；没人再引用就顺手把素材也收走 */
   const removeImage = (id) => {
     setField("images", (post.images || []).filter((im) => im.id !== id));
@@ -161,7 +164,7 @@ function EditorView({ post, onChange, onBack, onPublish, onDirty }) {
               onUploadMedia={uploadMedia}
             />
             {/* 标题上方的编辑工具栏 */}
-            <EditToolbar onCommand={runCommand} onImage={insertImage} />
+            <EditToolbar onCommand={runCommand} onImage={insertImage} beginLink={beginLink} cancelLink={cancelLink} />
             <input
               className="m-titlein"
               value={post.title}
@@ -231,7 +234,8 @@ function setCaretOffset(root, offset) {
   }
 }
 
-/* 光标所在的块：编辑器的直接子节点（正文被切成的「段落 / 标题 / 引用 / 图 / 分隔线」） */
+/* 光标所在的块：编辑器的直接子节点。新建稿的正文是裸文本节点（不在 <p> 里），
+   所以 Text 节点也是合法的「块」—— 否则空稿里的 Markdown 快输入整个失效 */
 function blockAt(root) {
   if (!root) return null;
   const sel = window.getSelection();
@@ -242,7 +246,7 @@ function blockAt(root) {
     const next = root.childNodes[range.startOffset];
     const prev = root.childNodes[range.startOffset - 1];
     const pick = next && next.nodeType === 1 ? next : prev;
-    return pick && pick.nodeType === 1 ? pick : null;
+    return pick || null;
   }
   let node = range.startContainer;
   while (node && node.parentNode !== root) node = node.parentNode;
@@ -322,28 +326,51 @@ function caretIntoBlockAt(block, offset) {
   caretInto(block, false);
 }
 
-/* 删掉块开头的 Markdown 记号：选中记号后交给浏览器删，
-   这样 Blink 的编辑态跟着一起更新，光标留在块里。 */
-function stripMarker(root, len) {
+/* 删掉块开头的 Markdown 记号：优先选中记号交给浏览器删（Blink 的编辑态跟着更新，
+   光标留在块里）；execCommand 偶发不生效（合成期被拒等），删完复查，没掉就手动抹掉 */
+function stripMarker(root, marker) {
+  const len = marker.length;
   const block = blockAt(root);
   if (!block) return;
-  const node = document.createTreeWalker(block, NodeFilter.SHOW_TEXT, null).nextNode();
-  if (!node || node.nodeValue.length < len) return;
-  const range = document.createRange();
-  range.setStart(node, 0);
-  range.setEnd(node, len);
-  const sel = window.getSelection();
-  sel.removeAllRanges();
-  sel.addRange(range);
-  document.execCommand("delete");
+  /* 块本身是裸文本节点时 TreeWalker 拿不到它（nextNode 只走后代），直接用它 */
+  const node = block.nodeType === 3 ? block : document.createTreeWalker(block, NodeFilter.SHOW_TEXT, null).nextNode();
+  if (node && node.nodeValue.length >= len) {
+    const range = document.createRange();
+    range.setStart(node, 0);
+    range.setEnd(node, len);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    document.execCommand("delete");
+  }
+  const now = blockAt(root);
+  if (!now || now.textContent.slice(0, len) !== marker) return;
+  /* 兜底：逐个文本节点抹掉开头 len 个字符，光标放回块首 */
+  const walker = document.createTreeWalker(now.nodeType === 3 ? now.parentNode : now, NodeFilter.SHOW_TEXT, null);
+  let left = len;
+  let n = walker.nextNode();
+  while (n && left > 0) {
+    const take = Math.min(left, n.nodeValue.length);
+    n.nodeValue = n.nodeValue.slice(take);
+    left -= take;
+    n = walker.nextNode();
+  }
+  now.normalize();
+  caretIntoBlockAt(now, 0);
 }
 
 /* 换块格式：已经是目标格式就退回正文段落 —— 加得上，就一定要去得掉 */
 function setBlockTag(root, tag) {
   const block = blockAt(root);
   if (!block) return null;
+  /* 裸文本节点：浏览器 formatBlock 会自己包一层 */
+  if (block.nodeType !== 1) {
+    document.execCommand("formatBlock", false, tag);
+    normalizeEdges(root);
+    return tag;
+  }
   /* 图与分隔线不是文字块，别把格式套到它们身上（套上去等于把图吃掉） */
-  if (block.nodeType === 1 && (block.tagName === "HR" || block.classList.contains("m-fig") || block.tagName === "UL" || block.tagName === "OL")) {
+  if (block.tagName === "HR" || block.classList.contains("m-fig") || block.tagName === "UL" || block.tagName === "OL") {
     return null;
   }
   const cur = block.nodeType === 1 ? block.tagName.toLowerCase() : "";
@@ -368,8 +395,15 @@ function unwrapQuote(root, quote) {
 }
 
 function setBlockQuote(root) {
-  const block = blockAt(root);
-  if (!block || block.nodeType !== 1) return false;
+  let block = blockAt(root);
+  if (!block) return false;
+  /* 裸文本节点（新稿正文没有段落标签）：先落成 <p> 再包壳，跟 setBlockTag 一个路数 */
+  if (block.nodeType !== 1) {
+    document.execCommand("formatBlock", false, "p");
+    normalizeEdges(root);
+    block = blockAt(root);
+    if (!block || block.nodeType !== 1) return false;
+  }
   if (block.tagName === "HR" || block.classList.contains("m-fig") || block.tagName === "UL" || block.tagName === "OL") return false;
   if (block.tagName === "BLOCKQUOTE") {
     unwrapQuote(root, block);
@@ -455,6 +489,7 @@ function RichBody({ html, plain, color, assets, postId, placeholder, onChangeBod
   const composing = React.useRef(false);
   const timer = React.useRef(null);
   const snapTimer = React.useRef(null);
+  const linkRange = React.useRef(null);
   /* 自带一份撤销栈：给 #标签 上色那一步会重写 DOM，浏览器原生的 undo 记录会被抹掉 */
   const hist = React.useRef({ stack: [], idx: -1, lock: false });
 
@@ -606,8 +641,8 @@ function RichBody({ html, plain, color, assets, postId, placeholder, onChangeBod
     scheduleHighlight();
   };
 
-  /* 改写 DOM 的命令都在这里落地：工具栏只管报「按了哪个」，怎么改由正文自己负责 */
-  const runCommand = (kind) => {
+  /* 改写 DOM 的命令都在这里落地：工具栏只管报「按了哪个」（链接附带 url） */
+  const runCommand = (kind, url) => {
     const el = ref.current;
     if (!el) return;
     /* 结构要变了：先把排队中的高亮取消，免得它在中途重写 DOM 把光标弄丢 */
@@ -618,8 +653,16 @@ function RichBody({ html, plain, color, assets, postId, placeholder, onChangeBod
       const b = blockAt(el);
       if (b && b.tagName === "BLOCKQUOTE") unwrapQuote(el, b);
       setBlockTag(el, kind);
+    } else if (kind === "mark") {
+      toggleMark();
     } else if (kind === "blockquote") {
       setBlockQuote(el);
+      /* 段落本来就以「>」记号开头（手敲的 Markdown）：包壳成功就把记号吃掉，别留在文字里 */
+      const qb = blockAt(el);
+      if (qb && qb.tagName === "BLOCKQUOTE") {
+        const m = qb.textContent.match(/^>\s?/);
+        if (m) stripMarker(el, m[0]);
+      }
     } else if (kind === "p") {
       /* 在引用里点「正文」：先解壳再回段落，壳留在原地震不来 */
       const b = blockAt(el);
@@ -627,12 +670,38 @@ function RichBody({ html, plain, color, assets, postId, placeholder, onChangeBod
       else setBlockTag(el, "p");
     } else if (kind === "ul" || kind === "ol") {
       setBlockList(el, kind === "ul" ? "UL" : "OL");
+      /* 手敲过 Markdown 记号的段落转列表：记号一并吃掉（切换回正文时不吃） */
+      const lb = blockAt(el);
+      const ltag = kind === "ul" ? "UL" : "OL";
+      if (lb && lb.tagName === ltag) {
+        const m = kind === "ul" ? lb.textContent.match(/^[-*+]\s?/) : lb.textContent.match(/^1\.\s?/);
+        if (m) stripMarker(el, m[0]);
+      }
     } else if (kind === "hr") {
-      document.execCommand("insertHorizontalRule");
+      /* 分割线是独立一行：光标在列表里时不能插进 <li>（会继承列表缩进），
+         要插到整个列表后面，再落一个空段落给光标 */
+      const b = blockAt(el);
+      const list = b && b.closest ? b.closest("ul, ol") : null;
+      if (list) {
+        const hr = document.createElement("hr");
+        list.parentNode.insertBefore(hr, list.nextSibling);
+        const p = makeParagraph();
+        hr.parentNode.insertBefore(p, hr.nextSibling);
+        caretInto(p, false);
+      } else {
+        document.execCommand("insertHorizontalRule");
+      }
       normalizeEdges(el);
     } else if (kind === "link") {
-      const url = window.prompt("链接地址", "https://");
-      if (url) document.execCommand("createLink", false, url);
+      if (!url) return;
+      /* 回填先前存下的选区（点按钮后焦点去了输入框），再挂链接 */
+      const sel = window.getSelection();
+      if (linkRange.current) {
+        sel.removeAllRanges();
+        sel.addRange(linkRange.current);
+        linkRange.current = null;
+      }
+      document.execCommand("createLink", false, url);
     } else {
       document.execCommand(kind);
     }
@@ -645,26 +714,32 @@ function RichBody({ html, plain, color, assets, postId, placeholder, onChangeBod
   const handleKeyDown = (e) => {
     const el = ref.current;
     if (!el) return;
+    /* 输入法合成中的按键（拼音候选上屏用的空格/回车，keyCode 229）一律不接：
+       此时 DOM 里还挂着合成文本，Markdown 转换会把半截字连同记号一起卷进去 */
+    if (e.isComposing || e.keyCode === 229) return;
     const mod = e.metaKey || e.ctrlKey;
     if (mod && (e.key === "z" || e.key === "Z")) {
       e.preventDefault();
       if (e.shiftKey) redo(); else undo();
       return;
     }
-    /* Markdown 快捷输入：# / ## / ### / > / - / 1. / --- 后面敲空格即成形 */
+    /* Markdown 快捷输入：# / ## / ### / > / - / 1. / --- 后面敲空格即成形。
+       记号在行首、光标紧跟其后就整段转 —— 段落里已有文字也一样，
+       空段上敲记号的老姿势（含回车触发）保持不变 */
     if ((e.key === " " || e.key === "Enter") && !mod) {
       cancelHighlight();
       const block = blockAt(el);
-      if (block && block.nodeType === 1) {
+      if (block) {
         const text = block.textContent;
-        const caretAtEnd = caretAtBlockEnd(el);
-        const marker = caretAtEnd ? text.trim() : null;
+        const offset = caretOffsetInBlock(block);
+        const hit = offset != null ? /^(#{1,3}|>|---|___|\*\*\*|1\.|-|\*|\+)/.exec(text) : null;
+        const marker = hit && offset === hit[1].length && (e.key === " " || text === hit[1]) ? hit[1] : null;
         const table = { "#": "h1", "##": "h2", "###": "h3", ">": "blockquote" };
         if (marker && table[marker]) {
           e.preventDefault();
           if (table[marker] === "blockquote") setBlockQuote(el);
           else setBlockTag(el, table[marker]);
-          stripMarker(el, marker.length);
+          stripMarker(el, marker);
           push();
           record(true);
           return;
@@ -672,14 +747,14 @@ function RichBody({ html, plain, color, assets, postId, placeholder, onChangeBod
         if (marker && (marker === "-" || marker === "*" || marker === "+" || marker === "1.")) {
           e.preventDefault();
           setBlockList(el, marker === "1." ? "OL" : "UL");
-          stripMarker(el, marker.length);
+          stripMarker(el, marker);
           push();
           record(true);
           return;
         }
         if (marker && (marker === "---" || marker === "***" || marker === "___")) {
           e.preventDefault();
-          stripMarker(el, marker.length);
+          stripMarker(el, marker);
           document.execCommand("insertHorizontalRule");
           normalizeEdges(el);
           push();
@@ -712,6 +787,21 @@ function RichBody({ html, plain, color, assets, postId, placeholder, onChangeBod
       }
       return;
     }
+    if (e.key === "Enter" && !e.shiftKey && (tag === "ul" || tag === "ol") && caretAtBlockStart(el) && block.textContent.trim()) {
+      cancelHighlight();
+      /* 光标在列表项行首回车（Markdown 转换刚把光标放这儿最常见）：标准拆分会在
+         头顶留一个空项，正文顺势变成「2.」，看起来像序号丢了 ——
+         改成在当前项下面补一个空项，新序号紧跟着正文 */
+      e.preventDefault();
+      const li = block.firstElementChild;
+      const nl = document.createElement("li");
+      nl.appendChild(document.createElement("br"));
+      li.parentNode.insertBefore(nl, li.nextSibling);
+      caretInto(nl, false);
+      push();
+      record(true);
+      return;
+    }
     if (e.key === "Backspace" && formatted && caretAtBlockStart(el)) {
       cancelHighlight();
       /* 行首退格先把格式去掉（文档第一行的引用/标题否则退不出来） */
@@ -732,7 +822,46 @@ function RichBody({ html, plain, color, assets, postId, placeholder, onChangeBod
     }
   };
 
-  /* 工具栏要能「插一张图」「撤销重做」「跑格式命令」，都从这里出 */
+  /* 高亮开关：选区套 / 解一层 mark.m-mark（工具栏按钮用） */
+  const toggleMark = () => {
+    const el = ref.current;
+    if (!el) return;
+    const sel = window.getSelection();
+    if (!sel || !sel.rangeCount || sel.isCollapsed || !el.contains(sel.getRangeAt(0).startContainer)) return;
+    const range = sel.getRangeAt(0);
+    const startHost = range.startContainer.nodeType === 1 ? range.startContainer : range.startContainer.parentNode;
+    const marked = startHost && startHost.closest ? startHost.closest("mark.m-mark") : null;
+    cancelHighlight();
+    el.focus();
+    if (marked && el.contains(marked)) {
+      /* 取消：把 mark 的内容搬回原位 */
+      const parent = marked.parentNode;
+      while (marked.firstChild) parent.insertBefore(marked.firstChild, marked);
+      parent.removeChild(marked);
+      el.normalize();
+      normalizeEdges(el);
+      push();
+      record(true);
+      return;
+    }
+    /* 应用：选区内容包进 mark */
+    const frag = range.extractContents();
+    const mark = document.createElement("mark");
+    mark.className = "m-mark";
+    mark.appendChild(frag);
+    range.insertNode(mark);
+    sel.removeAllRanges();
+    const r2 = document.createRange();
+    r2.selectNodeContents(mark);
+    sel.addRange(r2);
+    el.normalize();
+    normalizeEdges(el);
+    push();
+    record(true);
+    scheduleHighlight();
+  };
+
+  /* 工具栏要能「插一张图」「撤销重做」「跑格式命令」「发起链接」，都从这里出 */
   React.useEffect(() => {
     if (!bodyRef) return undefined;
     bodyRef.current = {
@@ -744,6 +873,17 @@ function RichBody({ html, plain, color, assets, postId, placeholder, onChangeBod
       run: runCommand,
       undo,
       redo,
+      toggleMark,
+      /* 链接两步走：先把当前选区存起来（点击输入框后焦点会离开正文），
+         确认时再回填选区挂链接；选区不在正文里则拒绝发起 */
+      beginLink: () => {
+        const el = ref.current;
+        const sel = window.getSelection();
+        if (!el || !sel || !sel.rangeCount || !el.contains(sel.getRangeAt(0).startContainer)) return false;
+        linkRange.current = sel.getRangeAt(0).cloneRange();
+        return true;
+      },
+      cancelLink: () => { linkRange.current = null; },
     };
     return () => { bodyRef.current = null; };
   });
@@ -783,11 +923,14 @@ function RichBody({ html, plain, color, assets, postId, placeholder, onChangeBod
   );
 }
 
-/* 标题上方的编辑工具栏：只有 icon，按下的格式会亮起来 */
-function EditToolbar({ onCommand, onImage }) {
+/* 标题上方的编辑工具栏：只有 icon，按下的格式会亮起来；链接走内联输入框 */
+function EditToolbar({ onCommand, onImage, beginLink, cancelLink }) {
   const [on, setOn] = React.useState({});
   const [menu, setMenu] = React.useState(false);
+  const [linkOpen, setLinkOpen] = React.useState(false);
+  const [linkUrl, setLinkUrl] = React.useState("");
   const barRef = React.useRef(null);
+  const linkInputRef = React.useRef(null);
   React.useEffect(() => {
     const sync = () => {
       const sel = window.getSelection();
@@ -795,11 +938,14 @@ function EditToolbar({ onCommand, onImage }) {
       if (!sel || !sel.rangeCount || !root || !root.contains(sel.getRangeAt(0).startContainer)) return;
       const block = blockAt(root);
       const tag = block && block.nodeType === 1 ? block.tagName.toLowerCase() : "";
+      const startNode = sel.getRangeAt(0).startContainer;
+      const startEl = startNode.nodeType === 1 ? startNode : startNode.parentNode;
       setOn({
         bold: document.queryCommandState("bold"),
         italic: document.queryCommandState("italic"),
         underline: document.queryCommandState("underline"),
         strike: document.queryCommandState("strikeThrough"),
+        mark: !!(startEl && startEl.closest && startEl.closest("mark.m-mark")),
         ul: document.queryCommandState("insertUnorderedList"),
         ol: document.queryCommandState("insertOrderedList"),
         h1: tag === "h1",
@@ -819,19 +965,34 @@ function EditToolbar({ onCommand, onImage }) {
     return () => document.removeEventListener("mousedown", away);
   }, [menu]);
   const cmd = (kind) => () => onCommand(kind);
+  /* 链接：先存选区，弹内联输入框（桌面壳里没有 window.prompt） */
+  const openLink = () => {
+    if (!beginLink || !beginLink()) return;
+    setLinkUrl("");
+    setLinkOpen(true);
+    requestAnimationFrame(() => { if (linkInputRef.current) linkInputRef.current.focus(); });
+  };
+  const closeLink = () => { setLinkOpen(false); if (cancelLink) cancelLink(); };
+  const confirmLink = () => {
+    const url = linkUrl.trim();
+    setLinkOpen(false);
+    if (!url) { if (cancelLink) cancelLink(); return; }
+    onCommand("link", url);
+  };
   const items = [
     { k: "heading", ic: <IcFormatHeading />, caret: true, on: on.h1 || on.h2 || on.h3, title: "标题 1 / 2 / 3", run: () => setMenu((v) => !v) },
     { k: "bold", ic: <IcFormatBold />, title: "加粗", run: cmd("bold") },
     { k: "italic", ic: <IcFormatItalic />, title: "斜体", run: cmd("italic") },
     { k: "underline", ic: <IcFormatUnderline />, title: "下划线", run: cmd("underline") },
     { k: "strike", ic: <IcFormatStrike />, title: "删除线", run: cmd("strikeThrough") },
+    { k: "mark", ic: <IcFormatMark />, title: "高亮", on: on.mark, run: cmd("mark") },
     { k: "quote", ic: <IcFormatQuote />, title: "引用", run: cmd("blockquote") },
     { sep: true },
     { k: "ul", ic: <IcFormatListUl />, title: "无序列表", run: cmd("ul") },
     { k: "ol", ic: <IcFormatListOl />, title: "有序列表", run: cmd("ol") },
     { k: "hr", ic: <IcFormatDivider />, title: "插入分隔线", run: cmd("hr") },
     { sep: true },
-    { k: "link", ic: <IcFormatLink />, title: "插入链接", run: cmd("link") },
+    { k: "link", ic: <IcFormatLink />, title: "插入链接", run: openLink },
     { k: "img", ic: <IcFormatImage />, title: "在光标处插入图片（也可直接粘贴）", run: onImage },
     { sep: true },
     { k: "undo", ic: <IcFormatUndo />, title: "撤销", run: cmd("undo") },
@@ -875,6 +1036,23 @@ function EditToolbar({ onCommand, onImage }) {
               {m.label}
             </button>
           ))}
+        </div>
+      )}
+      {linkOpen && (
+        <div className="m-linkpop" role="dialog" aria-label="插入链接">
+          <input
+            ref={linkInputRef}
+            className="m-linkpop-input"
+            value={linkUrl}
+            placeholder="https://…"
+            onChange={(e) => setLinkUrl(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") { e.preventDefault(); confirmLink(); }
+              if (e.key === "Escape") { e.preventDefault(); closeLink(); }
+            }}
+          />
+          <button type="button" className="m-linkpop-btn ok" onClick={confirmLink}>确定</button>
+          <button type="button" className="m-linkpop-btn cancel" onClick={closeLink}>取消</button>
         </div>
       )}
     </div>

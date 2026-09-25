@@ -1,246 +1,48 @@
-/* editor —— 编辑器：写作区 + 实时预览 + 自动/手动保存（移植原型 editor.jsx） */
+/* editor —— 编辑器：Tiptap 内核 + 写作区 + 实时预览 + 自动/手动保存。
+   内核从手写 contentEditable/execCommand 迁到 Tiptap（ProseMirror），
+   序列化格式不变：bodyHtml（富文本）+ body（纯文本）双列照旧落库，
+   旧数据、手机预览列、微信/微博发布通道均无需改动。 */
 "use client";
 
 import React from "react";
 import { TYPE_META, type PostDTO } from "@tassello/shared";
 import { useLongPressReorder } from "./dnd";
 import { AudioBar, fmtTime } from "./bits";
-import { Button, ToggleButton, ToggleButtonGroup } from "@heroui/react";
+import { Button, Dropdown, Popover } from "@heroui/react";
 import { PreviewColumn } from "./phone";
 import {
-  Add, ArrowLeft, Bold, ChevronDown, ChevronUp, Hashtag, Image, Italic, Link, List, Minus,
-  OrderedList, QuoteDown, Redo, Send, Underline, UnderlineX, Undo, X,
+  Add, ArrowLeft, ChevronDown, ChevronUp, Send, X,
+  Bold, Italic, Underline, List, Minus, Link2, Image as ImageIcon, Undo, Redo,
 } from "reicon-react";
+import { Heading as HeadingIcon, Strikethrough, Highlighter, Quote, ListOrdered } from "lucide-react";
+import { Editor, EditorContent, useEditor, useEditorState } from "@tiptap/react";
+import { Extension, Mark, Node, mergeAttributes } from "@tiptap/core";
+import StarterKit from "@tiptap/starter-kit";
+import Highlight from "@tiptap/extension-highlight";
+import { Placeholder } from "@tiptap/extensions";
+import type { DOMOutputSpec, Mark as PMark, MarkType } from "@tiptap/pm/model";
+import type { Transaction } from "@tiptap/pm/state";
+import { TextSelection } from "@tiptap/pm/state";
+import type { EditorView as PMEditorView } from "@tiptap/pm/view";
 
 export const ASSET_IMG_RE = /^!\[([^\]]*)\]\(asset:\/\/([^)]+)\)$/;
 
-/* ---------- DOM 光标工具（与原型一致） ---------- */
-function caretOffset(root: HTMLElement): number | null {
-  const sel = window.getSelection();
-  if (!sel || !sel.rangeCount) return null;
-  const range = sel.getRangeAt(0);
-  if (!root.contains(range.startContainer)) return null;
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-  let seen = 0;
-  let node = walker.nextNode();
-  while (node) {
-    if (node === range.startContainer) return seen + range.startOffset;
-    const inFig = node.parentNode && node.parentNode instanceof Element
-      ? node.parentNode.closest(".m-fig")
-      : null;
-    if (!inFig) seen += node.nodeValue?.length ?? 0;
-    node = walker.nextNode();
-  }
-  return null;
-}
-
-function setCaretOffset(root: HTMLElement, offset: number | null) {
-  if (offset == null) return;
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-  let seen = 0;
-  let node = walker.nextNode();
-  while (node) {
-    const inFig = node.parentNode instanceof Element ? node.parentNode.closest(".m-fig") : null;
-    if (!inFig) {
-      const len = node.nodeValue?.length ?? 0;
-      if (seen + len >= offset) {
-        const range = document.createRange();
-        range.setStart(node, Math.max(0, offset - seen));
-        range.collapse(true);
-        const sel = window.getSelection();
-        sel?.removeAllRanges();
-        sel?.addRange(range);
-        return;
-      }
-      seen += len;
-    }
-    node = walker.nextNode();
-  }
-}
-
-function blockAt(root: HTMLElement | null): Node | null {
-  if (!root) return null;
-  const sel = window.getSelection();
-  if (!sel || !sel.rangeCount) return null;
-  const range = sel.getRangeAt(0);
-  if (range.startContainer === root) {
-    const next = root.childNodes[range.startOffset];
-    const prev = root.childNodes[range.startOffset - 1];
-    const pick = next && next.nodeType === 1 ? next : prev;
-    return pick && pick.nodeType === 1 ? pick : null;
-  }
-  let node: Node | null = range.startContainer;
-  while (node && node.parentNode !== root) node = node.parentNode;
-  return node && node.parentNode === root ? node : null;
-}
-
-function caretInto(el: Element, atEnd: boolean) {
-  const range = document.createRange();
-  range.selectNodeContents(el);
-  range.collapse(!atEnd);
-  const sel = window.getSelection();
-  sel?.removeAllRanges();
-  sel?.addRange(range);
-}
-
-function caretAtBlockStart(root: HTMLElement): boolean {
-  const sel = window.getSelection();
-  const block = blockAt(root);
-  if (!sel || !sel.rangeCount || !(block instanceof HTMLElement)) return false;
-  const range = sel.getRangeAt(0);
-  if (!range.collapsed) return false;
-  const probe = document.createRange();
-  probe.selectNodeContents(block);
-  probe.setEnd(range.startContainer, range.startOffset);
-  return probe.toString().length === 0;
-}
-
-function caretAtBlockEnd(root: HTMLElement): boolean {
-  const sel = window.getSelection();
-  const block = blockAt(root);
-  if (!sel || !sel.rangeCount || !(block instanceof HTMLElement)) return false;
-  const range = sel.getRangeAt(0);
-  if (!range.collapsed) return false;
-  const probe = document.createRange();
-  probe.selectNodeContents(block);
-  probe.setStart(range.startContainer, range.startOffset);
-  return probe.toString().length === 0;
-}
-
-function makeParagraph() {
-  const p = document.createElement("p");
-  p.appendChild(document.createElement("br"));
-  return p;
-}
-
-function caretOffsetInBlock(block: HTMLElement): number | null {
-  const sel = window.getSelection();
-  if (!sel || !sel.rangeCount) return null;
-  const range = sel.getRangeAt(0);
-  if (!block.contains(range.startContainer)) return null;
-  const probe = document.createRange();
-  probe.selectNodeContents(block);
-  probe.setEnd(range.startContainer, range.startOffset);
-  return probe.toString().length;
-}
-
-function caretIntoBlockAt(block: HTMLElement, offset: number | null) {
-  const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT);
-  let seen = 0;
-  let node = walker.nextNode();
-  while (node) {
-    const len = node.nodeValue?.length ?? 0;
-    if (seen + len >= offset!) {
-      const range = document.createRange();
-      range.setStart(node, Math.max(0, offset! - seen));
-      range.collapse(true);
-      const sel = window.getSelection();
-      sel?.removeAllRanges();
-      sel?.addRange(range);
-      return;
-    }
-    seen += len;
-    node = walker.nextNode();
-  }
-  caretInto(block, false);
-}
-
-function stripMarker(root: HTMLElement, len: number) {
-  const block = blockAt(root);
-  if (!(block instanceof HTMLElement)) return;
-  const node = document.createTreeWalker(block, NodeFilter.SHOW_TEXT).nextNode();
-  if (!node || (node.nodeValue?.length ?? 0) < len) return;
-  const range = document.createRange();
-  range.setStart(node, 0);
-  range.setEnd(node, len);
-  const sel = window.getSelection();
-  sel?.removeAllRanges();
-  sel?.addRange(range);
-  document.execCommand("delete");
-}
-
-function normalizeEdges(root: HTMLElement) {
-  Array.from(root.children).forEach((child) => {
-    if (child.tagName === "DIV" && child.children.length === 1 && child.firstElementChild?.tagName === "HR") {
-      child.parentNode?.replaceChild(child.firstElementChild, child);
-    }
-  });
-  const isVoidBlock = (n: Node | null) =>
-    n && n.nodeType === 1 && ((n as HTMLElement).tagName === "HR" || (n as HTMLElement).classList?.contains("m-fig"));
-  if (isVoidBlock(root.firstChild)) root.insertBefore(makeParagraph(), root.firstChild);
-  if (isVoidBlock(root.lastChild)) root.appendChild(makeParagraph());
-}
-
-function setBlockTag(root: HTMLElement, tag: string): string | null {
-  const block = blockAt(root);
-  if (!(block instanceof HTMLElement)) return null;
-  if (block.tagName === "HR" || block.classList.contains("m-fig") || block.tagName === "UL" || block.tagName === "OL") {
-    return null;
-  }
-  const cur = block.tagName.toLowerCase();
-  const target = cur === tag ? "p" : tag;
-  document.execCommand("formatBlock", false, target);
-  normalizeEdges(root);
-  return target;
-}
-
-function setBlockList(root: HTMLElement, tag: "UL" | "OL") {
-  const block = blockAt(root);
-  if (!(block instanceof HTMLElement)) return;
-  const caret = caretOffsetInBlock(block);
-  const isList = block.tagName === "UL" || block.tagName === "OL";
-  if (isList) {
-    const frag = document.createDocumentFragment();
-    Array.from(block.children).forEach((li) => {
-      const p = document.createElement("p");
-      if (!li.textContent?.trim()) p.appendChild(document.createElement("br"));
-      else while (li.firstChild) p.appendChild(li.firstChild);
-      frag.appendChild(p);
-    });
-    block.parentNode?.replaceChild(frag, block);
-  } else if (block.tagName === "HR") {
-    return;
-  } else {
-    const list = document.createElement(tag);
-    const li = document.createElement("li");
-    if (!block.textContent?.trim()) li.appendChild(document.createElement("br"));
-    while (block.firstChild) li.appendChild(block.firstChild);
-    block.parentNode?.replaceChild(list, block);
-    list.appendChild(li);
-  }
-  const now = blockAt(root);
-  if (now instanceof HTMLElement) caretIntoBlockAt(now, caret == null ? now.textContent.length : caret);
-}
-
-function atListHead(root: HTMLElement): boolean {
-  const block = blockAt(root);
-  if (!(block instanceof HTMLElement)) return false;
-  if (block.tagName !== "UL" && block.tagName !== "OL") return false;
-  const sel = window.getSelection();
-  if (!sel || !sel.rangeCount) return false;
-  const range = sel.getRangeAt(0);
-  const startEl = range.startContainer.nodeType === 1
-    ? (range.startContainer as Element)
-    : range.startContainer.parentNode;
-  const li = startEl instanceof Element ? startEl.closest("li") : null;
-  if (!li || li !== block.firstElementChild) return false;
-  const probe = document.createRange();
-  probe.selectNodeContents(li);
-  probe.setEnd(range.startContainer, range.startOffset);
-  return probe.toString().length === 0;
-}
-
-/* ---------- 正文富文本 ---------- */
+/* ---------- 序列化辅助（旧数据的兜底渲染仍走这套字符串模板） ---------- */
 function escHtml(s: string): string {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
+/* reicon「X」outline 的同款 path：序列化富文本里挂不了 React 组件，内联保持视觉一致 */
+const X_PATH = "M18.4697 19.5303C18.7626 19.8232 19.2374 19.8232 19.5303 19.5303C19.8232 19.2374 19.8232 18.7626 19.5303 18.4697L13.0607 12L19.5303 5.53033C19.8232 5.23744 19.8232 4.76256 19.5303 4.46967C19.8232 4.17678 18.7626 4.17678 18.4697 4.46967L12 10.9393L5.53033 4.46967C5.23744 4.17678 5.23744 4.17678 5.53033 4.46967C4.17678 4.76256 4.17678 5.23744 4.46967 5.53033L10.9393 12L4.46967 18.4697C4.17678 18.7626 4.17678 19.2374 4.46967 19.5303C4.17678 19.8232 5.23744 19.8232 5.53033 19.5303L12 13.0607L18.4697 19.5303Z";
+/* contenteditable="false"：标签是完整 token —— 预览/发布侧保持原子，不会被继续吞进文字里 */
 function wrapTags(escaped: string, color: string): string {
   return escaped.replace(/(#[^\s#，。！？；：,.!?;:]+)/g, (m) =>
-    `<span class="m-tag" style="color:${color};background:${color}1A">${m}</span>`);
+    `<span class="m-tag" contenteditable="false" style="color:${color};background:${color}1A">${m}</span>`);
+}
+/* ==高亮== 包成 mark（荧光笔效果），底色随主题换（见 globals.css） */
+function wrapHighlights(escaped: string): string {
+  return escaped.replace(/==([^=\n]+)==/g, '<mark class="m-mark">$1</mark>');
 }
 function figHtml(id: string, alt: string, color: string, path?: string | null): string {
-  // 序列化富文本里不能挂 React 组件：内联 reicon「X」outline 的同款 path，与 reicon-react 视觉一致。
-  // 有真实文件的素材渲染 <img>；无 path 的历史素材回退色块
   const img = path
     ? `<img class="m-fig-img" src="/api/assets/${id}/raw" alt="${escHtml(alt || "配图")}" draggable="false">`
     : "";
@@ -248,7 +50,7 @@ function figHtml(id: string, alt: string, color: string, path?: string | null): 
     `<figure class="m-fig" contenteditable="false" data-asset="${id}" data-alt="${escHtml(alt || "配图")}" style="background:${color}">` +
     img +
     `<span class="m-fig-lb">${escHtml(alt || "配图")}</span>` +
-    `<button type="button" class="m-fig-del" aria-label="移除这张图"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M18.4697 19.5303C18.7626 19.8232 19.2374 19.8232 19.5303 19.5303C19.8232 19.2374 19.8232 18.7626 19.5303 18.4697L13.0607 12L19.5303 5.53033C19.8232 5.23744 19.8232 4.76256 19.5303 4.46967C19.8232 4.17678 18.7626 4.17678 18.4697 4.46967L12 10.9393L5.53033 4.46967C5.23744 4.17678 5.23744 4.17678 5.53033 4.46967C4.17678 4.76256 4.17678 5.23744 4.46967 5.53033L10.9393 12L4.46967 18.4697C4.17678 18.7626 4.17678 19.2374 4.46967 19.5303C4.17678 19.8232 5.23744 19.8232 5.53033 19.5303L12 13.0607L18.4697 19.5303Z" fill="currentColor"/></svg></button></figure>`
+    `<button type="button" class="m-fig-del" aria-label="移除这张图"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="${X_PATH}" fill="currentColor"/></svg></button></figure>`
   );
 }
 function mdToHtmlLocal(body: string, color: string, assets: { id: string; color?: string | null; path?: string | null }[]): string {
@@ -256,7 +58,7 @@ function mdToHtmlLocal(body: string, color: string, assets: { id: string; color?
   let buf: string[] = [];
   const flush = () => {
     if (!buf.length) return;
-    out.push("<p>" + buf.map((l) => wrapTags(escHtml(l), color)).join("<br>") + "</p>");
+    out.push("<p>" + buf.map((l) => wrapHighlights(wrapTags(escHtml(l), color))).join("<br>") + "</p>");
     buf = [];
   };
   for (const line of (body || "").split("\n")) {
@@ -274,6 +76,8 @@ function mdToHtmlLocal(body: string, color: string, assets: { id: string; color?
   flush();
   return out.join("");
 }
+/* 富文本 → 纯文本（body 列）：顶层块取 innerText，配图还原成 asset:// 记号。
+   与旧实现同一算法，微博纯文本发布、列表摘要、字数统计都吃这份 */
 function htmlToPlain(root: HTMLElement): string {
   const blocks: string[] = [];
   Array.from(root.childNodes).forEach((node) => {
@@ -288,566 +92,410 @@ function htmlToPlain(root: HTMLElement): string {
   });
   return blocks.join("\n\n");
 }
-function highlightTags(root: HTMLElement, color: string) {
-  const test = /#[^\s#，。！？；：,.!?;:]+/;
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-  const nodes: Text[] = [];
-  while (walker.nextNode()) {
-    const n = walker.currentNode as Text;
-    const host = n.parentNode;
-    if (host && host instanceof Element && host.closest(".m-tag, a, code, .m-fig")) continue;
-    if (test.test(n.nodeValue ?? "")) nodes.push(n);
-  }
-  nodes.forEach((n) => {
-    const frag = document.createDocumentFragment();
-    (n.nodeValue ?? "").split(/(#[^\s#，。！？；：,.!?;:]+)/g).forEach((part) => {
-      if (!part) return;
-      if (part.charAt(0) === "#") {
-        const span = document.createElement("span");
-        span.className = "m-tag";
-        span.style.color = color;
-        span.style.background = color + "1A";
-        span.textContent = part;
-        frag.appendChild(span);
-      } else {
-        frag.appendChild(document.createTextNode(part));
+
+/* ---------- Tiptap 自定义扩展 ---------- */
+const TAG_SRC = "[^\\s#，。！？；：,.!?;:]+";
+const TAG_RE = new RegExp(`#${TAG_SRC}`, "g");
+const TAG_FULL_RE = new RegExp(`^#${TAG_SRC}$`);
+/* 标签记号的收尾字符：后面跟着这些（或到头）才算一个完整标签 */
+const TAG_STOP_RE = /[\s#，。！？；：,.!?;:]/;
+/* 行内记号转换的黑名单：文字已带这些 mark 就不再转（对齐旧行内规则的宿主黑名单） */
+const INLINE_MARK_SKIP = ["tag", "link", "highlight", "code", "bold", "italic", "strike"];
+
+/* 话题标签 mark：#标签 → span.m-tag，颜色随稿子类型注入 style */
+const TagMark = Mark.create({
+  name: "tag",
+  /* 非延伸：紧挨着标签往后打字不会被吞进标签里 */
+  inclusive: false,
+  addOptions() {
+    return { color: "var(--onda-hover)" };
+  },
+  addAttributes() {
+    return {
+      color: {
+        default: null,
+        parseHTML: (element) => element.style.color || null,
+        renderHTML: (attributes) => {
+          const color = attributes.color as string | null;
+          return color ? { style: `color:${color};background:${color}1A` } : {};
+        },
+      },
+    };
+  },
+  parseHTML() {
+    return [{ tag: "span.m-tag" }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    return ["span", mergeAttributes({ "data-type": "tag", class: "m-tag" }, HTMLAttributes), 0];
+  },
+});
+
+/* 配图块：figure.m-fig[data-asset]，正文里存 asset:// 引用，真实文件经 /api/assets/[id]/raw */
+const AssetFigure = Node.create({
+  name: "assetFigure",
+  group: "block",
+  atom: true,
+  selectable: true,
+  addAttributes() {
+    return {
+      assetId: {
+        default: null,
+        parseHTML: (element) => element.getAttribute("data-asset"),
+        renderHTML: (attributes) => ({ "data-asset": attributes.assetId }),
+      },
+      alt: {
+        default: "配图",
+        parseHTML: (element) => element.getAttribute("data-alt") || "配图",
+        renderHTML: (attributes) => ({ "data-alt": attributes.alt }),
+      },
+      color: {
+        default: "var(--onda-hover)",
+        parseHTML: (element) => element.style.background || null,
+        renderHTML: (attributes) => ({ style: `background:${attributes.color}` }),
+      },
+      hasPath: {
+        default: false,
+        parseHTML: (element) => !!element.querySelector("img"),
+        renderHTML: () => ({}),
+      },
+    };
+  },
+  parseHTML() {
+    return [{ tag: "figure[data-asset]" }];
+  },
+  renderHTML({ node }): DOMOutputSpec {
+    const { assetId, alt, color, hasPath } = node.attrs as { assetId: string; alt: string; color: string; hasPath: boolean };
+    const children: DOMOutputSpec[] = [];
+    if (hasPath) {
+      children.push(["img", { class: "m-fig-img", src: `/api/assets/${assetId}/raw`, alt: alt || "配图", draggable: "false" }]);
+    }
+    children.push(["span", { class: "m-fig-lb" }, alt || "配图"]);
+    children.push([
+      "button", { type: "button", class: "m-fig-del", "aria-label": "移除这张图" },
+      ["svg", { width: "12", height: "12", viewBox: "0 0 24 24", fill: "none", "aria-hidden": "true" },
+        ["path", { d: X_PATH, fill: "currentColor" }],
+      ],
+    ]);
+    return ["figure", { class: "m-fig", "data-asset": assetId, "data-alt": alt || "配图", style: `background:${color}` }, ...children];
+  },
+});
+
+/* 单趟行内规范化：在一趟里只处理一种记号，改动落到同一个事务上（= 一步撤销） */
+type InlineOp =
+  | { kind: "mark"; from: number; to: number; mark: PMark }
+  | { kind: "unmark"; from: number; to: number }
+  | { kind: "convert"; from: number; to: number; before: number; after: number; mark: PMark };
+
+function collectTagOps(doc: Transaction["doc"], markT: MarkType, color: string, ops: InlineOp[]) {
+  doc.descendants((node, pos) => {
+    if (!node.isText || !node.text) return;
+    const existing = node.marks.find((m) => m.type === markT);
+    if (existing) {
+      /* 校验整个标签 run：文字不再是完整标签，或后面还跟着可续字的字符
+         （在标签中间改字会拆成两截），整段解开 —— 下一轮规范化会按新文字重新着色 */
+      let runStart = pos;
+      let runEnd = pos + node.nodeSize;
+      for (;;) {
+        const nb = doc.resolve(runStart).nodeBefore;
+        if (nb && nb.isText && markT.isInSet(nb.marks)) runStart -= nb.nodeSize;
+        else break;
       }
-    });
-    n.parentNode?.replaceChild(frag, n);
-  });
-}
-function markdownifyInline(root: HTMLElement) {
-  const rules = [
-    { re: /\*\*([^*\n]+)\*\*/g, tag: "b" },
-    { re: /~~([^~\n]+)~~/g, tag: "s" },
-    { re: /\*([^*\n]+)\*/g, tag: "i" },
-  ];
-  rules.forEach((rule) => {
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-    const hits: Text[] = [];
-    while (walker.nextNode()) {
-      const n = walker.currentNode as Text;
-      const host = n.parentNode;
-      if (host && host instanceof Element && host.closest("b, i, s, a, code, .m-tag, .m-fig")) continue;
-      rule.re.lastIndex = 0;
-      if (rule.re.test(n.nodeValue ?? "")) hits.push(n);
-      rule.re.lastIndex = 0;
+      for (;;) {
+        const na = doc.resolve(runEnd).nodeAfter;
+        if (na && na.isText && markT.isInSet(na.marks)) runEnd += na.nodeSize;
+        else break;
+      }
+      const text = doc.textBetween(runStart, runEnd);
+      const after = doc.resolve(runEnd).nodeAfter;
+      const cont = after && after.isText && after.text ? after.text.charAt(0) : "";
+      const valid = TAG_FULL_RE.test(text) && (!cont || TAG_STOP_RE.test(cont));
+      if (!valid) ops.push({ kind: "unmark", from: runStart, to: runEnd });
+      return;
     }
-    hits.forEach((n) => {
-      const frag = document.createDocumentFragment();
-      let last = 0;
-      (n.nodeValue ?? "").replace(rule.re, (m: string, inner: string, offset: number) => {
-        if (offset > last) frag.appendChild(document.createTextNode((n.nodeValue ?? "").slice(last, offset)));
-        const el = document.createElement(rule.tag);
-        el.textContent = inner;
-        frag.appendChild(el);
-        last = offset + m.length;
-        return m;
-      });
-      if (last < (n.nodeValue ?? "").length) frag.appendChild(document.createTextNode((n.nodeValue ?? "").slice(last)));
-      n.parentNode?.replaceChild(frag, n);
-    });
-  });
-}
-/* 失效标签清理：回车拆半、打出空格、删掉 # 的残留 .m-tag 一律解开再重新着色 */
-function unwrapStaleTags(root: HTMLElement) {
-  const valid = /^#[^\s#，。！？；：,.!?;:]+$/;
-  root.querySelectorAll(".m-tag").forEach((span) => {
-    const text = span.textContent ?? "";
-    if (!valid.test(text)) {
-      while (span.firstChild) span.parentNode?.insertBefore(span.firstChild, span);
-      span.remove();
+    if (node.marks.some((m) => ["tag", "link", "highlight", "code"].includes(m.type.name))) return;
+    TAG_RE.lastIndex = 0;
+    let m = TAG_RE.exec(node.text);
+    while (m) {
+      ops.push({ kind: "mark", from: pos + m.index, to: pos + m.index + m[0].length, mark: markT.create({ color }) });
+      m = TAG_RE.exec(node.text);
     }
   });
-}
-function serializeBody(root: HTMLElement, color: string) {
-  const clone = root.cloneNode(true) as HTMLElement;
-  unwrapStaleTags(clone);
-  highlightTags(clone, color);
-  markdownifyInline(clone);
-  return { html: clone.innerHTML, plain: htmlToPlain(root) };
 }
 
-/* ---------- RichBody ---------- */
-type RichBodyHandle = {
-  insert: () => void;
-  run: (kind: string) => void;
-  undo: () => void;
-  redo: () => void;
-  /** 素材条删除联动：把正文里引用该素材的图块一并移除 */
-  removeFig: (id: string) => void;
-};
+function collectInlineMarkdownOps(doc: Transaction["doc"], markT: MarkType, re: RegExp, ops: InlineOp[]) {
+  doc.descendants((node, pos) => {
+    if (!node.isText || !node.text) return;
+    if (node.marks.some((m) => INLINE_MARK_SKIP.includes(m.type.name))) return;
+    re.lastIndex = 0;
+    let m = re.exec(node.text);
+    while (m) {
+      /* 记号替换成内容：只删前后记号，内容原位补 mark（内容本身不进删除范围）。
+         记号字符不出现在内容里（如 ** 的内层不含 *），indexOf 即前记号长度 */
+      const before = m[0].indexOf(m[1]!);
+      const after = m[0].length - before - m[1]!.length;
+      ops.push({ kind: "convert", from: pos + m.index, to: pos + m.index + m[0].length, before, after, mark: markT.create() });
+      m = re.exec(node.text);
+    }
+  });
+}
+
+function normalizeInline(editor: Editor, color: string) {
+  const { state, view } = editor;
+  if (view.isDestroyed || view.composing) return;
+  const { tr } = state;
+  const schema = state.schema;
+  const passes: { markT?: MarkType; re?: RegExp }[] = [
+    { markT: schema.marks.tag },
+    { markT: schema.marks.bold, re: /\*\*([^*\n]+)\*\*/g },
+    { markT: schema.marks.strike, re: /~~([^~\n]+)~~/g },
+    { markT: schema.marks.highlight, re: /==([^=\n]+)==/g },
+    { markT: schema.marks.italic, re: /\*([^*\n]+)\*/g },
+  ];
+  let changed = false;
+  for (const pass of passes) {
+    if (!pass.markT) continue;
+    const ops: InlineOp[] = [];
+    const doc = tr.doc;
+    if (pass.re) collectInlineMarkdownOps(doc, pass.markT, pass.re, ops);
+    else collectTagOps(doc, pass.markT, color, ops);
+    if (!ops.length) continue;
+    ops.sort((a, b) => b.from - a.from);
+    for (const op of ops) {
+      if (op.kind === "mark") tr.addMark(op.from, op.to, op.mark);
+      else if (op.kind === "unmark") tr.removeMark(op.from, op.to, pass.markT);
+      else {
+        /* 先删后记号（高位不踩低位），再删前记号；内容落在 [from, from+内长) 原位加 mark */
+        tr.delete(op.to - op.after, op.to);
+        tr.delete(op.from, op.from + op.before);
+        tr.addMark(op.from, op.from + (op.to - op.from - op.before - op.after), op.mark);
+      }
+      changed = true;
+    }
+  }
+  if (!changed) return;
+  tr.setMeta("addToHistory", true);
+  view.dispatch(tr);
+}
+
+/* 行内规范化：停手 500ms 后把 #标签 / **粗** / ~~删~~ / ==亮== / *斜* 就地转成 mark。
+   打字态由 Tiptap inputRule 即时转换，这里兜底粘贴、legacy 纯文本和标签场景
+   （旧行内规则也是 500ms 防抖后重写 DOM，节奏保持一致） */
+const InlineNormalize = Extension.create({
+  name: "inlineNormalize",
+  addOptions() {
+    return { color: "var(--onda-hover)", delay: 500 };
+  },
+  addStorage() {
+    return { timer: 0 as number };
+  },
+  onTransaction() {
+    if (this.editor.isDestroyed || this.editor.view.composing) return;
+    if (this.storage.timer) window.clearTimeout(this.storage.timer);
+    this.storage.timer = window.setTimeout(() => {
+      this.storage.timer = 0;
+      normalizeInline(this.editor, this.options.color);
+    }, this.options.delay);
+  },
+  onDestroy() {
+    if (this.storage.timer) window.clearTimeout(this.storage.timer);
+  },
+});
+
+/* 标签是完整 token：光标紧跟标签尾部按退格，整枚标签一起删
+   （对齐旧 contenteditable=false 的原子语义，也免去逐字符拆标签） */
+function tagBackspace(editor: Editor): boolean {
+  const { state, view } = editor;
+  const tagT = state.schema.marks.tag as MarkType | undefined;
+  const { selection, doc } = state;
+  if (!tagT || !selection.empty) return false;
+  const before = selection.$from.nodeBefore;
+  if (!before || !before.isText || !tagT.isInSet(before.marks)) return false;
+  let from = selection.from - before.nodeSize;
+  let to = selection.from;
+  for (;;) {
+    const nb = doc.resolve(from).nodeBefore;
+    if (nb && nb.isText && tagT.isInSet(nb.marks)) from -= nb.nodeSize;
+    else break;
+  }
+  for (;;) {
+    const na = doc.resolve(to).nodeAfter;
+    if (na && na.isText && tagT.isInSet(na.marks)) to += na.nodeSize;
+    else break;
+  }
+  view.dispatch(state.tr.delete(from, to));
+  return true;
+}
+
+const TagToken = Extension.create({
+  name: "tagToken",
+  addKeyboardShortcuts() {
+    return {
+      Backspace: () => tagBackspace(this.editor),
+    };
+  },
+});
+
+/* 引用回车逃逸：空引用回车解壳回正文；引用末尾回车在下方另起正文段落
+   （Tiptap 默认回车继续留在引用里，与旧编辑器行为不一致 —— hr 等独立块会被塞进引用） */
+const QuoteEscape = Extension.create({
+  name: "quoteEscape",
+  addKeyboardShortcuts() {
+    return {
+      Enter: () => {
+        const { editor } = this;
+        if (!editor.isActive("blockquote")) return false;
+        const { state } = editor;
+        const { $from, empty } = state.selection;
+        if (!empty) return false;
+        let depth = -1;
+        for (let d = $from.depth; d > 0; d -= 1) {
+          if ($from.node(d).type.name === "blockquote") {
+            depth = d;
+            break;
+          }
+        }
+        if (depth < 0) return false;
+        /* 空引用：解壳回正文段落 */
+        if ($from.parent.content.size === 0) {
+          return editor.commands.lift("blockquote");
+        }
+        /* 末尾回车：引用下方另起一段，光标落进新段 */
+        if ($from.pos !== $from.end()) return false;
+        const tr = state.tr;
+        const at = $from.after(depth);
+        tr.insert(at, state.schema.nodes.paragraph.create());
+        tr.setSelection(TextSelection.create(tr.doc, at + 1));
+        tr.scrollIntoView();
+        editor.view.dispatch(tr);
+        return true;
+      },
+    };
+  },
+});
+
+function buildExtensions(color: string, placeholder: string) {
+  return [
+    StarterKit.configure({
+      heading: { levels: [1, 2, 3] },
+      /* 本编辑器没有代码场景：schema 里不注册 code/codeBlock，
+         行内转换的黑名单也就不用考虑它们（` 引号照常当普通字符） */
+      code: false,
+      codeBlock: false,
+      link: { openOnClick: false },
+      trailingNode: { node: "paragraph" },
+    }),
+    Highlight.configure({ HTMLAttributes: { class: "m-mark" } }),
+    TagMark.configure({ color }),
+    AssetFigure,
+    TagToken,
+    QuoteEscape,
+    InlineNormalize.configure({ color }),
+    Placeholder.configure({ placeholder }),
+  ];
+}
+
+/* ---------- 正文（Tiptap） ---------- */
+function insertFigureAt(view: PMEditorView, im: { id: string; color: string; path?: string | null }) {
+  const nodeT = view.state.schema.nodes.assetFigure;
+  if (!nodeT) return;
+  const fig = nodeT.create({ assetId: im.id, alt: "配图", color: im.color, hasPath: !!im.path });
+  view.dispatch(view.state.tr.replaceSelectionWith(fig).scrollIntoView());
+}
 
 function RichBody({
-  html, plain, color, assets, postId, placeholder, onChangeBody, onUploadImage, onRemoveAsset, bodyRef,
+  postId, html, plain, color, assets, placeholder, onChangeBody, onUploadImage, onRemoveAsset, onReady,
 }: {
+  postId: string;
   html: string;
   plain: string;
   color: string;
   assets: { id: string; color?: string | null; path?: string | null }[];
-  postId: string;
   placeholder: string;
   onChangeBody: (html: string, plain: string) => void;
   /** 上传图片并返回新素材（插入正文用真实文件） */
   onUploadImage: (file: File) => Promise<{ id: string; color: string; path?: string | null } | null>;
   onRemoveAsset: (id: string) => void;
-  bodyRef: React.RefObject<RichBodyHandle | null>;
+  onReady: (editor: Editor | null) => void;
 }) {
-  const ref = React.useRef<HTMLDivElement | null>(null);
-  const inputRef = React.useRef<HTMLInputElement | null>(null);
-  const composing = React.useRef(false);
-  const timer = React.useRef<number | null>(null);
-  const snapTimer = React.useRef<number | null>(null);
-  const hist = React.useRef({ stack: [] as string[], idx: -1, lock: false });
-
+  /* editorProps 在编辑器创建时就固化了（不随重渲染更新），回调一律走 ref 取最新 */
+  const cbRef = React.useRef({ onChangeBody, onUploadImage, onRemoveAsset });
   React.useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    el.innerHTML = html && html.trim() ? html : mdToHtmlLocal(plain || "", color, assets);
-    normalizeEdges(el);
-    hist.current = { stack: [el.innerHTML], idx: 0, lock: false };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    cbRef.current = { onChangeBody, onUploadImage, onRemoveAsset };
+  });
+  /* 首次回填：bodyHtml 为空时用纯文本现渲染一份（老数据/新稿）；只在切稿时重算，
+     编辑过程中的 props 更新不回灌编辑器 */
+  const initialContent = React.useMemo(
+    () => (html && html.trim() ? html : mdToHtmlLocal(plain || "", color, assets)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 内容只随稿子切换重算
+    [postId],
+  );
+
+  const editor = useEditor({
+    immediatelyRender: false,
+    content: initialContent || undefined,
+    extensions: buildExtensions(color, placeholder),
+    editorProps: {
+      attributes: {
+        class: "m-richbody",
+        role: "textbox",
+        "aria-multiline": "true",
+        "aria-label": "正文",
+        spellcheck: "false",
+      },
+      /* 粘贴一律降级为纯文本：网页/整选区 HTML 会把外部结构样式原样带进正文 */
+      transformPastedHTML: (paste) => {
+        const box = document.createElement("div");
+        box.innerHTML = paste;
+        return box.textContent || "";
+      },
+      handlePaste: (view, event) => {
+        const items = Array.from(event.clipboardData?.items ?? []);
+        const img = items.find((it) => it.type.startsWith("image"));
+        if (!img) return false;
+        const file = img.getAsFile();
+        if (!file) return false;
+        void cbRef.current.onUploadImage(file).then((im) => {
+          if (im) insertFigureAt(view, im);
+        });
+        return true;
+      },
+      /* 配图块右上角的删除钮：点它从正文摘掉这张图；素材不再被引用时通知外层删素材 */
+      handleClick: (view, pos, event) => {
+        const target = event.target instanceof Element ? event.target : null;
+        const del = target?.closest(".m-fig-del");
+        if (!del) return false;
+        const $pos = view.state.doc.resolve(pos);
+        let nodePos = -1;
+        let node = $pos.nodeAfter;
+        if (node && node.type.name === "assetFigure") {
+          nodePos = pos;
+        } else if ($pos.nodeBefore && $pos.nodeBefore.type.name === "assetFigure") {
+          node = $pos.nodeBefore;
+          nodePos = pos - node.nodeSize;
+        }
+        if (nodePos < 0 || !node) return false;
+        const assetId = String(node.attrs.assetId ?? "");
+        view.dispatch(view.state.tr.delete(nodePos, nodePos + node.nodeSize));
+        let still = false;
+        view.state.doc.descendants((n) => {
+          if (!still && n.type.name === "assetFigure" && n.attrs.assetId === assetId) still = true;
+        });
+        if (assetId && !still) cbRef.current.onRemoveAsset(assetId);
+        return true;
+      },
+    },
+    onCreate: ({ editor: ed }) => onReady(ed),
+    onDestroy: () => onReady(null),
+    onUpdate: ({ editor: ed }) => {
+      cbRef.current.onChangeBody(ed.getHTML(), htmlToPlain(ed.view.dom as HTMLElement));
+    },
   }, [postId]);
 
-  const push = () => {
-    const el = ref.current;
-    if (!el) return;
-    const s = serializeBody(el, color);
-    onChangeBody(s.html, s.plain);
-  };
-
-  const record = (immediate: boolean) => {
-    const el = ref.current;
-    if (!el || hist.current.lock) return;
-    const htmlNow = el.innerHTML;
-    const st = hist.current;
-    if (st.stack[st.idx] === htmlNow) return;
-    const commit = () => {
-      if (st.stack[st.idx] === htmlNow) return;
-      st.stack = st.stack.slice(0, st.idx + 1);
-      st.stack.push(htmlNow);
-      st.idx = st.stack.length - 1;
-      if (st.stack.length > 80) {
-        st.stack.shift();
-        st.idx -= 1;
-      }
-    };
-    if (snapTimer.current) window.clearTimeout(snapTimer.current);
-    if (immediate) commit();
-    else snapTimer.current = window.setTimeout(commit, 350);
-  };
-
-  const applyHtml = (nextHtml: string) => {
-    const el = ref.current;
-    if (!el) return;
-    const caret = caretOffset(el);
-    hist.current.lock = true;
-    el.innerHTML = nextHtml;
-    normalizeEdges(el);
-    setCaretOffset(el, Math.min(caret == null ? nextHtml.length : caret, nextHtml.length));
-    const st = hist.current;
-    if (st.idx >= 0) st.stack[st.idx] = el.innerHTML;
-    hist.current.lock = false;
-    push();
-  };
-
-  const undo = () => {
-    const st = hist.current;
-    if (st.idx <= 0) return;
-    st.idx -= 1;
-    applyHtml(st.stack[st.idx]!);
-  };
-  const redo = () => {
-    const st = hist.current;
-    if (st.idx >= st.stack.length - 1) return;
-    st.idx += 1;
-    applyHtml(st.stack[st.idx]!);
-  };
-
-  const removeFig = (id: string) => {
-    const el = ref.current;
-    if (!el) return;
-    const fig = el.querySelector(`.m-fig[data-asset="${id}"]`);
-    if (!fig) return;
-    fig.remove();
-    normalizeEdges(el);
-    push();
-    record(true);
-  };
-
-  const cancelHighlight = () => {
-    if (timer.current) window.clearTimeout(timer.current);
-  };
-  const scheduleHighlight = () => {
-    if (timer.current) window.clearTimeout(timer.current);
-    timer.current = window.setTimeout(() => {
-      const el = ref.current;
-      if (!el || composing.current) return;
-      const sel = window.getSelection();
-      let marker: HTMLSpanElement | null = null;
-      if (sel && sel.rangeCount) {
-        const range = sel.getRangeAt(0);
-        if (el.contains(range.startContainer)) {
-          marker = document.createElement("span");
-          marker.setAttribute("data-caret", "1");
-          const end = range.cloneRange();
-          end.collapse(false);
-          end.insertNode(marker);
-        }
-      }
-      const s = serializeBody(el, color);
-      const strip = (h: string) => h.split('<span data-caret="1"></span>').join("");
-      if (strip(s.html) === strip(el.innerHTML)) {
-        marker?.remove();
-        return;
-      }
-      el.innerHTML = s.html;
-      const st = hist.current;
-      if (st.idx >= 0) st.stack[st.idx] = s.html;
-      const at = el.querySelector("[data-caret]");
-      if (at) {
-        const range = document.createRange();
-        range.setStartBefore(at);
-        range.collapse(true);
-        const now = window.getSelection();
-        now?.removeAllRanges();
-        now?.addRange(range);
-        at.remove();
-      }
-      push();
-    }, 500);
-  };
-
-  const insertFigure = (im: { id: string; color: string; path?: string | null }) => {
-    const el = ref.current;
-    if (!el) return;
-    el.focus();
-    document.execCommand("insertHTML", false, figHtml(im.id, "配图", im.color, im.path) + "<p><br></p>");
-    normalizeEdges(el);
-    push();
-    record(true);
-    scheduleHighlight();
-  };
-
-  const pickImage = () => {
-    inputRef.current?.click();
-  };
-
-  const handlePaste = (e: React.ClipboardEvent) => {
-    const items = (e.clipboardData && e.clipboardData.items) || [];
-    for (let i = 0; i < items.length; i += 1) {
-      if (items[i].type && items[i].type.startsWith("image")) {
-        const file = items[i].getAsFile();
-        if (!file) continue;
-        e.preventDefault();
-        void onUploadImage(file).then((im) => {
-          if (im) insertFigure(im);
-        });
-        return;
-      }
-    }
-  };
-
-  const runCommand = (kind: string) => {
-    const el = ref.current;
-    if (!el) return;
-    cancelHighlight();
-    el.focus();
-    if (kind === "h1" || kind === "h2" || kind === "h3" || kind === "blockquote") {
-      setBlockTag(el, kind);
-    } else if (kind === "p") {
-      setBlockTag(el, "p");
-    } else if (kind === "ul" || kind === "ol") {
-      setBlockList(el, kind === "ul" ? "UL" : "OL");
-    } else if (kind === "hr") {
-      document.execCommand("insertHorizontalRule");
-      normalizeEdges(el);
-    } else if (kind === "link") {
-      const url = window.prompt("链接地址", "https://");
-      if (url) document.execCommand("createLink", false, url);
-    } else {
-      document.execCommand(kind);
-    }
-    push();
-    record(true);
-    scheduleHighlight();
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    const el = ref.current;
-    if (!el) return;
-    const mod = e.metaKey || e.ctrlKey;
-    if (mod && (e.key === "z" || e.key === "Z")) {
-      e.preventDefault();
-      if (e.shiftKey) redo();
-      else undo();
-      return;
-    }
-    if ((e.key === " " || e.key === "Enter") && !mod) {
-      cancelHighlight();
-      const block = blockAt(el);
-      if (block instanceof HTMLElement) {
-        const text = block.textContent ?? "";
-        const caretAtEnd = caretAtBlockEnd(el);
-        const marker = caretAtEnd ? text.trim() : null;
-        const table: Record<string, string> = { "#": "h1", "##": "h2", "###": "h3", ">": "blockquote" };
-        if (marker && table[marker]) {
-          e.preventDefault();
-          setBlockTag(el, table[marker]!);
-          stripMarker(el, marker.length);
-          push();
-          record(true);
-          return;
-        }
-        if (marker && (marker === "-" || marker === "*" || marker === "+" || marker === "1.")) {
-          e.preventDefault();
-          setBlockList(el, marker === "1." ? "OL" : "UL");
-          stripMarker(el, marker.length);
-          push();
-          record(true);
-          return;
-        }
-        if (marker && (marker === "---" || marker === "***" || marker === "___")) {
-          e.preventDefault();
-          stripMarker(el, marker.length);
-          document.execCommand("insertHorizontalRule");
-          normalizeEdges(el);
-          push();
-          record(true);
-          return;
-        }
-      }
-    }
-    const block = blockAt(el);
-    if (!(block instanceof HTMLElement)) return;
-    const tag = block.tagName.toLowerCase();
-    const formatted = /^h[1-3]$/.test(tag) || tag === "blockquote";
-    if (e.key === "Enter" && !e.shiftKey && formatted) {
-      cancelHighlight();
-      if (!block.textContent?.trim()) {
-        e.preventDefault();
-        setBlockTag(el, "p");
-        push();
-        record(true);
-      } else if (caretAtBlockEnd(el)) {
-        e.preventDefault();
-        const p = makeParagraph();
-        block.parentNode?.insertBefore(p, block.nextSibling);
-        caretInto(p, false);
-        push();
-        record(true);
-      }
-      return;
-    }
-    if (e.key === "Backspace" && formatted && caretAtBlockStart(el)) {
-      cancelHighlight();
-      e.preventDefault();
-      setBlockTag(el, "p");
-      push();
-      record(true);
-      return;
-    }
-    if (e.key === "Backspace" && atListHead(el)) {
-      cancelHighlight();
-      e.preventDefault();
-      setBlockList(el, "UL");
-      push();
-      record(true);
-    }
-  };
-
-  React.useEffect(() => {
-    if (!bodyRef) return;
-    bodyRef.current = {
-      insert: () => {
-        pickImage();
-      },
-      run: runCommand,
-      undo,
-      redo,
-      removeFig,
-    };
-  });
-
-  const handleClick = (e: React.MouseEvent) => {
-    const target = e.target instanceof Element ? e.target : null;
-    const del = target?.closest(".m-fig-del");
-    if (!del) return;
-    e.preventDefault();
-    const fig = del.closest(".m-fig");
-    const id = fig?.getAttribute("data-asset");
-    fig?.remove();
-    const s = ref.current ? serializeBody(ref.current, color) : null;
-    if (s) onChangeBody(s.html, s.plain);
-    if (id && s && !s.html.includes("asset://" + id)) onRemoveAsset(id);
-  };
-
-  return (
-    <>
-      <input
-        ref={inputRef}
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={async (e) => {
-          const f = e.target.files?.[0];
-          e.target.value = "";
-          if (!f) return;
-          const im = await onUploadImage(f);
-          if (im) insertFigure(im);
-        }}
-      />
-      <div
-        ref={ref}
-        className={"m-richbody" + ((plain || "").trim() ? "" : " is-empty")}
-      contentEditable
-      suppressContentEditableWarning
-      role="textbox"
-      aria-multiline="true"
-      spellCheck={false}
-      data-placeholder={placeholder}
-      onInput={() => { if (!composing.current) { push(); record(false); scheduleHighlight(); } }}
-      onCompositionStart={(e) => { composing.current = true; e.currentTarget.classList.add("is-composing"); }}
-      onCompositionEnd={(e) => { composing.current = false; e.currentTarget.classList.remove("is-composing"); push(); record(true); scheduleHighlight(); }}
-      onPaste={handlePaste}
-      onClick={handleClick}
-      onKeyDown={handleKeyDown}
-      onBlur={() => { push(); record(true); }}
-      />
-    </>
-  );
+  return <EditorContent editor={editor} />;
 }
 
 /* ---------- 工具栏 ---------- */
-function EditToolbar({ onCommand, onImage }: { onCommand: (kind: string) => void; onImage: () => void }) {
-  const [on, setOn] = React.useState<Record<string, boolean>>({});
-  const [menu, setMenu] = React.useState(false);
-  const barRef = React.useRef<HTMLDivElement | null>(null);
-  React.useEffect(() => {
-    const sync = () => {
-      const sel = window.getSelection();
-      const root = document.querySelector(".m-richbody");
-      if (!sel || !sel.rangeCount || !root || !root.contains(sel.getRangeAt(0).startContainer)) return;
-      const block = blockAt(root as HTMLElement);
-      const tag = block instanceof HTMLElement ? block.tagName.toLowerCase() : "";
-      setOn({
-        bold: document.queryCommandState("bold"),
-        italic: document.queryCommandState("italic"),
-        underline: document.queryCommandState("underline"),
-        strike: document.queryCommandState("strikeThrough"),
-        ul: document.queryCommandState("insertUnorderedList"),
-        ol: document.queryCommandState("insertOrderedList"),
-        h1: tag === "h1",
-        h2: tag === "h2",
-        h3: tag === "h3",
-        quote: tag === "blockquote",
-      });
-    };
-    document.addEventListener("selectionchange", sync);
-    return () => document.removeEventListener("selectionchange", sync);
-  }, []);
-  React.useEffect(() => {
-    if (!menu) return;
-    const away = (e: MouseEvent) => {
-      if (barRef.current && !barRef.current.contains(e.target as Node)) setMenu(false);
-    };
-    document.addEventListener("mousedown", away);
-    return () => document.removeEventListener("mousedown", away);
-  }, [menu]);
-  /* 工具栏：HeroUI ToggleButtonGroup（受控多选）；命令键（undo/redo/hr/link/img）不落选中，
-     heading 只负责开关标题菜单；选中态最终由 selectionchange 回流的 on 驱动 */
-  const selectedKeys = React.useMemo(() => {
-    const keys = new Set<string>();
-    for (const k of ["bold", "italic", "underline", "strike", "quote", "ul", "ol"] as const) {
-      if (on[k]) keys.add(k);
-    }
-    if (on.h1 || on.h2 || on.h3) keys.add("heading");
-    return keys;
-  }, [on]);
-
-  const TOGGLE_KEYS = ["bold", "italic", "underline", "strike", "quote", "ul", "ol"];
-  const handleSelectionChange = (keys: Set<unknown> | "all") => {
-    if (keys === "all") return;
-    const next = new Set(keys);
-    const diff = [...next].filter((k) => !selectedKeys.has(String(k)))
-      .concat([...selectedKeys].filter((k) => !next.has(k)));
-    const key = String(diff[0] ?? "");
-    if (!key) return;
-    if (key === "heading") { setMenu((v) => !v); return; }
-    if (key === "img") { onImage(); return; }
-    onCommand(key);
-    /* execCommand 不一定触发 selectionchange：切换键先乐观翻转，随后由 selectionchange 校准 */
-    if (TOGGLE_KEYS.includes(key)) setOn((prev) => ({ ...prev, [key]: !prev[key] }));
-  };
-
-  const items: { id: string; ic: React.ReactNode; title: string }[] = [
-    { id: "heading", ic: <span className="text-[15px] font-black leading-none">H</span>, title: "标题 1 / 2 / 3" },
-    { id: "bold", ic: <Bold size={16} strokeWidth={3.3} />, title: "加粗" },
-    { id: "italic", ic: <Italic size={16} strokeWidth={3.3} />, title: "斜体" },
-    { id: "underline", ic: <Underline size={16} strokeWidth={3.3} />, title: "下划线" },
-    { id: "strike", ic: <UnderlineX size={16} strokeWidth={3.3} />, title: "删除线" },
-    { id: "quote", ic: <QuoteDown size={16} strokeWidth={3.3} />, title: "引用（再点一次回正文）" },
-    { id: "ul", ic: <List size={16} strokeWidth={3.3} />, title: "无序列表" },
-    { id: "ol", ic: <OrderedList size={16} strokeWidth={3.3} />, title: "有序列表" },
-    { id: "hr", ic: <Minus size={16} strokeWidth={3.3} />, title: "插入分隔线" },
-    { id: "link", ic: <Link size={16} strokeWidth={3.3} />, title: "插入链接" },
-    { id: "img", ic: <Image size={16} strokeWidth={3.3} />, title: "在光标处插入配图（也可直接粘贴图片）" },
-    { id: "undo", ic: <Undo size={16} strokeWidth={3.3} />, title: "撤销" },
-    { id: "redo", ic: <Redo size={16} strokeWidth={3.3} />, title: "重做" },
-  ];
-  const sepsAfter = new Set(["quote", "ol", "img"]);
-
-  return (
-    <div className="relative mb-3.5 flex w-full items-center rounded-[12px] border border-line bg-card px-2 py-[5px]" role="toolbar" aria-label="编辑工具栏" ref={barRef}>
-      <ToggleButtonGroup
-        selectionMode="multiple"
-        selectedKeys={selectedKeys}
-        onSelectionChange={handleSelectionChange}
-        aria-label="格式"
-        className="flex w-full items-center justify-between gap-0.5"
-      >
-        {items.map((item) => (
-          <React.Fragment key={item.id}>
-            <ToggleButton
-              id={item.id}
-              variant="ghost"
-              isIconOnly
-              aria-label={item.title}
-              aria-expanded={menu}
-              className="m-0 inline-flex h-8 w-9 items-center justify-center rounded-[10px] p-0 text-ink transition-colors [--toggle-button-bg:transparent] [--toggle-button-bg-hover:var(--color-hover)] [--toggle-button-bg-pressed:var(--color-hover)] [--toggle-button-bg-selected:var(--color-selected)] [--toggle-button-bg-selected-hover:var(--color-selected)] [--toggle-button-bg-selected-pressed:var(--color-selected)] data-[selected=true]:bg-selected data-[selected=true]:text-ink"
-            >
-              {item.ic}
-            </ToggleButton>
-            {sepsAfter.has(item.id) && <ToggleButtonGroup.Separator className="h-5 w-[1.5px] flex-none rounded-sm bg-line" />}
-          </React.Fragment>
-        ))}
-      </ToggleButtonGroup>
-            {menu && (
-        <div className="absolute left-0 top-[calc(100%+6px)] z-20 flex min-w-[132px] flex-col gap-0.5 rounded-xl border border-line bg-card p-1.5 shadow-[0_10px_30px_rgba(15,15,15,0.12)] animate-pop" role="menu">
-          {[
-            { k: "h1", label: "标题 1" },
-            { k: "h2", label: "标题 2" },
-            { k: "h3", label: "标题 3" },
-            { k: "p", label: "正文" },
-          ].map((m) => (
-            <button
-              key={m.k}
-              type="button"
-              role="menuitem"
-              className={"rounded-lg px-2.5 py-2 text-left text-[13.5px] font-bold text-ink transition-colors hover:bg-hover" + (on[m.k] ? " bg-selected text-ink" : "")}
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={(e) => { e.preventDefault(); setMenu(false); onCommand(m.k); }}
-            >
-              {m.label}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ---------- 图片素材（真实文件上传；粘贴/工具栏插图仍走占位色块） ---------- */
+/* ---------- 图片素材（真实文件上传；正文插图/粘贴即真实图片） ---------- */
 const IMG_W = 72;
 const IMG_GAP = 8;
 
@@ -871,8 +519,11 @@ function ImageAssets({
      关键：渲染顺序必须由 dnd.order 驱动 —— order 变格子才真的让位，
      只让被拖格跟着指针走而其余不动，就是「看起来不可用」的根源 */
   const orderRef = React.useRef<string[]>([]);
+  // eslint-disable-next-line react-hooks/refs -- 渲染期同步 ids：拖拽判定要用最新顺序（原型同款模式）
   orderRef.current = list.map((im) => im.id);
+  // eslint-disable-next-line react-hooks/refs -- 同上
   const dnd = useLongPressReorder({
+    // eslint-disable-next-line react-hooks/refs
     ids: orderRef.current,
     ignoreSelector: "[aria-label^='删除素材']",
     onCommit: (ids, draggedId) => {
@@ -924,7 +575,7 @@ function ImageAssets({
       <div className="flex items-center gap-2.5">
         {/* 拖拽进行中放开裁剪：被拖的格子要能甩出素材条外，否则拖到边缘就被「吃掉」。
             relative 是必须的：格子的 offsetLeft 要以这行为基准，与指针坐标同系，拖拽判定才准 */}
-        <div className={"relative flex min-w-0 flex-1 gap-2" + (expanded ? " flex-wrap" : "") + (expanded || dnd.dragId ? " overflow-visible" : " overflow-hidden")} ref={(el) => { rowRef.current = el; dnd.gridRef.current = el; }}>
+        <div className={"relative flex min-w-0 flex-1 gap-2" + (expanded ? " flex-wrap" : "") + (expanded || dnd.dragId ? " overflow-visible" : " overflow-hidden")} ref={(el) => { /* eslint-disable-line react-hooks/immutability, react-hooks/refs -- 同一个元素挂两个 ref */ rowRef.current = el; dnd.gridRef.current = el; }}>
           <input
             ref={inputRef}
             type="file"
@@ -1157,6 +808,163 @@ function AssetSection({
   return null;
 }
 
+/* ---------- 工具栏：格式命令一排（吸附在写作列顶部）；图标 reicon 优先、缺的用 lucide ---------- */
+const TB_BTN = "flex h-8 min-w-9 items-center justify-center rounded-[9px] px-1.5 text-ink transition-colors data-[hovered=true]:bg-hover";
+
+type ToolbarState = {
+  h1: boolean; h2: boolean; h3: boolean;
+  bold: boolean; italic: boolean; underline: boolean; strike: boolean; highlight: boolean;
+  quote: boolean; ul: boolean; ol: boolean;
+  canUndo: boolean; canRedo: boolean;
+};
+
+function EditToolbar({ editor, onImage }: { editor: Editor | null; onImage: () => void }) {
+  const s = useEditorState({
+    editor,
+    selector: ({ editor: ed }): ToolbarState | null =>
+      ed
+        ? {
+            h1: ed.isActive("heading", { level: 1 }),
+            h2: ed.isActive("heading", { level: 2 }),
+            h3: ed.isActive("heading", { level: 3 }),
+            bold: ed.isActive("bold"),
+            italic: ed.isActive("italic"),
+            underline: ed.isActive("underline"),
+            strike: ed.isActive("strike"),
+            highlight: ed.isActive("highlight"),
+            quote: ed.isActive("blockquote"),
+            ul: ed.isActive("bulletList"),
+            ol: ed.isActive("orderedList"),
+            canUndo: ed.can().undo(),
+            canRedo: ed.can().redo(),
+          }
+        : null,
+  });
+  const [linkOpen, setLinkOpen] = React.useState(false);
+  const [linkUrl, setLinkUrl] = React.useState("");
+  const linkInputRef = React.useRef<HTMLInputElement | null>(null);
+  const on = s ?? { h1: false, h2: false, h3: false, bold: false, italic: false, underline: false, strike: false, highlight: false, quote: false, ul: false, ol: false, canUndo: false, canRedo: false };
+  /* 当前光标所在块，驱动标题菜单选中态 */
+  const blockTag = on.h1 ? "h1" : on.h2 ? "h2" : on.h3 ? "h3" : "p";
+  /* 标题/正文在引用里要先解壳再换块（对齐旧行为：壳不留在原地） */
+  const setHeading = (level: 1 | 2 | 3) => {
+    if (!editor) return;
+    const chain = editor.chain().focus();
+    if (editor.isActive("blockquote")) chain.toggleBlockquote();
+    chain.toggleHeading({ level }).run();
+  };
+  const setParagraph = () => {
+    if (!editor) return;
+    const chain = editor.chain().focus();
+    if (editor.isActive("blockquote")) chain.toggleBlockquote();
+    chain.setParagraph().run();
+  };
+  const cmd = (fn: (c: ReturnType<Editor["chain"]>) => unknown) => () => {
+    if (!editor) return;
+    fn(editor.chain().focus());
+  };
+
+  /* 链接：弹内联输入框（桌面壳里没有 window.prompt）；Esc / 点外面由 onOpenChange(false) 取消。
+     ProseMirror 在失焦后仍持有选区，confirm 里 focus() 会原位恢复，不用像旧实现那样存 Range */
+  const confirmLink = () => {
+    const url = linkUrl.trim();
+    setLinkOpen(false);
+    if (!url || !editor) return;
+    editor.chain().focus().extendMarkRange("link").setLink({ href: url }).run();
+  };
+  /* pressed 态压掉 HeroUI ghost 的深色底（--default=ink），否则菜单开着时标题按钮黑圈吞图标 */
+  const iconBtn = (active: boolean) => `min-w-9 data-[hovered=true]:bg-hover data-[pressed=true]:bg-hover ${active ? "bg-selected" : ""}`;
+
+  return (
+    <div
+      className="sticky top-0 z-10 mb-3.5 flex w-full items-center justify-between gap-0.5 rounded-[12px] border border-line bg-card px-2 py-[5px] shadow-[0_8px_12px_-10px_rgba(15,15,15,0.16)]"
+      role="toolbar"
+      aria-label="编辑工具栏"
+      /* mousedown 一律 preventDefault：点击任何按钮都不抢正文选区（HeroUI 的 press 走 pointer，不受影响） */
+      onMouseDownCapture={(e) => e.preventDefault()}
+    >
+      <Dropdown>
+        <Button
+          isIconOnly
+          variant="ghost"
+          className={iconBtn(!!(on.h1 || on.h2 || on.h3))}
+          aria-label="标题级别"
+        >
+          <HeadingIcon size={17} strokeWidth={2.2} />
+        </Button>
+        <Dropdown.Popover placement="bottom left">
+          <Dropdown.Menu
+            aria-label="标题级别"
+            selectionMode="single"
+            selectedKeys={[blockTag]}
+            onSelectionChange={(keys) => {
+              const k = keys === "all" ? undefined : Array.from(keys as Set<React.Key>)[0];
+              if (k == null) return;
+              const kind = String(k);
+              if (kind === "p") setParagraph();
+              else if (kind === "h1") setHeading(1);
+              else if (kind === "h2") setHeading(2);
+              else if (kind === "h3") setHeading(3);
+            }}
+          >
+            <Dropdown.Item key="h1" id="h1" textValue="标题 1">标题 1</Dropdown.Item>
+            <Dropdown.Item key="h2" id="h2" textValue="标题 2">标题 2</Dropdown.Item>
+            <Dropdown.Item key="h3" id="h3" textValue="标题 3">标题 3</Dropdown.Item>
+            <Dropdown.Item key="p" id="p" textValue="正文">正文</Dropdown.Item>
+          </Dropdown.Menu>
+        </Dropdown.Popover>
+      </Dropdown>
+      <Button isIconOnly variant="ghost" className={iconBtn(on.bold)} onPress={cmd((c) => c.toggleBold().run())} aria-label="加粗"><Bold size={17} strokeWidth={2.4} /></Button>
+      <Button isIconOnly variant="ghost" className={iconBtn(on.italic)} onPress={cmd((c) => c.toggleItalic().run())} aria-label="斜体"><Italic size={17} strokeWidth={2.4} /></Button>
+      <Button isIconOnly variant="ghost" className={iconBtn(on.underline)} onPress={cmd((c) => c.toggleUnderline().run())} aria-label="下划线"><Underline size={17} strokeWidth={2.4} /></Button>
+      <Button isIconOnly variant="ghost" className={iconBtn(on.strike)} onPress={cmd((c) => c.toggleStrike().run())} aria-label="删除线"><Strikethrough size={17} strokeWidth={2.2} /></Button>
+      <Button isIconOnly variant="ghost" className={iconBtn(on.highlight)} onPress={cmd((c) => c.toggleHighlight().run())} aria-label="高亮"><Highlighter size={17} strokeWidth={2.2} /></Button>
+      <Button isIconOnly variant="ghost" className={iconBtn(on.quote)} onPress={cmd((c) => c.toggleBlockquote().run())} aria-label="引用"><Quote size={17} strokeWidth={2.2} /></Button>
+      <span className="h-5 w-px flex-none bg-line" aria-hidden="true" />
+      <Button isIconOnly variant="ghost" className={iconBtn(on.ul)} onPress={cmd((c) => c.toggleBulletList().run())} aria-label="无序列表"><List size={17} strokeWidth={2.4} /></Button>
+      <Button isIconOnly variant="ghost" className={iconBtn(on.ol)} onPress={cmd((c) => c.toggleOrderedList().run())} aria-label="有序列表"><ListOrdered size={17} strokeWidth={2.2} /></Button>
+      <Button isIconOnly variant="ghost" className={iconBtn(false)} onPress={cmd((c) => c.setHorizontalRule().run())} aria-label="插入分隔线"><Minus size={17} strokeWidth={2.4} /></Button>
+      <span className="h-5 w-px flex-none bg-line" aria-hidden="true" />
+      <Popover
+        isOpen={linkOpen}
+        onOpenChange={(o) => {
+          setLinkOpen(o);
+          if (!o) setLinkUrl("");
+        }}
+      >
+        <Popover.Trigger>
+          <Button isIconOnly variant="ghost" className={iconBtn(false)} aria-label="插入链接"><Link2 size={17} strokeWidth={2.2} /></Button>
+        </Popover.Trigger>
+        <Popover.Content placement="bottom right">
+          <div className="flex items-center gap-1.5 rounded-xl border border-line bg-card p-1.5 shadow-[0_14px_40px_rgba(15,15,15,0.14)]">
+            <input
+              ref={linkInputRef}
+              autoFocus
+              className="w-[220px] rounded-lg bg-hover px-2.5 py-1.5 text-[13px] text-ink outline-none placeholder:text-ink3"
+              value={linkUrl}
+              placeholder="https://…"
+              onChange={(e) => setLinkUrl(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") { e.preventDefault(); confirmLink(); }
+              }}
+            />
+            <Button
+              className="min-w-0 rounded-lg bg-accent px-2.5 py-1.5 text-xs font-bold text-white data-[hovered=true]:brightness-105"
+              onPress={confirmLink}
+            >
+              确定
+            </Button>
+          </div>
+        </Popover.Content>
+      </Popover>
+      <Button isIconOnly variant="ghost" className={iconBtn(false)} onPress={onImage} aria-label="在光标处插入图片（也可直接粘贴）"><ImageIcon size={17} strokeWidth={2.2} /></Button>
+      <span className="h-5 w-px flex-none bg-line" aria-hidden="true" />
+      <Button isIconOnly variant="ghost" className={iconBtn(false)} isDisabled={!on.canUndo} onPress={cmd((c) => c.undo().run())} aria-label="撤销"><Undo size={17} strokeWidth={2.4} /></Button>
+      <Button isIconOnly variant="ghost" className={iconBtn(false)} isDisabled={!on.canRedo} onPress={cmd((c) => c.redo().run())} aria-label="重做"><Redo size={17} strokeWidth={2.4} /></Button>
+    </div>
+  );
+}
+
 /* ---------- EditorView ---------- */
 export function EditorView({
   post, saveState, onChangeField, onUploadImage, onRemoveAsset, onMoveImage, onUploadMedia, onBack, onPublish, onSave,
@@ -1175,6 +983,23 @@ export function EditorView({
 }) {
   const t = TYPE_META[post.type];
   const wordCount = (post.title + post.body).length;
+
+  /* Tiptap 实例由 RichBody 创建后交上来，工具栏/素材区都通过它操作正文 */
+  const [editor, setEditor] = React.useState<Editor | null>(null);
+  const imgInputRef = React.useRef<HTMLInputElement | null>(null);
+
+  /** 从正文摘掉一张配图（素材区删除/清空用） */
+  const removeFigure = (assetId: string) => {
+    if (!editor) return;
+    const tr = editor.state.tr;
+    let done = false;
+    editor.state.doc.descendants((node, pos) => {
+      if (done || node.type.name !== "assetFigure" || node.attrs.assetId !== assetId) return;
+      tr.delete(pos, pos + node.nodeSize);
+      done = true;
+    });
+    if (done) editor.view.dispatch(tr);
+  };
 
   /* 全编辑区拖拽上传：按稿子类型路由文件（video/audio 取第一个，image 逐张追加） */
   const [dropping, setDropping] = React.useState(false);
@@ -1205,14 +1030,6 @@ export function EditorView({
     return () => window.removeEventListener("keydown", onKey);
   }, [onSave]);
 
-  const richRef = React.useRef<RichBodyHandle | null>(null);
-  const insertImage = () => richRef.current?.insert();
-  const runCommand = (kind: string) => {
-    if (kind === "undo") richRef.current?.undo();
-    else if (kind === "redo") richRef.current?.redo();
-    else richRef.current?.run(kind);
-  };
-
   /* 两栏各自可滚：底部渐隐提示「下面还有」，滚到底自动收掉 */
   const writeRef = React.useRef<HTMLDivElement | null>(null);
   const phoneRef = React.useRef<HTMLDivElement | null>(null);
@@ -1227,9 +1044,9 @@ export function EditorView({
   React.useEffect(() => {
     syncMore();
     const raf = requestAnimationFrame(syncMore);
-    const t = window.setTimeout(syncMore, 260);
+    const t2 = window.setTimeout(syncMore, 260);
     window.addEventListener("resize", syncMore);
-    return () => { cancelAnimationFrame(raf); window.clearTimeout(t); window.removeEventListener("resize", syncMore); };
+    return () => { cancelAnimationFrame(raf); window.clearTimeout(t2); window.removeEventListener("resize", syncMore); };
   }, [post.id, post.title, post.body, post.bodyHtml, post.durationSec, post.assets.length, syncMore]);
 
   return (
@@ -1280,7 +1097,8 @@ export function EditorView({
       </div>
       <div className="grid min-h-0 flex-1 grid-cols-[1fr_460px]">
         <div className="relative flex min-h-0 overflow-hidden">
-          <div className="scroll-thin min-h-0 flex-1 overflow-auto border-r border-line px-10 py-[34px]" ref={writeRef} onScroll={syncMore}>
+          {/* 顶距放在首子元素上而不是容器 padding：工具栏 sticky 时才能贴到滚动区最顶 */}
+          <div className="scroll-thin min-h-0 flex-1 overflow-auto border-r border-line px-10 pb-[34px] [&>*:first-child]:mt-[34px]" ref={writeRef} onScroll={syncMore}>
             <AssetSection
               post={post}
               color={t.color}
@@ -1288,20 +1106,34 @@ export function EditorView({
               /* 素材区单删：图片类至少保留一张（正文里的删除不受限） */
               onRemoveImage={(id) => {
                 if (post.type === "image" && post.assets.length <= 1) return;
-                richRef.current?.removeFig(id);
+                removeFigure(id);
                 onRemoveAsset(id);
               }}
               /* 清空图片素材：保留第一张，清掉的图在正文里的引用一并移除 */
               onClearImages={() => {
                 post.assets.slice(1).forEach((a) => {
-                  richRef.current?.removeFig(a.id);
+                  removeFigure(a.id);
                   onRemoveAsset(a.id);
                 });
               }}
               onRemoveMedia={onRemoveAsset}
               onUploadMedia={onUploadMedia}
             />
-            <EditToolbar onCommand={runCommand} onImage={insertImage} />
+            {/* 格式工具栏：吸附在写作列顶部；undo/redo 走 Tiptap 历史 */}
+            <EditToolbar editor={editor} onImage={() => imgInputRef.current?.click()} />
+            <input
+              ref={imgInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={async (e) => {
+                const f = e.target.files?.[0];
+                e.target.value = "";
+                if (!f) return;
+                const im = await onUploadImage(f);
+                if (im && editor) insertFigureAt(editor.view, im);
+              }}
+            />
             <input
               className="w-full border-b-2 border-transparent bg-transparent pb-3 pt-1 text-[28px] font-bold leading-[1.35] tracking-[-0.4px] text-ink outline-none transition-colors placeholder:text-ink3 focus:border-accent"
               value={post.title}
@@ -1309,15 +1141,15 @@ export function EditorView({
               onChange={(e) => onChangeField("title", e.target.value)}
             />
             <RichBody
+              postId={post.id}
               html={post.bodyHtml}
               plain={post.body}
               color={t.color}
               assets={post.assets}
-              postId={post.id}
               onChangeBody={(html, plain) => { onChangeField("bodyHtml", html); onChangeField("body", plain); }}
               onUploadImage={onUploadImage}
               onRemoveAsset={onRemoveAsset}
-              bodyRef={richRef}
+              onReady={setEditor}
               placeholder={post.type === "article"
                 ? "开始写正文。粘贴图片或点工具栏「图片」，图会落在光标处；用 #标签 标记话题。"
                 : "开始写正文。用 #标签 标记话题，右侧的预览会实时更新。"}

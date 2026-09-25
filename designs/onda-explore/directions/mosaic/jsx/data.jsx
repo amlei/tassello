@@ -48,10 +48,10 @@ const PLATFORMS = [
     account: { name: "九漾Onda", kind: "个人认证", uid: "UID 5f2c91a4", until: "2027-01-15", checked: "09-15 20:41", lands: "直接发一条微博（这个号没开长文，正文限 500 字）" } },
   { id: "jike",      name: "即刻",       char: "即", color: "#FFD400", fg: "#16130E", state: "ok", link: "web.okjike.com/originalPost/", supports: ["article", "image", "video"],
     account: { name: "九漾", kind: "个人号", uid: "即刻 ID 9A3F7C", until: "2026-10-20", checked: "09-14 11:03", lands: "直接发一条动态" } },
-  { id: "bili",      name: "B站",        char: "B",  color: "#00A1D6", state: "fail", link: "www.bilibili.com/video/",    supports: ["article", "image", "video"],
+  { id: "bili",      name: "B站",        char: "B",  color: "#00A1D6", state: "fail", link: "www.bilibili.com/video/",    supports: ["article", "image", "video"], lands: "进投稿页，需要你确认封面与分区后提交",
     account: null, accountError: "登录态已过期（08-30 失效），需要重新登录 B站 账号" },
   /* X 是单色品牌：品牌色跟主题翻转（亮色黑标 / 深色白标），见 index.html 的 --plat-x */
-  { id: "x",         name: "X",          char: "X",  color: "var(--plat-x)", fg: "var(--plat-x-fg)", state: "fail", link: "x.com/i/status/",            supports: ["article", "image", "video"],
+  { id: "x",         name: "X",          char: "X",  color: "var(--plat-x)", fg: "var(--plat-x-fg)", state: "fail", link: "x.com/i/status/",            supports: ["article", "image", "video"], lands: "直接发一条推文（长文走 X Article）",
     account: null, accountError: "授权被平台撤销，需要重新登录 X 账号" },
   { id: "zhihu",     name: "知乎",       char: "知", color: "#0084FF", state: "ok",   link: "zhuanlan.zhihu.com/p/",      supports: ["article", "image", "video"],
     account: { name: "九漾 Onda", kind: "机构号授权", uid: "zhuanlan.zhihu.com/people/onda", until: "2026-12-08", checked: "09-16 08:30", lands: "存成一篇专栏草稿，发布按钮在知乎后台" } },

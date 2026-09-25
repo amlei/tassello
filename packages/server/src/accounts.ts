@@ -5,6 +5,7 @@ import { withPage } from "@tassello/cdp";
 import type { AccountDTO, PlatformDTO } from "@tassello/shared";
 import { fileSecretBox } from "./secrets";
 import { syncBrowserProfile } from "./profile";
+import { getSettings } from "./settings";
 
 function toAccountDTO(a: {
   id: string; platformId: string; state: string; failReason: string | null;
@@ -64,12 +65,14 @@ async function upsertAccount(
   return prisma.platformAccount.create({ data: { platformId, ...base } });
 }
 
-/** 获取 = 导入用户已登录的浏览器 Profile → 自动校验。登录不发生在本应用内 */
+/** 获取 = 导入用户已登录的浏览器 Profile → 自动校验。登录不发生在本应用内。
+ *  导入源 = 设置里的「浏览器选择」（importBrowser），切换后下次获取以新浏览器整体覆盖 */
 export async function acquireAccount(platformId: string): Promise<AccountDTO> {
   const adapter = getAdapter(platformId);
   if (!adapter) throw new Error(`平台 ${platformId} 的适配器尚未接入`);
   const prisma = getPrisma();
-  const sync = await syncBrowserProfile();
+  const { importBrowser } = await getSettings();
+  const sync = await syncBrowserProfile(importBrowser);
   if (!sync.ok) {
     const saved = await upsertAccount(platformId, { state: "fail", failReason: sync.message });
     return toAccountDTO(saved);

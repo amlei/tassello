@@ -42,6 +42,7 @@ export function useLongPressReorder({
   const orderRef = React.useRef<string[] | null>(null);
 
   const idsRef = React.useRef(ids);
+  // eslint-disable-next-line react-hooks/refs -- 同步 ref 是拖拽判定的前提（原型同款模式）
   idsRef.current = ids;
 
   const slot = (el: HTMLElement) => ({ left: el.offsetLeft, top: el.offsetTop, w: el.offsetWidth, h: el.offsetHeight });

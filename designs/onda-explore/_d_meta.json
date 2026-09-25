@@ -12,31 +12,13 @@
         }
       ]
     },
-    "方向 A · 书房": {
-      "versions": [
-        {
-          "path": "directions/paper/index.html",
-          "createdAt": "2026-09-12T15:59:46.214Z",
-          "status": "needs-review"
-        }
-      ]
-    },
-    "方向 B · 涟漪": {
-      "versions": [
-        {
-          "path": "directions/ripple/index.html",
-          "createdAt": "2026-09-12T15:59:46.239Z",
-          "status": "needs-review"
-        }
-      ]
-    },
     "方向 C · 色板": {
       "versions": [
         {
           "path": "directions/mosaic/index.html",
           "createdAt": "2026-09-12T15:59:46.263Z",
           "status": "needs-review",
-          "subtitle": "中性工作台 + 主题修补 + 全卡片 + 素材管理 + 弹窗删稿 + 自动保存",
+          "subtitle": "中性工作台 + 主题修补 + 全卡片 + 列表样式补全 + 自动保存",
           "viewport": {
             "width": 1440,
             "height": 900
@@ -46,5 +28,5 @@
     }
   },
   "createdAt": "2026-09-12T15:59:46.188Z",
-  "updatedAt": "2026-09-22T23:44:26.593Z"
+  "updatedAt": "2026-09-25T02:18:03.310Z"
 }

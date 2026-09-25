@@ -122,7 +122,8 @@ function PhoneCard({ post, paneRef, onScroll, more }) {
           <div className="who">九漾小记</div>
         </div>
       </div>
-      <h2 className="m-phone-title">{post.title || "未命名"}</h2>
+      {/* 没有标题就不渲染占位：预览长得像发出去的样子，空标题不发出去 */}
+      {post.title ? <h2 className="m-phone-title">{post.title}</h2> : null}
       {/* 只有正文这一块滚：素材与页脚留在屏内，长文不会把它们顶走。
           正文只读 —— 链接点了新开页，不把原型带走 */}
       <div className="m-phone-body">

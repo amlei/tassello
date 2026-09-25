@@ -4,7 +4,7 @@
 import React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { TYPE_META, TYPE_ORDER, type AppSettings, type ContentType, type PlatformDTO } from "@tassello/shared";
+import { TYPE_META, TYPE_ORDER, type AppSettings, type ContentType, type ImportBrowserDTO, type ImportBrowserId, type PlatformDTO } from "@tassello/shared";
 import { api } from "./api";
 import { MosaicLogo } from "./bits";
 import { SettingsSheet } from "./settings";
@@ -120,12 +120,13 @@ function NewContentDropdown({ guard }: { guard?: (nav: () => void) => void }) {
   );
 }
 
-/* 设置入口：点开时按需拉平台与设置数据，再弹设置层 */
+/* 设置入口：点开时按需拉平台、设置与浏览器候选数据，再弹设置层 */
 function SettingsGate({ missing }: { missing: number }) {
   const [open, setOpen] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
   const [platforms, setPlatforms] = React.useState<PlatformDTO[] | null>(null);
   const [settings, setSettings] = React.useState<AppSettings | null>(null);
+  const [browsers, setBrowsers] = React.useState<ImportBrowserDTO[]>([]);
   const [busyId, setBusyId] = React.useState<string | null>(null);
 
   const openSheet = async () => {
@@ -133,9 +134,10 @@ function SettingsGate({ missing }: { missing: number }) {
     if (platforms && settings) return;
     setLoading(true);
     try {
-      const [ps, st] = await Promise.all([api.listPlatforms(), api.getSettings()]);
+      const [ps, st, bs] = await Promise.all([api.listPlatforms(), api.getSettings(), api.listImportBrowsers()]);
       setPlatforms(ps);
       setSettings(st);
+      setBrowsers(bs);
     } catch {
       setOpen(false);
     } finally {
@@ -172,6 +174,12 @@ function SettingsGate({ missing }: { missing: number }) {
     await refreshPlatforms();
     setBusyId(null);
   };
+  /* 浏览器选择：乐观更新 + 落库；失败不回滚（下次打开设置会以服务端为准） */
+  const setImportBrowser = async (id: ImportBrowserId) => {
+    if (!settings) return;
+    setSettings({ ...settings, importBrowser: id });
+    try { await api.saveSettings({ importBrowser: id }); } catch {}
+  };
 
   return (
     <>
@@ -190,11 +198,13 @@ function SettingsGate({ missing }: { missing: number }) {
         <SettingsSheet
           platforms={platforms}
           settings={settings}
+          browsers={browsers}
           busyId={busyId}
           onToggleDefault={(t, id) => void toggleDefault(t, id)}
           onAcquireAndSetDefault={(t, id) => void acquireAndSetDefault(t, id)}
           onVerify={(id) => void verify(id)}
           onAcquire={(id) => void acquire(id)}
+          onImportBrowser={(id) => void setImportBrowser(id)}
           onClose={() => setOpen(false)}
         />
       )}
