@@ -64,6 +64,25 @@
 - 用户信息：后台 DOM（`G青春列车`、总用户数等）+ `wx.commonData.data`（`nickname / uin`）。
 - API 通道（MVP 主路线）：`appid/appsecret` → `access_token`（2h，自动续）→ `draft/add` / 素材上传 / `freepublish`；受 **IP 白名单**限制。本机为移动动态公网 IP（实测会漂移），白名单只能 mp 后台手动改——预检/提示策略延后到验证阶段，`Setting.wechat_ip_whitelist` + `wechat_channel(api|browser)` 先留位。
 
+### 2.5 微信公众号四种内容形态（2026-09-25 真机验证）
+
+mp 后台首页「新的创作」四项与 tassello 内容类型一一对应，**共用同一个新编辑器**
+`/cgi-bin/appmsg?t=media/appmsg_edit_v2&action=edit&isNew=1&type=77&createType=<n>&token=…`：
+
+| 形态 | createType | 自动化程度 | 通道要点 |
+|---|---|---|---|
+| 文章 | 0 | 全自动填充 | 标题 `textarea#title` + 摘要 `#js_description` + 正文 ProseMirror；正文配图走页面上下文 `filetransfer?action=upload_material&scene=8`（实测免 ticket），拿 `cdn_url` 换掉 `figure[data-asset]` 后合成 paste 进编辑器 |
+| 贴图 | 8 | 首图自动 | 专用图片 input（accept 带 bmp）。**上传器喂过一次即失效**：mp 重建后旧 input 成死节点、重新喂不再触发，且合成/真实点击添加区都不再建新 input——第二张起只能人工点加图 |
+| 视频 | 5 | 编辑器+弹窗自动开到「本地上传」，选文件人工 | `filetransfer scene=29` 能建 video 类素材但服务端探测不出时长（width/height/duration 全 0），进不了「选择视频」素材库；mp 正式视频上传是独立的分片协议（appmsgvideo），v1 未实现。`Page.setInterceptFileChooserDialog` 拦截在 Chrome 153（headless 与 visible 实测）均不触发 `fileChooserOpened`，chooser 通道整体作废 |
+| 播客/音频 | 7 | 全自动填充 | `filetransfer scene=4` 上传音频素材（实测进「插入音频」素材库列表、时长正确）→ 点 `a.audio_cover_empty.js_replace_media` 开弹窗 → 勾选条目（**checkbox 是隐藏的，点 label 中心会落在试听按钮上，必须直接点 checkbox 本体**）→ 点「插入」 |
+
+工程结论（全部踩坑实测）：
+
+1. **正文填充必须走合成 paste**（`new ClipboardEvent("paste", { clipboardData })`）：编辑器是 ProseMirror，直接 innerHTML 只骗过 DOM 骗不过编辑器状态，发表时内容会丢。
+2. **`DOM.setFileInputFiles` 只对「初始化即存在」的 input 有效**；mp 大量上传入口是点击后才懒创建的 input，且文件框只认 isTrusted 手势——`Input.dispatchMouseEvent` 真实点击也弹不出 chooser（headless/visible 均如此）。稳定通道是页面上下文 `filetransfer` fetch 与「初始化即存在」的 input。
+3. 探针脚本保留在 `packages/platforms/wechat/scripts/`（probe / inspect2 / list-tabs 等，可独立运行），下次 mp 改版直接重跑对比。
+4. 探测期间在 mp 素材库留下了少量测试文件（probe.mp3 / probe2.mp4 / probe.png 等），可在 mp 后台素材库手动删除。
+
 ## 3. 共性工程结论
 
 1. **登录态迁移可行**：`Cookies(+journal)` + `Local Storage` + `Session Storage` + `Local State` + `Preferences` 拷贝到专用 profile 后，微博/知乎/公众号会话全部存活（macOS 下 cookie 加密密钥在用户 Keychain，同机同 Chrome 有效）。生产流程即此：**「重新获取账号」= 用日常 Chrome 的 Default profile 覆盖应用专用 profile（先停应用侧 Chrome 释放文件锁）→ 自动校验**；覆盖后仍失效说明源 Cookie 真过期，才落到打开浏览器人工登录的兜底。

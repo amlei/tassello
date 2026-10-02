@@ -231,7 +231,7 @@ export type PlatformMeta = {
 2. ✅ Electron 壳（dev 模式 spawn `next dev` 并开窗；打包进一期后置）
 3. ✅ Prisma 模型 + 原型 60 篇种子数据，三视图复刻（library/queue/editor + 设置 + 发布弹层 + 手机预览）
 4. ✅ `cdp` 包移植 + 会话池；**微博真实链路打通**（verify 拉回真实账号 → 填充编辑器 → 人工确认 → 标记完成，2026-09-19 E2E）
-5. 🚧 公众号 API 通道（draft/add 已实现；appid/secret 灌入与真实 draft 验证待做）+ CDP 兜底（已实现骨架）
+5. ✅ 公众号 CDP 通道四种内容形态全接入（2026-09-25 真机验证：文章全自动、贴图首图自动、播客全自动、视频编辑器自动+选文件人工，见 `docs/platforms.md` §2.5）；API 通道（draft/add）保留为增强
 6. ⏳ xhs（creator 通道，接口已验证）；其余 CDP 平台逐个接入
 7. ⏳ `agent`/MCP 包装（单列一期，不在 MVP）
 
