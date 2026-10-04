@@ -8,11 +8,15 @@
     "packages/platforms/*"
   ],
   "scripts": {
-    "dev": "cd apps/web && bun run dev",
+    "build:obsidian": "cd apps/obsidian && bun run build",
     "build:web": "cd apps/web && bun run build",
-    "start:web": "cd apps/web && bun run start",
-    "desktop": "cd apps/desktop && bun run desktop",
     "db:migrate": "cd packages/db && bunx prisma migrate dev",
+    "desktop": "cd apps/desktop && bun run desktop",
+    "dev": "bun scripts/dev.ts",
+    "dev:web": "cd apps/web && bun run dev",
+    "package:obsidian": "cd apps/obsidian && bun run package",
+    "start:web": "cd apps/web && bun run start",
+    "test:obsidian": "cd apps/obsidian && bun test",
     "typecheck": "bun run scripts/typecheck.ts"
   },
   "devDependencies": {

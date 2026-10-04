@@ -8,6 +8,8 @@ import { TYPE_META, TYPE_ORDER, type AppSettings, type ContentType, type ImportB
 import { api } from "./api";
 import { MosaicLogo } from "./bits";
 import { SettingsSheet } from "./settings";
+import { useImportProfile } from "./import-profile";
+import { toggleSidebar, useSidebarCollapsed } from "./sidebar-toggle";
 import { Button, Dropdown } from "@heroui/react";
 import { Add, Tuning2 } from "reicon-react";
 
@@ -28,6 +30,24 @@ export function Rail({
   guard?: (nav: () => void) => void;
 }) {
   const router = useRouter();
+  /* 专注模式：⌘\（Windows Ctrl+\）或红绿灯右侧按钮收起/展开左栏；
+   * 收起后主区占满，配合编辑器自动收起进入心流编辑 */
+  const collapsed = useSidebarCollapsed();
+  React.useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "\\") {
+        e.preventDefault();
+        toggleSidebar();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+  /* 收起状态挂到 body：主区头部（标题/编辑器顶栏 .focuspad）据此让位红绿灯与悬浮按钮 */
+  React.useEffect(() => {
+    document.body.classList.toggle("rail-collapsed", collapsed);
+    return () => document.body.classList.remove("rail-collapsed");
+  }, [collapsed]);
   const missing = platforms.filter((p) => p.status === "active" && (!p.account || p.account.state !== "ok")).length;
   /* guard 存在时接管 Link：先过守卫，放行后再编程式跳转 */
   const guardedNav = (href: string) =>
@@ -44,12 +64,35 @@ export function Rail({
     }`;
 
   return (
-    <aside className="flex h-full min-h-0 w-[236px] flex-none flex-col gap-3.5 border-r border-line bg-rail px-3.5 pb-3.5 pt-[18px]" aria-label="工作台导航">
-      <div className="flex items-center gap-[11px] px-2">
+    <>
+    <aside
+      className={`relative flex h-full min-h-0 flex-none flex-col gap-3.5 overflow-hidden border-r border-line bg-rail pb-3.5 pt-[18px] transition-[width] duration-200 ease-out ${
+        collapsed ? "w-0 border-r-transparent px-0" : "w-[236px] px-3.5"
+      }`}
+      aria-label="工作台导航"
+      aria-hidden={collapsed || undefined}
+    >
+      {/* 红绿灯是系统真控件（hiddenInset），折叠按钮放侧栏右上角（见 .rail-toggle） */}
+      {/* 顶部整条可拖动：盖住红绿灯一行；折叠按钮自身 no-drag 不受影响 */}
+      <div className="rail-topdrag" aria-hidden="true" />
+      {!collapsed && (
+        <button
+          type="button"
+          onClick={toggleSidebar}
+          aria-label="收起侧栏"
+          title="收起侧栏 (⌘\)"
+          className="rail-toggle"
+        >
+          <PanelIcon />
+        </button>
+      )}
+      {/* 内容包一层固定宽：收起动画时只裁切不回绕 */}
+      <div className="flex w-[208px] flex-none flex-col gap-3.5" style={{ minHeight: 0, flex: 1 }}>
+      {/* macOS 桌面壳下：.rail-brand 让位红绿灯（见 globals.css），整块可拖动窗口 */}
+      <div className="rail-brand app-drag flex items-center gap-[11px] px-2">
         <MosaicLogo size={10} />
         <div>
           <div className="text-[18px] font-bold tracking-[-0.3px]">九漾 Onda</div>
-          <div className="font-mono text-[9.5px] tracking-[0.8px] text-ink3 uppercase">content worksbench</div>
         </div>
       </div>
 
@@ -81,7 +124,26 @@ export function Rail({
       <div className="mt-auto border-t border-line pt-3">
         <SettingsGate missing={missing} />
       </div>
+      </div>
     </aside>
+    {/* 收起后：左上角悬浮展开按钮 + 右下角轻提示 */}
+    {collapsed && (
+      <button type="button" onClick={toggleSidebar} aria-label="展开侧栏" title="展开侧栏 (⌘\)" className="rail-float">
+        <PanelIcon />
+      </button>
+    )}
+    {collapsed && <div className="rail-hint">专注模式 · ⌘\ 展开侧栏</div>}
+    </>
+  );
+}
+
+/* 侧栏折叠：左宽右窄的面板隐喻（reicon-react 里没有合适的，就地画一个） */
+function PanelIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinejoin="round" aria-hidden="true">
+      <rect x="1.8" y="2.4" width="12.4" height="11.2" rx="2.2" />
+      <path d="M6.2 2.4v11.2" />
+    </svg>
   );
 }
 
@@ -155,25 +217,14 @@ function SettingsGate({ missing }: { missing: number }) {
     setSettings(next);
     try { await api.saveSettings({ defaultTargets: next.defaultTargets }); } catch {}
   };
-  const acquireAndSetDefault = async (type: ContentType, id: string) => {
-    setBusyId(id);
-    try { await api.accountAction(id, "acquire"); } catch {}
-    await refreshPlatforms();
-    setBusyId(null);
-    await toggleDefault(type, id);
-  };
   const verify = async (id: string) => {
     setBusyId(id);
     try { await api.accountAction(id, "verify"); } catch {}
     await refreshPlatforms();
     setBusyId(null);
   };
-  const acquire = async (id: string) => {
-    setBusyId(id);
-    try { await api.accountAction(id, "acquire"); } catch {}
-    await refreshPlatforms();
-    setBusyId(null);
-  };
+  /* 导入登录态：全局唯一入口 —— 确认弹窗 + 覆盖 + 后台全量重校验（结果靠轮询平台状态） */
+  const imp = useImportProfile(refreshPlatforms);
   /* 浏览器选择：乐观更新 + 落库；失败不回滚（下次打开设置会以服务端为准） */
   const setImportBrowser = async (id: ImportBrowserId) => {
     if (!settings) return;
@@ -200,14 +251,15 @@ function SettingsGate({ missing }: { missing: number }) {
           settings={settings}
           browsers={browsers}
           busyId={busyId}
+          importing={imp.importing}
           onToggleDefault={(t, id) => void toggleDefault(t, id)}
-          onAcquireAndSetDefault={(t, id) => void acquireAndSetDefault(t, id)}
           onVerify={(id) => void verify(id)}
-          onAcquire={(id) => void acquire(id)}
+          onImport={imp.ask}
           onImportBrowser={(id) => void setImportBrowser(id)}
           onClose={() => setOpen(false)}
         />
       )}
+      {imp.overlay}
     </>
   );
 }

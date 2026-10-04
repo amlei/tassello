@@ -8,7 +8,9 @@ import { api } from "./api";
 import { Rail } from "./rail";
 import { EditorView } from "./editor";
 import { PublishSheet } from "./publish";
+import { useImportProfile } from "./import-profile";
 import { FloatingPill } from "./bits";
+import { setSidebarCollapsed } from "./sidebar-toggle";
 import { Button, Modal } from "@heroui/react";
 
 export function EditorScreen({
@@ -31,6 +33,12 @@ export function EditorScreen({
   /* 未保存离开确认：pendingLeave 存放被拦下的动作 */
   const [pendingLeave, setPendingLeave] = React.useState<(() => void) | null>(null);
 
+  /* 专注编辑：进编辑器自动收起侧栏，离开时恢复（用户手动 ⌘\ 展开也不冲突） */
+  React.useEffect(() => {
+    setSidebarCollapsed(true);
+    return () => setSidebarCollapsed(false);
+  }, []);
+
   const dirtyRef = React.useRef(false);
   const saveTimer = React.useRef<number | null>(null);
   const pendingPatch = React.useRef<{ id: string; patch: Record<string, unknown> } | null>(null);
@@ -41,6 +49,10 @@ export function EditorScreen({
     const timer = setInterval(() => { void api.listTasks().then(setTasks).catch(() => {}); }, 5000);
     return () => clearInterval(timer);
   }, []);
+
+  /* 导入登录态：发布弹层里点失效平台会走到这（确认弹窗 + 覆盖 + 后台全量重校验） */
+  const refreshPlatforms = React.useCallback(() => { api.listPlatforms().then(setPlatforms).catch(() => {}); }, []);
+  const imp = useImportProfile(refreshPlatforms);
 
   /* 保存：停手 2.5s 自动保存一次（再输入重新计时）；手动保存 / ⌘S 随时插队并取消排队的自动保存；
      切换/发布前先冲刷落库 */
@@ -211,13 +223,15 @@ export function EditorScreen({
           platforms={platforms}
           selectedIds={selectedIds}
           onToggle={(id) => setSelectedIds((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]))}
-          onReacquire={(id) => { void api.accountAction(id, "acquire").then(() => api.listPlatforms()).then(setPlatforms).catch(() => {}); }}
+          onImport={imp.ask}
           onClose={() => setSheetOpen(false)}
           onConfirm={() => void confirmPublish()}
         />
       )}
 
       <FloatingPill running={runningCount} avg={avgProgress} onClick={() => leaveGuard(() => go("/queue"))} />
+
+      {imp.overlay}
 
       {/* 未保存离开确认：三选一（取消 / 不保存并离开 / 保存并离开） */}
       {pendingLeave && (

@@ -9,8 +9,15 @@ const targets = [
   "packages/platforms/core",
   "packages/platforms/wechat",
   "packages/platforms/weibo",
+  "packages/platforms/xhs",
+  "packages/platforms/douban",
+  "packages/platforms/xiaoyuzhou",
+  "packages/platforms/ximalaya",
+  "packages/platforms/lizhi",
+  "packages/platforms/qingting",
   "packages/server",
   "apps/web",
+  "apps/obsidian",
 ];
 
 let failed = 0;

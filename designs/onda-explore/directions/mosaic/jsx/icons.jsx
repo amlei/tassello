@@ -116,8 +116,17 @@ function IcSettings({ size = 15 }) {
   );
 }
 
-/* 问题：全部「出事了」的信号共用这一枚图标和一种错误色 */
-function IcAlert({ size = 13 }) {
+/* 侧栏折叠：左宽右窄的面板（Obsidian 同款隐喻），块与线、无圆弧 */
+function IcPanel({ size = 15 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinejoin="round">
+      <rect x="1.8" y="2.4" width="12.4" height="11.2" rx="2.2" />
+      <path d="M6.2 2.4v11.2" />
+    </svg>
+  );
+}
+
+/* 问题：全部「出事了」的信号共用这一枚图标和一种错误色 */function IcAlert({ size = 13 }) {
   return (
     <svg width={size} height={size} viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
       <path d="M7 1.9 13 12H1L7 1.9z" />
@@ -313,7 +322,7 @@ function IcEdge({ size = 14 }) {
 
 Object.assign(window, {
   IcArrowLeft, IcPlus, IcCheck, IcX, IcPlay, IcPause, IcRetry, IcSend, IcClock, IcLinkOut, IcChevron,
-  IcSearch, IcSort, IcSettings, IcAlert, IcChrome, IcEdge,
+  IcSearch, IcSort, IcSettings, IcAlert, IcChrome, IcEdge, IcPanel,
   IcFormatHeading, IcFormatQuote, IcFormatListUl, IcFormatListOl, IcFormatDivider,
   IcFormatLink, IcFormatImage, IcFormatUndo, IcFormatRedo,
   IcFormatBold, IcFormatItalic, IcFormatUnderline, IcFormatStrike, IcFormatMark, IcCaret,

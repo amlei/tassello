@@ -191,6 +191,21 @@ export async function retryTask(taskId: string): Promise<TaskDTO> {
   return { ...toTaskDTO(t), postTitle: post?.title || "未命名" };
 }
 
+/** 删除队列记录：排队/执行中的不能删（引擎还在写，会出幽灵状态）；
+ *  等待人工确认（stage3+100%）的可以删——引擎已经跑完，不再写状态。
+ *  只删记录本身和它的发布日志，不动稿子、不动平台账号 */
+export async function deleteTask(taskId: string): Promise<void> {
+  const prisma = getPrisma();
+  const task = await prisma.publishTask.findUnique({ where: { id: taskId } });
+  if (!task) return;
+  const awaiting = task.status === "running" && task.stage === 3 && task.progress >= 100;
+  if (task.status === "queued" || (task.status === "running" && !awaiting)) {
+    throw new Error("发布进行中的记录不能删除（可等它结束，或先重试）");
+  }
+  await prisma.publishLog.deleteMany({ where: { taskId } });
+  await prisma.publishTask.delete({ where: { id: taskId } });
+}
+
 /** 占位 token 生成给 UI 预填（与原型 newToken 语义一致） */
 export function previewToken(): string {
   return randomUUID().slice(0, 8).toUpperCase();

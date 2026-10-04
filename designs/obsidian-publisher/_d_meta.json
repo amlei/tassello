@@ -1,0 +1,18 @@
+{
+  "type": "design",
+  "designSystems": [],
+  "primaryDesignSystem": null,
+  "assets": {
+    "right-panel": {
+      "versions": [
+        {
+          "path": "right-panel.html",
+          "createdAt": "2026-10-03T05:06:12.732Z",
+          "status": "needs-review"
+        }
+      ]
+    }
+  },
+  "createdAt": "2026-10-03T05:06:12.733Z",
+  "updatedAt": "2026-10-03T05:19:29.418Z"
+}

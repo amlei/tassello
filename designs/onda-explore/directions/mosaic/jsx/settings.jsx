@@ -4,9 +4,11 @@
 
 const THEME_KEY = "onda-theme";
 
-/* 浏览器选择：获取账号时从哪个日常浏览器复制登录态（实现见 packages/server/src/profile.ts）。
+/* 浏览器选择 + 导入登录态：导入是独立的显式动作，不绑定在任何单个平台上 ——
+   覆盖的是全平台共用的 Cookies 库，多平台同时失效时也只需导入一次，
+   导入完成后自动重新检查全部账号（实现见 packages/server/src/accounts.ts 的 importProfile）。
    全局单选 —— 复制的是整个 Cookies 库且解密密钥绑单一 Local State，做不到按平台混用；
-   切换只是换偏好，下次获取才以新浏览器整体覆盖。按平台绑定导入来源已记入 docs/todo.md。 */
+   切换只是换偏好，下次导入才以新浏览器整体覆盖。按平台绑定导入来源已记入 docs/todo.md。 */
 const BROWSER_KEY = "onda-import-browser";
 const BROWSERS = [
   { id: "chrome", name: "Google Chrome", detected: true },
@@ -85,31 +87,42 @@ function BrowserSelect() {
 
 /* 平台账号一行 = 一枚方块 + 平台名 + 「拿到的是哪个账号」。
    凭据详情不往下展开 —— 那会把下面的名单顶走、还让人丢失上下文；
-   改成从这一行旁边浮出来：左列的账号往左弹，右列的往右弹。 */
-function AccountRow({ p, active, onToggle }) {
+   改成从这一行旁边浮出来：左列的账号往左弹，右列的往右弹。
+   busy：全局导入后的批量重校验进行中 —— 覆盖动作改了所有平台的 Cookies，
+   每一行的状态都要等重校验结果落定，期间统一显示「检查中…」。 */
+function AccountRow({ p, active, busy, onToggle }) {
   const off = p.state !== "ok";
   const a = p.account;
   return (
     <button
-      className={"w-acct" + (off ? " fail" : "") + (active ? " active" : "")}
+      className={"w-acct" + (off && !busy ? " fail" : "") + (active ? " active" : "")}
       onClick={onToggle}
       aria-expanded={active}
-      title={off ? p.accountError : "查看这个账号的凭据"}
+      title={off && !busy ? p.accountError : "查看账号信息"}
     >
-      <span className="w-sq" style={{ background: p.color, opacity: off ? 0.38 : 1 }}></span>
+      <span className="w-sq" style={{ background: p.color, opacity: off && !busy ? 0.38 : 1 }}></span>
       <span className="w-acctname">{p.name}</span>
-      <span className="w-acctwho">{off ? "未连接账号" : (a ? a.name : "")}</span>
-      {off
-        ? <span className="w-statchip bad">获取失败</span>
-        : <span className="w-statchip ok">已获取</span>}
+      <span className="w-acctwho">
+        {off && !busy
+          ? "未连接账号"
+          : a
+            ? (a.channels && a.channels.length > 1 ? a.name + " · " + a.channels.length + " 个频道" : a.name)
+            : ""}
+      </span>
+      {busy
+        ? <span className="w-statchip busy">检查中…</span>
+        : off
+          ? <span className="w-statchip bad">获取失败</span>
+          : <span className="w-statchip ok">已获取</span>}
       <span className="w-acctchev"><IcChevron size={11} dir={active ? "left" : "right"} /></span>
     </button>
   );
 }
 
 /* 悬浮凭据卡：账号 ID、授权有效期、最近校验，以及最关键的一句 ——
-   发布到这儿的内容，最后落在那个账号的哪里。 */
-function AccountPop({ p, side, style, onReacquire, onClose }) {
+   发布到这儿的内容，最后落在那个账号的哪里。
+   失效时的按钮只校验当前选中的平台；登录态源头过期时引导去全局「导入」。 */
+function AccountPop({ p, side, style, busy, onImport, onVerify, onClose }) {
   const off = p.state !== "ok";
   const a = p.account;
   return (
@@ -121,17 +134,20 @@ function AccountPop({ p, side, style, onReacquire, onClose }) {
       onClick={(e) => e.stopPropagation()}
     >
       <div className="w-acctpop-head">
-        <span className="w-sq" style={{ background: p.color, opacity: off ? 0.38 : 1 }}></span>
+        <span className="w-sq" style={{ background: p.color, opacity: off && !busy ? 0.38 : 1 }}></span>
         <span className="t">{p.name}</span>
-        {off ? <span className="w-statchip bad">获取失败</span> : <span className="w-statchip ok">已获取</span>}
+        {busy
+          ? <span className="w-statchip busy">检查中…</span>
+          : off ? <span className="w-statchip bad">获取失败</span> : <span className="w-statchip ok">已获取</span>}
         <button className="w-acctpop-x" onClick={onClose} aria-label="关闭账号信息"><IcX size={11} /></button>
       </div>
       {off ? (
         <div className="w-acctpop-body">
           <p className="w-accterr"><IcAlert size={12} /> {p.accountError}</p>
-          <button className="w-relink" onClick={() => onReacquire(p.id)}>
-            <IcRetry size={11} /> 重新获取
+          <button className="w-relink" onClick={() => onVerify(p.id)} disabled={busy}>
+            <IcRetry size={11} /> {busy ? "检查中…" : "重新检查"}
           </button>
+          <p className="w-imphint">在浏览器里重新登录过？点上方「导入」，所有平台账号自动更新。</p>
         </div>
       ) : (
         <div className="w-acctpop-body">
@@ -143,26 +159,42 @@ function AccountPop({ p, side, style, onReacquire, onClose }) {
             </div>
           </div>
           <dl className="w-acctrows">
-            <div><dt>授权</dt><dd>有效至 {a.until} · 最近校验 {a.checked}</dd></div>
+            <div><dt>授权</dt><dd>有效期至 {a.until} · 上次检查 {a.checked}</dd></div>
             <div><dt>发布去向</dt><dd>{a.lands}</dd></div>
           </dl>
+          {/* 重新检查：只查这个平台的登录态是否仍有效，不复制任何文件 */}
+          <button className="w-relink" onClick={onVerify} disabled={busy}>
+            <IcRetry size={11} /> {busy ? "检查中…" : "重新检查"}
+          </button>
+          {/* 账号 → 频道：小宇宙的节目 / 喜马拉雅的专辑 / 荔枝的播单。
+              频道才是发布目标，凭据只是入场券 —— 所以在这里把两者分开列清楚 */}
+          {a.channels && a.channels.length > 0 && (
+            <div className="w-chlist">
+              <div className="w-chhead">
+                <span>频道 · {a.channels.length}</span>
+                <button className="w-chsync" title="从平台后台重新拉取这个账号的频道列表">同步频道</button>
+              </div>
+              {a.channels.map((c) => (
+                <div className="w-chrow" key={c.id}>
+                  <span className="w-chdot" style={{ background: p.color }}></span>
+                  <span className="w-chname">{c.name}</span>
+                  <span className="w-chmeta">{c.items}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
   );
 }
 
-function SettingsSheet({ platforms, defaults, onToggle, onAcquire, onReacquire, onClose }) {
+function SettingsSheet({ platforms, defaults, onToggle, onImport, onVerify, importing, onClose }) {
   const [pop, setPop] = React.useState(null); // { id, side, top, left }
-  const [confirmSrc, setConfirmSrc] = React.useState(null); // { typeId?, platformId }
   const sheetRef = React.useRef(null);
+  const busy = !!importing; // 全局导入 / 批量重校验进行中
 
-  const POP_W = 336, GAP = 14, M = 12, POP_H = 240;
-
-  /* 获取账号前先确认：导入登录态会先关闭工作台浏览器（Cookie 被文件锁着，进程必须先停），
-     这一步不能静默发生 —— 用户得知道接下来发生什么。 */
-  const askAcquire = (typeId, platformId) => setConfirmSrc({ typeId, platformId });
-  const askReacquire = (platformId) => setConfirmSrc({ platformId });
+  const POP_W = 336, GAP = 14, M = 12, POP_H = 360;
 
   /* 点一行：按它落在左列还是右列，把凭据卡放到弹窗外侧的对应一边。
      窗口太窄时哪边宽就往哪边放；实在都放不下就贴视口边缘压住弹窗。 */
@@ -191,17 +223,19 @@ function SettingsSheet({ platforms, defaults, onToggle, onAcquire, onReacquire, 
     return () => window.removeEventListener("resize", close);
   }, []);
 
-  /* Esc：先收导入确认，再收凭据卡，最后才关设置 */
+  /* Esc：先收凭据卡，最后才关设置（导入确认浮层挂在 App 层，自己收自己） */
   React.useEffect(() => {
     const onKey = (e) => {
       if (e.key !== "Escape") return;
-      if (confirmSrc) setConfirmSrc(null);
-      else if (pop) setPop(null);
+      if (pop) setPop(null);
       else onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [pop, confirmSrc, onClose]);
+  }, [pop, onClose]);
+
+  /* 浏览器选择 + 导入按钮（导入入口全局唯一） */
+  const importLabel = importing === "copying" ? "导入中…" : importing === "verifying" ? "检查中…" : "导入";
 
   return (
     <>
@@ -220,14 +254,18 @@ function SettingsSheet({ platforms, defaults, onToggle, onAcquire, onReacquire, 
               </div>
             </section>
 
-            {/* 〇.五、浏览器选择：获取账号时从哪个浏览器复制登录态。
-                    覆盖语义值得一句辅助文案：这是少数「不说就会误解」的设置 */}
+            {/* 〇.五、浏览器选择 + 导入登录态：导入是随时可用的独立动作，
+                    日常浏览器重新登录后点一下，全部平台自动覆盖 + 重校验 */}
             <section className="w-setsec">
               <div className="w-sethead">
                 <h4>浏览器选择</h4>
-                <BrowserSelect />
+                <span className="w-settools">
+                  <BrowserSelect />
+                  <button className="w-importbtn" onClick={onImport} disabled={busy}>
+                    <IcRetry size={11} /> {importLabel}
+                  </button>
+                </span>
               </div>
-              <p className="w-selhint">获取账号时从这个浏览器复制登录态；再次获取会整体覆盖，以当前选择的为准。</p>
             </section>
 
             {/* 一、平台账号：凭据状态是发布能不能成的唯一前提。
@@ -236,7 +274,7 @@ function SettingsSheet({ platforms, defaults, onToggle, onAcquire, onReacquire, 
               <h4>平台账号</h4>
               <div className="w-accts">
                 {platforms.map((p) => (
-                  <AccountRow key={p.id} p={p} active={!!pop && pop.id === p.id} onToggle={openPop(p)} />
+                  <AccountRow key={p.id} p={p} active={!!pop && pop.id === p.id} busy={busy} onToggle={openPop(p)} />
                 ))}
               </div>
             </section>
@@ -271,8 +309,8 @@ function SettingsSheet({ platforms, defaults, onToggle, onAcquire, onReacquire, 
                               key={p.id}
                               className={"m-platico sm" + (on ? " sel" : "") + (off ? " muted" : "")}
                               style={skin}
-                              onClick={() => (off ? askAcquire(k, p.id) : onToggle(k, p.id))}
-                              title={p.name + (off ? " · 获取失败，点一下重新获取并设为" + t.zh + "的默认平台" : on ? " · 已是" + t.zh + "的默认平台" : " · 点一下设为" + t.zh + "的默认平台")}
+                              onClick={() => (off ? onImport() : onToggle(k, p.id))}
+                              title={p.name + (off ? " · 账号未连接，点一下可修复" : on ? " · 已是" + t.zh + "的默认平台" : " · 点一下设为" + t.zh + "的默认平台")}
                               aria-label={p.name}
                             >
                               {p.char}
@@ -301,36 +339,14 @@ function SettingsSheet({ platforms, defaults, onToggle, onAcquire, onReacquire, 
               p={p}
               side={pop.side}
               style={{ top: pop.top, left: pop.left, width: POP_W }}
-              onReacquire={askReacquire}
+              busy={busy}
+              onImport={onImport}
+              onVerify={() => onVerify(p.id)}
               onClose={() => setPop(null)}
             />
           ) : null;
         })()}
       </div>
-
-      {/* 导入确认：获取账号会先关掉工作台浏览器再复制登录态，这一步必须让用户知情。
-          与删稿弹窗同构（取消 / 确认，Esc 或点背景取消），但按钮走主色 —— 有打断、不毁数据 */}
-      {confirmSrc && (() => {
-        const b = BROWSERS.find((x) => x.id === getBrowserPref()) || BROWSERS[0];
-        const p = platforms.find((x) => x.id === confirmSrc.platformId);
-        return (
-          <div className="m-overlay" onClick={() => setConfirmSrc(null)}>
-            <div className="m-mini" role="alertdialog" aria-label="导入登录态确认" data-screen-label="导入确认" onClick={(e) => e.stopPropagation()}>
-              <h3>从 {b.name} 导入登录态？</h3>
-              <p>工作台浏览器会先关闭一次，并以 {b.name} 的登录态整体覆盖后重新校验{p ? "「" + p.name + "」" : ""}账号；日常浏览器不受影响。</p>
-              <div className="m-mini-foot">
-                <button className="m-btn-plain" onClick={() => setConfirmSrc(null)}>取消</button>
-                <button
-                  className="m-btn-acc"
-                  onClick={() => { const c = confirmSrc; setConfirmSrc(null); if (c.typeId) onAcquire(c.typeId, c.platformId); else onReacquire(c.platformId); }}
-                >
-                  导入并校验
-                </button>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
     </>
   );
 }

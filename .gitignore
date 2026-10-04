@@ -47,3 +47,8 @@ shots/
 # tassello
 apps/desktop/dist/
 packages/db/src/generated/
+apps/desktop/build/
+
+# obsidian plugin
+apps/obsidian/dist/
+apps/obsidian/release/

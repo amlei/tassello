@@ -4,8 +4,19 @@
    · 已发布：方块右上角一枚勾，整块就是个链接，点进去就是平台上的成品
    · 出问题：方块统一换成错误色，原因另起一行（只有出错才多花这一行）
    这么排，一屏能扫完的稿子数比以前多三倍。 */
-function TasksView({ tasks, posts, onRetry, onOpen }) {
-  const running = tasks.filter((t) => t.status === "running");
+/* 失败分两类，动作跟着变：
+   · 可重试（网络/超时等瞬时问题）→ 给「重试」
+   · 不可重试（稿子被删、超字数上限、无权限）→ 重试没有意义，给「移除记录」，
+     并提示真正该做的事（改稿 / 检查稿子）——重试按钮点一万次也不会成功 */
+function failKind(t) {
+  const r = t.failReason || "";
+  if (/不存在|已删除/.test(r)) return "dead";
+  if (/上限|权限|字/.test(r)) return "fix";
+  return "retry";
+}
+const FAIL_TAG = { dead: "无法重试", fix: "需改稿" };
+
+function TasksView({ tasks, posts, onRetry, onOpen, onDismiss, onDismissGroup }) {  const running = tasks.filter((t) => t.status === "running");
   const failed = tasks.filter((t) => t.status === "failed");
   const ok = tasks.filter((t) => t.status === "success");
 
@@ -40,16 +51,15 @@ function TasksView({ tasks, posts, onRetry, onOpen }) {
       </div>
       <div className="m-tlist">
         {tasks.length === 0 && <div className="m-emptybox">队列为空</div>}
-        {order.map((g) => (<PostGroup key={g.postId} group={g} onRetry={onRetry} onOpen={onOpen} />))}
+        {order.map((g) => (<PostGroup key={g.postId} group={g} onRetry={onRetry} onOpen={onOpen} onDismiss={onDismiss} onDismissGroup={onDismissGroup} />))}
       </div>
     </div>
   );
 }
 
 /* 一篇稿子 = 一行。左边是稿子，右边是它这一轮发布到的平台方块 */
-function PostGroup({ group, onRetry, onOpen }) {
+function PostGroup({ group, onRetry, onOpen, onDismiss, onDismissGroup }) {
   const t = group.post ? TYPES[group.post.type] : TYPES.article;
-  const problems = group.tasks.filter((x) => x.status === "failed");
   return (
     <article className="q-item">
       <div className="q-head">
@@ -63,30 +73,29 @@ function PostGroup({ group, onRetry, onOpen }) {
           {group.tasks[0].postTitle || "未命名"}
         </button>
         <div className="q-icons">
-          {group.tasks.map((task) => (<PlatformTile key={task.id} task={task} onRetry={onRetry} />))}
+          {group.tasks.map((task) => (<PlatformTile key={task.id} task={task} onRetry={onRetry} onDismiss={onDismiss} />))}
         </div>
         <div className="q-meta">
           <span>{group.latest}</span>
+          {/* 删除这条队列记录（该稿子的全部发布记录）：只删记录，不动稿子与平台；进行中不可删 */}
+          <button
+            className="q-del"
+            onClick={() => onDismissGroup(group.postId)}
+            disabled={group.running > 0}
+            aria-label="删除这条队列记录"
+            title={group.running > 0 ? "发布进行中，结束后才能删除" : "删除这条队列记录"}
+          >
+            <IcX size={11} />
+          </button>
         </div>
       </div>
-      {/* 只有出错才多占一行：原因和重试放在一起，用同一种错误色 */}
-      {problems.map((p) => {
-        const pf = PLATFORMS.find((x) => x.id === p.platformId);
-        return (
-          <div className="q-err" key={p.id}>
-            <IcAlert size={13} />
-            <span className="q-errtxt"><b>{pf ? pf.name : p.platformId}</b> · {p.failReason}</span>
-            <button className="q-retry" onClick={() => onRetry(p.id)}><IcRetry size={11} /> 重试</button>
-          </div>
-        );
-      })}
     </article>
   );
 }
 
 /* 平台方块：一枚方块承担原来一整行的信息量。
    水位用两层同色椭圆做出水面，字随水位漂白（白色那层被裁在 fill 里）。 */
-function PlatformTile({ task, onRetry }) {
+function PlatformTile({ task, onRetry, onDismiss }) {
   const p = PLATFORMS.find((x) => x.id === task.platformId) || { name: task.platformId, char: "?", color: "#2C6FF0" };
   const running = task.status === "running";
   const ok = task.status === "success";
@@ -94,12 +103,14 @@ function PlatformTile({ task, onRetry }) {
   const fg = p.fg || "#fff";
   const style = { "--pc": p.color, "--fg": fg };
 
+  const label = p.name + (task.channelName ? " · " + task.channelName : "");
   const body = (
     <span className="q-body" aria-hidden="true">
       <span className="ch">{p.char}</span>
       {running && (
         <span className="fill" style={{ height: pct + "%" }}>
-          <span className="ch chfill">{p.char}</span>
+          {/* 白字只露出水线以下的部分：clip-path 随水位裁剪，波浪（fill 的伪元素）不受影响 */}
+          <span className="ch chfill" style={{ clipPath: `inset(${100 - pct}% 0 0 0)` }}>{p.char}</span>
         </span>
       )}
     </span>
@@ -113,8 +124,8 @@ function PlatformTile({ task, onRetry }) {
         href={"https://" + task.url}
         target="_blank"
         rel="noopener noreferrer"
-        title={p.name + " · 已发布，点开去平台看"}
-        aria-label={p.name + " 已发布，点击访问"}
+        title={label + " · 已发布，点开去平台看"}
+        aria-label={label + " 已发布，点击访问"}
       >
         {body}
         <span className="badge ok"><IcCheck size={10} /></span>
@@ -123,23 +134,73 @@ function PlatformTile({ task, onRetry }) {
   }
   if (running) {
     return (
-      <span className="q-tile running" style={style} title={p.name + " · " + STAGES[task.stage] + " " + pct + "%"}>
+      <span className="q-tile running" style={style} title={label + " · " + STAGES[task.stage] + " " + pct + "%"}>
         {body}
         <span className="badge pct">{pct}</span>
       </span>
     );
   }
-  /* 出问题：整块换成错误色，点一下重试 */
+  /* 出问题：整块换成错误色；原因和时间收进悬浮 tooltip（portal 到 body，永不裁切） */
+  if (task.status === "failed") {
+    return <FailedTile task={task} onRetry={onRetry} onDismiss={onDismiss} />;
+  }
+  return null;
+}
+
+/* 失败方块：tooltip 渲染到 body（position:fixed），按方块位置摆放并夹在视口内，
+   彻底摆脱滚动容器/卡片的裁剪；悬停方块本身永不被盖住 */
+function FailedTile({ task, onRetry, onDismiss }) {
+  const kind = failKind(task);
+  const when = ((task.finishedAt || "").split(" ")[1] || task.finishedAt || "").slice(0, 5);
+  const label = (PLATFORMS.find((x) => x.id === task.platformId) || { name: task.platformId }).name
+    + (task.channelName ? " · " + task.channelName : "");
+  const p = PLATFORMS.find((x) => x.id === task.platformId) || { char: "?", color: "#2C6FF0", fg: "#fff" };
+  const wrapRef = React.useRef(null);
+  const tipRef = React.useRef(null);
+  const [open, setOpen] = React.useState(false);
+  const [xy, setXY] = React.useState({ x: -9999, y: -9999 });
+  React.useLayoutEffect(() => {
+    if (!open) return;
+    const el = wrapRef.current, tt = tipRef.current;
+    if (!el || !tt) return;
+    const r = el.getBoundingClientRect();
+    const tw = tt.offsetWidth, th = tt.offsetHeight;
+    /* 水平：右缘对齐方块、夹在视口内；垂直：优先上方，放不下落到下方 */
+    const x = Math.min(Math.max(8, r.right - tw), window.innerWidth - tw - 8);
+    let y = r.top - th - 8;
+    if (y < 8) y = Math.min(r.bottom + 8, window.innerHeight - th - 8);
+    setXY({ x, y });
+  }, [open]);
+  const pct = Math.max(0, Math.min(100, Math.floor(task.progress)));
   return (
-    <button
-      className="q-tile bad"
-      onClick={() => onRetry(task.id)}
-      title={p.name + " · 发布失败，点一下重试"}
-      aria-label={p.name + " 发布失败，点击重试"}
+    <span
+      className="q-tilewrap"
+      ref={wrapRef}
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+      onFocus={() => setOpen(true)}
+      onBlur={() => setOpen(false)}
     >
-      {body}
-      <span className="badge bad"><IcAlert size={10} /></span>
-    </button>
+      <span className="q-tile bad" tabIndex={0}>
+        <span className="q-body" aria-hidden="true"><span className="ch">{p.char}</span></span>
+        <span className="badge bad"><IcAlert size={10} /></span>
+        {kind === "retry" && (
+          <button className="q-tile-retry" onClick={() => onRetry(task.id)} aria-label={"重试发布到 " + label} title="重试">
+            <IcRetry size={13} />
+          </button>
+        )}
+      </span>
+      {open && ReactDOM.createPortal(
+        <span className="q-tip" ref={tipRef} style={{ left: xy.x, top: xy.y }} role="tooltip">
+          <span className="q-tiptxt">{task.failReason}</span>
+          <span className="q-tipmeta">
+            <span>{when}{kind !== "retry" ? " · " + FAIL_TAG[kind] : ""}</span>
+            <button className="q-tipx" onClick={() => onDismiss(task.id)} aria-label="移除这条记录" title="移除记录">移除</button>
+          </span>
+        </span>,
+        document.body
+      )}
+    </span>
   );
 }
 

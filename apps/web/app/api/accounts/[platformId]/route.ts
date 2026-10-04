@@ -4,7 +4,8 @@ import { ensureBoot, fail, json, readJson } from "../../_lib";
 
 type Ctx = { params: Promise<{ platformId: string }> };
 
-/** POST /api/accounts/:platformId  body: { action: "acquire" | "verify" } */
+/** POST /api/accounts/:platformId  body: { action: "acquire" | "verify" }
+ *  verify = 纯校验（UI 只走这个）；acquire = 校验 + 失效时打开登录页兜底，不再复制文件 */
 export async function POST(req: Request, ctx: Ctx) {
   ensureBoot();
   const { platformId } = await ctx.params;

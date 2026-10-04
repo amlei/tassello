@@ -1073,7 +1073,7 @@ export function EditorView({
         if (files.length) void onDropFiles(files);
       }}
     >
-      <div className="flex h-[60px] flex-none items-center gap-3.5 bg-card px-7">
+      <div className="app-drag focuspad flex h-[60px] flex-none items-center gap-3.5 bg-card px-7">
         <Button variant="ghost" className="flex items-center gap-[7px] rounded-full border border-ink3 bg-card px-4 py-2 text-sm font-bold text-ink data-[hovered=true]:bg-hover" onPress={onBack}><ArrowLeft size={14} strokeWidth={3.3} /> 返回</Button>
         {/* 一枚按钮表达保存状态：未保存时点亮成主色，其余时候灰着 */}
         <Button
@@ -1093,6 +1093,8 @@ export function EditorView({
           {saveState === "saving" && "保存中…"}
         </Button>
         <span className="font-mono text-xs text-ink2">{wordCount} 字</span>
+        {/* 空白处拖动窗口：拖拽区只放真正的空隙，按钮才不会被吞掉点击 */}
+        <div className="drag-strip h-full" aria-hidden="true" />
         <Button className="ml-auto flex items-center gap-2 rounded-full bg-green px-[26px] py-[11px] text-[15px] font-black tracking-[1px] text-white transition-[translate,background-color] duration-150 data-[hovered=true]:-translate-y-0.5 data-[hovered=true]:bg-[#069e62]" onPress={onPublish}><Send size={15} strokeWidth={2.9} /> 发布</Button>
       </div>
       <div className="grid min-h-0 flex-1 grid-cols-[1fr_460px]">

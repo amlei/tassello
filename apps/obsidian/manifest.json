@@ -1,0 +1,9 @@
+{
+  "id": "tassello-publisher",
+  "name": "Tassello Publisher",
+  "version": "0.1.1",
+  "minAppVersion": "1.5.0",
+  "description": "Preview and publish the current Obsidian note to Weibo, Zhihu, and Xiaohongshu.",
+  "author": "Tassello",
+  "isDesktopOnly": true
+}

@@ -15,17 +15,23 @@ const SORTS = [
 ];
 
 /* ---------- 左侧栏 ---------- */
-function Sidebar({ view, scope, counts, runningCount, queueCount, platforms, onScope, onQueue, onNew, onSettings }) {
+function Sidebar({ view, scope, counts, runningCount, queueCount, platforms, onScope, onQueue, onNew, onSettings, collapsed, onToggleRail }) {
   const active = view === "queue" ? "queue" : scope;
   /* 凭据缺了才提醒：全拿到的时候设置这一行不带任何噪音 */
   const missing = platforms.filter((p) => p.state !== "ok").length;
   return (
-    <aside className="w-rail" aria-label="工作台导航">
+    <aside className={"w-rail" + (collapsed ? " fr-collapsed" : "")} aria-label="工作台导航" aria-hidden={collapsed || undefined}>
+      {/* 红绿灯在真机上是系统控件，原型不再模拟 */}
+      {/* 折叠按钮：红绿灯右侧空位；收起后由左上角悬浮按钮接管 */}
+      <button className="fr-toggle" onClick={onToggleRail} aria-label={collapsed ? "展开侧栏" : "收起侧栏"} title={collapsed ? "展开侧栏" : "收起侧栏"}>
+        <IcPanel size={15} />
+        <span className="fr-kbd">⌘\</span>
+      </button>
+      <div className="w-railclip" style={{ display: "flex", flexDirection: "column", gap: 14, minHeight: 0, flex: 1 }}>
       <div className="m-brand">
         <MosaicLogo size={10} />
         <div>
           <div className="m-brand-name">九漾 Onda</div>
-          <div className="m-brand-sub">content worksbench</div>
         </div>
       </div>
 
@@ -74,6 +80,7 @@ function Sidebar({ view, scope, counts, runningCount, queueCount, platforms, onS
           <span>设置</span>
           {missing > 0 && <span className="w-attn" title={missing + " 个平台凭据获取失败"}>{missing}</span>}
         </button>
+      </div>
       </div>
     </aside>
   );

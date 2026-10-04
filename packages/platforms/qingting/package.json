@@ -1,0 +1,17 @@
+{
+  "name": "@tassello/platform-qingting",
+  "type": "module",
+  "private": true,
+  "devDependencies": {
+    "@tassello/server": "workspace:*"
+  },
+  "dependencies": {
+    "@tassello/cdp": "workspace:*",
+    "@tassello/platform-core": "workspace:*",
+    "zod": "^4.6.5"
+  },
+  "exports": { ".": "./src/index.ts" },
+  "types": "./src/index.ts",
+  "main": "./src/index.ts",
+  "files": ["src"]
+}

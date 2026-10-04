@@ -56,11 +56,13 @@ function ViewHead({
   }, []);
 
   return (
-    <header className="flex flex-none flex-wrap items-end gap-4 px-[34px] pb-4 pt-[26px]">
+    <header className="app-drag focuspad flex flex-none flex-wrap items-end gap-4 px-[34px] pb-4 pt-[26px]">
       <div className="flex min-w-0 items-baseline gap-3">
         <h1 className="text-[28px] font-bold leading-[1.35] tracking-[-0.4px]">{title}</h1>
         <span className="whitespace-nowrap font-mono text-[11.5px] tracking-[0.5px] text-ink2">{meta}</span>
       </div>
+      {/* 标题与搜索之间的空隙用来拖动窗口 */}
+      <div className="drag-strip" aria-hidden="true" />
       <div className="ml-auto flex items-center gap-2.5">
         <SearchField
           aria-label="搜索稿子"

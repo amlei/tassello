@@ -17,16 +17,25 @@
         {
           "path": "directions/mosaic/index.html",
           "createdAt": "2026-09-12T15:59:46.263Z",
-          "status": "needs-review",
-          "subtitle": "中性工作台 + 主题修补 + 全卡片 + 列表样式补全 + 自动保存",
+          "status": "changes-requested",
+          "subtitle": "账号→频道两级：多频道平台发布选频道",
           "viewport": {
             "width": 1440,
             "height": 900
           }
         }
       ]
+    },
+    "方向 C · 色板（专注模式原型）": {
+      "versions": [
+        {
+          "path": "directions/mosaic/index.html",
+          "createdAt": "2026-10-03T03:12:18.732Z",
+          "status": "needs-review"
+        }
+      ]
     }
   },
   "createdAt": "2026-09-12T15:59:46.188Z",
-  "updatedAt": "2026-09-25T02:18:03.310Z"
+  "updatedAt": "2026-10-03T03:12:18.732Z"
 }

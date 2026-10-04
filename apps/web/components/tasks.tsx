@@ -2,24 +2,40 @@
 "use client";
 
 import React from "react";
+import ReactDOM from "react-dom";
 import { STAGE_LABELS, TYPE_META, type PlatformDTO, type TaskDTO } from "@tassello/shared";
 import { Button, Link as OndaLink } from "@heroui/react";
 import { PlatformMark } from "./platform-icons";
-import { Alert, Check, Refresh } from "reicon-react";
+import { Alert, Check, Refresh, X } from "reicon-react";
+
+/* 失败分类：动作跟着类型走
+   · retry：网络/超时等瞬时问题 → 悬浮时给重试 icon
+   · dead：稿子被删等 → 重试必然失败，只给说明
+   · fix：超字数上限/无权限 → 先改稿，重试无效 */
+function failKind(reason: string | null): "dead" | "fix" | "retry" {
+  const r = reason || "";
+  if (/不存在|已删除/.test(r)) return "dead";
+  if (/上限|权限|字/.test(r)) return "fix";
+  return "retry";
+}
+const FAIL_TAG: Record<"dead" | "fix", string> = { dead: "无法重试", fix: "需改稿" };
 
 function PlatformTile({
-  task, platform, onRetry, onConfirm,
+  task, platform, onRetry, onConfirm, onDelete,
 }: {
   task: TaskDTO;
   platform?: PlatformDTO;
   onRetry: (id: string) => void;
   onConfirm: (id: string) => void;
+  onDelete: (id: string) => void;
 }) {
   const p = platform ?? { id: task.platformId, name: task.platformId, char: "?", color: "#2C6FF0", fg: undefined };
   const running = task.status === "running";
   const ok = task.status === "success";
   const pct = Math.max(0, Math.min(100, Math.floor(task.progress)));
   const awaiting = running && task.stage === 3 && task.progress >= 100;
+  /* 水位层只在真正推进时渲染：等待确认（100%+等）再画一层会和底下的平台 icon 叠成重影 */
+  const filling = running && !awaiting;
   const fg = (p as { fg?: string }).fg || "#fff";
   const pc = (p as { color: string }).color;
 
@@ -28,12 +44,13 @@ function PlatformTile({
   const body = (
     <span className="absolute inset-0 flex items-center justify-center overflow-hidden rounded-[12px]" aria-hidden="true">
       <span className="relative z-[2]"><PlatformMark id={p.id} char={(p as { char: string }).char} size={18} imgScale={1.4} /></span>
-      {running && (
+      {filling && (
         <span className="absolute inset-x-0 bottom-0 z-[1] transition-[height] duration-[550ms]" style={{ height: `${pct}%`, background: pc }}>
           {/* 两层同宽椭圆叠出水面：一层定形，一层缓慢平移做波纹 */}
           <i className="absolute left-[-60%] top-[-6px] block h-3 w-[220%] rounded-[50%] opacity-95" style={{ background: pc }} />
           <i className="absolute left-[-60%] top-[-3px] block h-3 w-[220%] rounded-[50%] opacity-55 animate-q-wave" style={{ background: pc }} />
-          <span className="absolute inset-x-0 bottom-0 z-[1] flex h-[46px] items-center justify-center font-black" style={{ color: fg }}>
+          {/* 白色平台字只露出水线以下：clip-path 随水位裁剪，波浪不受影响 */}
+          <span className="absolute inset-x-0 bottom-0 z-[1] flex h-[46px] items-center justify-center font-black" style={{ color: fg, clipPath: `inset(${100 - pct}% 0 0 0)` }}>
             <PlatformMark id={p.id} char={(p as { char: string }).char} size={18} imgScale={1.4} />
           </span>
         </span>
@@ -86,23 +103,85 @@ function PlatformTile({
       </span>
     );
   }
+  /* 出问题：整块换错误色；原因/时间收进悬浮 tooltip（portal 到 body，永不裁切），
+     可重试的失败悬浮时浮现重试 icon */
+  return <FailedTile task={task} platform={platform} onRetry={onRetry} onDelete={onDelete} />;
+}
+
+/* 失败方块：tooltip 渲染到 body（position:fixed），按方块位置摆放并夹在视口内，
+   彻底摆脱滚动容器/卡片的裁剪；悬停方块本身永不被盖住 */
+function FailedTile({
+  task, platform, onRetry, onDelete,
+}: {
+  task: TaskDTO;
+  platform?: PlatformDTO;
+  onRetry: (id: string) => void;
+  onDelete: (id: string) => void;
+}) {
+  const kind = failKind(task.failReason);
+  const when = (task.finishedAt || "").slice(11, 16);
+  const p = platform ?? { id: task.platformId, name: task.platformId, char: "?", color: "#2C6FF0", fg: undefined };
+  const label = p.name;
+  const pc = (p as { color: string }).color;
+  const wrapRef = React.useRef<HTMLSpanElement | null>(null);
+  const tipRef = React.useRef<HTMLSpanElement | null>(null);
+  const [open, setOpen] = React.useState(false);
+  const [xy, setXY] = React.useState({ x: -9999, y: -9999 });
+  React.useLayoutEffect(() => {
+    if (!open) return;
+    const el = wrapRef.current, tt = tipRef.current;
+    if (!el || !tt) return;
+    const r = el.getBoundingClientRect();
+    const tw = tt.offsetWidth, th = tt.offsetHeight;
+    /* 水平：右缘对齐方块、夹在视口内；垂直：优先上方，放不下落到下方 */
+    const x = Math.min(Math.max(8, r.right - tw), window.innerWidth - tw - 8);
+    let y = r.top - th - 8;
+    if (y < 8) y = Math.min(r.bottom + 8, window.innerHeight - th - 8);
+    setXY({ x, y });
+  }, [open]);
+  const TILE =
+    "relative flex h-[46px] w-[46px] flex-none items-center justify-center rounded-[14px] border border-transparent p-0 text-base font-black leading-none shadow-[0_1px_2px_rgba(15,15,15,0.06)]";
   return (
-    <span title={`${p.name} · 发布失败，点一下重试`}>
-      <Button
-        className={TILE + " text-white"}
-        style={{ background: "var(--color-error)", borderColor: "var(--color-error)" }}
-        onPress={() => onRetry(task.id)}
-        aria-label={`${p.name} 发布失败，点击重试`}
-      >
-        {body}
+    <span
+      className="q-tilewrap"
+      ref={wrapRef}
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+      onFocus={() => setOpen(true)}
+      onBlur={() => setOpen(false)}
+    >
+      <span className={TILE + " cursor-default border-transparent text-white"} style={{ background: "var(--color-error)" }}>
+        <span className="absolute inset-0 flex items-center justify-center overflow-hidden rounded-[12px]" aria-hidden="true">
+          <span className="relative z-[2]"><PlatformMark id={p.id} char={(p as { char: string }).char} size={18} imgScale={1.4} /></span>
+        </span>
         <span className="absolute right-[-6px] top-[-6px] z-[3] flex h-[19px] w-[19px] items-center justify-center rounded-[7px] border-2 border-white text-white" style={{ background: "var(--color-error)" }}><Alert size={10} strokeWidth={4} /></span>
-      </Button>
+        {kind === "retry" && (
+          <button
+            className="q-tile-retry"
+            onClick={() => onRetry(task.id)}
+            aria-label={`重试发布到 ${label}`}
+            title="重试"
+          >
+            <Refresh size={13} strokeWidth={3.3} />
+          </button>
+        )}
+      </span>
+      {open && ReactDOM.createPortal(
+        <span className="q-tip" ref={tipRef} style={{ left: xy.x, top: xy.y }} role="tooltip">
+          <span className="q-tiptxt">{task.failReason}</span>
+          <span className="q-tipmeta">
+            <span>{when}{kind !== "retry" ? " · " + FAIL_TAG[kind] : ""}</span>
+            <button className="q-tipx" onClick={() => onDelete(task.id)} aria-label="移除这条记录" title="移除记录">移除</button>
+          </span>
+        </span>,
+        document.body
+      )}
     </span>
   );
 }
 
 export function TasksView({
-  tasks, posts, platforms, onRetry, onConfirm, onOpen,
+  tasks, posts, platforms, onRetry, onConfirm, onOpen, onDelete,
 }: {
   tasks: TaskDTO[];
   posts: { id: string; type: string; title: string }[];
@@ -110,17 +189,20 @@ export function TasksView({
   onRetry: (id: string) => void;
   onConfirm: (id: string) => void;
   onOpen: (id: string) => void;
+  /** 删除队列记录：传该条记录组里的任务 id 列表（不动稿子与平台账号） */
+  onDelete: (ids: string[]) => void;
 }) {
   const running = tasks.filter((t) => t.status === "running" && !(t.stage === 3 && t.progress >= 100));
+  const onDeleteOne = (id: string) => onDelete([id]);
   const failed = tasks.filter((t) => t.status === "failed");
   const ok = tasks.filter((t) => t.status === "success");
 
-  const order: { postId: string; tasks: TaskDTO[]; post?: (typeof posts)[number]; running: number; bad: number; latest: string }[] = [];
-  const byPost = new Map<string, { postId: string; tasks: TaskDTO[]; post?: (typeof posts)[number]; running: number; bad: number; latest: string }>();
+  const order: { postId: string; tasks: TaskDTO[]; post?: (typeof posts)[number]; running: number; busy: boolean; bad: number; latest: string }[] = [];
+  const byPost = new Map<string, { postId: string; tasks: TaskDTO[]; post?: (typeof posts)[number]; running: number; busy: boolean; bad: number; latest: string }>();
   tasks.forEach((t) => {
     let g = byPost.get(t.postId);
     if (!g) {
-      g = { postId: t.postId, tasks: [], running: 0, bad: 0, latest: "" };
+      g = { postId: t.postId, tasks: [], running: 0, busy: false, bad: 0, latest: "" };
       byPost.set(t.postId, g);
       order.push(g);
     }
@@ -129,6 +211,8 @@ export function TasksView({
   order.forEach((g) => {
     g.post = posts.find((p) => p.id === g.postId);
     g.running = g.tasks.filter((t) => t.status === "running").length;
+    /* 忙 = 排队或真正执行中；等待确认（stage3+100%）不算，可删 */
+    g.busy = g.tasks.some((t) => t.status === "queued" || (t.status === "running" && !(t.stage === 3 && t.progress >= 100)));
     g.bad = g.tasks.filter((t) => t.status === "failed").length;
     g.latest = g.tasks.reduce((acc, t) => {
       const s = (t.finishedAt || t.createdAt || "").replace("T", " ").slice(5, 16);
@@ -149,9 +233,8 @@ export function TasksView({
         {tasks.length === 0 && <div className="rounded-[14px] border border-dashed border-ink3 p-[22px] text-center font-mono text-[13px] text-ink2">队列空闲 — 去编辑器点「发布」试试</div>}
         {order.map((g) => {
           const t0 = g.post ? TYPE_META[g.post.type as keyof typeof TYPE_META] : TYPE_META.article;
-          const problems = g.tasks.filter((x) => x.status === "failed");
           return (
-            <article className="rounded-[14px] border border-line bg-card px-4 py-[11px] shadow-[0_1px_2px_rgba(15,15,15,0.04)] transition-transform hover:-translate-y-0.5" key={g.postId}>
+            <article className="group rounded-[14px] border border-line bg-card px-4 py-[11px] shadow-[0_1px_2px_rgba(15,15,15,0.04)] transition-transform hover:-translate-y-0.5" key={g.postId}>
               <div className="flex min-h-[46px] items-center gap-3.5">
                 <span className="block h-3.5 w-3.5 flex-none rounded" style={{ background: t0.color }} />
                 <Button
@@ -170,24 +253,29 @@ export function TasksView({
                       platform={platforms.find((x) => x.id === task.platformId)}
                       onRetry={onRetry}
                       onConfirm={onConfirm}
+                      onDelete={onDeleteOne}
                     />
                   ))}
                 </div>
                 <div className="ml-auto flex flex-none items-center gap-3.5 font-mono text-[11px] text-ink2">
                   <span>{g.tasks.length} 个平台</span>
                   <span>{g.latest}</span>
+                  {/* 删除这条队列记录（该稿子的全部发布记录）：只删记录，不动稿子与平台；进行中不可删 */}
+                  <span title={g.busy ? "发布进行中，结束后才能删除" : "删除这条队列记录"}>
+                    <Button
+                      variant="ghost"
+                      isDisabled={g.busy}
+                      className="h-[22px] min-w-[22px] w-[22px] rounded-[7px] border-none bg-transparent px-0 text-ink3 opacity-0 transition-opacity data-[hovered=true]:bg-error/10 data-[hovered=true]:text-error group-hover:opacity-100 aria-disabled:opacity-25"
+                      style={{ justifyContent: "center" }}
+                      isIconOnly
+                      onPress={() => onDelete(g.tasks.map((t) => t.id))}
+                      aria-label="删除这条队列记录"
+                    >
+                      <X size={11} strokeWidth={3.3} />
+                    </Button>
+                  </span>
                 </div>
               </div>
-              {problems.map((p) => {
-                const pf = platforms.find((x) => x.id === p.platformId);
-                return (
-                  <div className="mt-[9px] flex w-fit max-w-full items-center gap-[9px] rounded-[11px] border border-error/30 bg-error/10 px-3 py-2 text-error" key={p.id}>
-                    <Alert size={13} strokeWidth={3.3} />
-                    <span className="min-w-0 truncate text-[12.5px] leading-normal"><b className="font-black">{pf ? pf.name : p.platformId}</b> · {p.failReason}</span>
-                    <Button variant="ghost" className="inline-flex flex-none items-center gap-[5px] rounded-full border border-error bg-card px-[11px] py-[3px] font-mono text-[11px] font-bold text-error data-[hovered=true]:bg-error data-[hovered=true]:text-white" onPress={() => onRetry(p.id)}><Refresh size={11} strokeWidth={3.3} /> 重试</Button>
-                  </div>
-                );
-              })}
             </article>
           );
         })}

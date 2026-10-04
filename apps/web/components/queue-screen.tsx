@@ -33,6 +33,11 @@ export function QueueScreen({
     try { await api.confirmTask(id); } catch {}
     void api.listTasks().then(setTasks).catch(() => {});
   };
+  /* 删除队列记录（一组或单条失败）：只删记录，不动稿子与平台账号 */
+  const deleteTasks = async (ids: string[]) => {
+    try { await Promise.all(ids.map((id) => api.deleteTask(id))); } catch {}
+    void api.listTasks().then(setTasks).catch(() => {});
+  };
   const runningCount = tasks.filter((t) => t.status === "running").length;
   const avgProgress = runningCount
     ? Math.round(tasks.filter((t) => t.status === "running").reduce((sum, t) => sum + t.progress, 0) / runningCount)
@@ -42,11 +47,12 @@ export function QueueScreen({
     <div className="flex h-screen min-h-0 overflow-hidden" data-screen-label="发布队列">
       <Rail active="queue" counts={counts} runningCount={runningCount} queueCount={tasks.length} platforms={platforms} />
       <div className="mx-auto flex min-h-0 w-full max-w-[1560px] flex-1 flex-col">
-        <header className="flex flex-none flex-wrap items-end gap-4 px-[34px] pb-4 pt-[26px]">
+        <header className="app-drag focuspad flex flex-none flex-wrap items-end gap-4 px-[34px] pb-4 pt-[26px]">
           <div className="flex min-w-0 items-baseline gap-3">
             <h1 className="text-[28px] font-bold leading-[1.35] tracking-[-0.4px]">发布队列</h1>
             <span className="whitespace-nowrap font-mono text-[11.5px] tracking-[0.5px] text-ink2">{tasks.length} 个发布动作 · 发布事实只此一处</span>
           </div>
+          <div className="drag-strip" aria-hidden="true" />
         </header>
         <div className="scroll-thin min-h-0 flex-1 overflow-auto px-[34px] pb-[120px]">
           <TasksView
@@ -56,6 +62,7 @@ export function QueueScreen({
             onRetry={(id) => void retryTask(id)}
             onConfirm={(id) => void confirmTask(id)}
             onOpen={(id) => router.push(`/editor/${id}`)}
+            onDelete={(ids) => void deleteTasks(ids)}
           />
         </div>
       </div>

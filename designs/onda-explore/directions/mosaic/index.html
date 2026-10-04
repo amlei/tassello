@@ -370,6 +370,29 @@ input,textarea{font-family:inherit}
 .q-errtxt b{font-weight:700}
 .q-retry{flex:0 0 auto;display:inline-flex;align-items:center;gap:5px;border:1px solid var(--error);background:var(--card);border-radius:999px;padding:3px 11px;font-family:var(--mono);font-size:11px;font-weight:700;color:var(--error);transition:background .15s,color .15s}
 .q-retry:hover{background:var(--error);color:#fff}
+/* 失败：信息收进悬浮 tooltip，重试是悬浮时浮现的 icon 按钮 */
+.q-tilewrap{position:relative;flex:0 0 auto;display:block}
+.q-tile-retry{position:absolute;inset:0;z-index:2;display:grid;place-items:center;border:none;border-radius:14px;background:rgba(200,30,78,.92);color:#fff;cursor:pointer;opacity:0;transition:opacity .15s}
+.q-tilewrap:hover .q-tile-retry,.q-tilewrap:focus-within .q-tile-retry{opacity:1}
+.q-tip{position:fixed;z-index:1000;display:flex;width:max-content;max-width:300px;flex-direction:column;gap:3px;padding:9px 12px;background:var(--ink);color:var(--paper);border-radius:10px;font-size:12px;line-height:1.55;text-align:left;box-shadow:var(--shadow-pop)}
+.q-tiptxt b{font-weight:700}
+.q-tipmeta{display:flex;align-items:center;justify-content:space-between;gap:12px;font-family:var(--mono);font-size:10.5px;opacity:.78}
+.q-tipx{border:none;background:transparent;padding:0;font-family:var(--mono);font-size:10.5px;font-weight:700;color:inherit;text-decoration:underline;cursor:pointer;opacity:.85}
+.q-tipx:hover{opacity:1}
+/* 删除整条队列记录：行尾一枚 ×，默认隐形、悬停行时浮现 */
+.q-del{flex:0 0 auto;display:grid;place-items:center;width:22px;height:22px;border:none;border-radius:7px;background:transparent;color:var(--ink3);opacity:0;transition:background .15s,color .15s,opacity .15s;cursor:pointer}
+.q-item:hover .q-del{opacity:1}
+.q-del:hover{background:var(--error-soft);color:var(--error)}
+.q-del:disabled{cursor:default;opacity:.25}
+.q-del:disabled:hover{background:transparent;color:var(--ink3)}
+/* 不可重试的失败：一枚说明性标签替代重试按钮（重试点一万次也不会成功） */
+.q-errtag{flex:0 0 auto;font-family:var(--mono);font-size:10.5px;font-weight:700;color:var(--error);background:var(--card);border:1px dashed var(--error-line);border-radius:999px;padding:3px 10px;white-space:nowrap}
+/* 失败发生时间 + 移除记录 */
+.q-errmeta{flex:0 0 auto;font-family:var(--mono);font-size:10.5px;color:var(--error);opacity:.72}
+.q-dismiss{flex:0 0 auto;display:grid;place-items:center;width:22px;height:22px;border:none;border-radius:7px;background:transparent;color:var(--error);opacity:.6;transition:background .15s,opacity .15s}
+.q-dismiss:hover{background:var(--error);color:#fff;opacity:1}
+.q-tile.bad{cursor:default}
+.q-tile.bad:hover{transform:none}
 @keyframes q-wave{0%,100%{transform:translateX(-3%)}50%{transform:translateX(3%)}}
 .m-emptybox{border:1px dashed var(--ink3);border-radius:var(--r-md);padding:22px;text-align:center;color:var(--ink2);font-size:13px;font-family:var(--mono)}
 
@@ -554,7 +577,14 @@ body.w-dragging,body.w-dragging *{user-select:none;cursor:grabbing}
 .w-selwrap select:focus-visible{outline:none;border-color:var(--accent)}
 .w-selwrap select:disabled{opacity:.55;cursor:default}
 .w-selwrap .cv{position:absolute;right:12px;pointer-events:none;display:flex;color:var(--ink2)}
-.w-selhint{margin-top:12px;font-size:11.5px;line-height:1.7;color:var(--ink3)}
+
+/* 导入登录态：独立按钮与浏览器选择同一行 —— 覆盖的是全平台共用的 Cookies 库，
+   所以入口只有一个、不挂在任何单个平台上；导入后自动重校验全部账号 */
+.w-settools{display:inline-flex;align-items:center;gap:8px}
+.w-importbtn{display:inline-flex;align-items:center;gap:6px;border:none;background:var(--accent);color:#fff;border-radius:999px;padding:6px 14px;font-size:12px;font-weight:700;transition:filter .15s}
+.w-importbtn:hover{filter:brightness(1.06)}
+.w-importbtn:disabled{opacity:.55;cursor:default;filter:none}
+.w-imphint{margin:10px 0 0;font-size:11.5px;line-height:1.7;color:var(--ink2)}
 
 /* 凭据卡：浮在设置弹窗外侧，左列账号往左、右列往右，不挤压下面的名单 */
 .w-acctpop{position:fixed;z-index:70;padding:16px 18px 18px;background:var(--card);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow-pop);animation:m-pop .18s cubic-bezier(.2,.8,.3,1.2)}
@@ -579,9 +609,48 @@ body.w-dragging,body.w-dragging *{user-select:none;cursor:grabbing}
 .w-statchip{flex:0 0 auto;font-family:var(--mono);font-size:10px;font-weight:700;border:1px solid var(--line);border-radius:999px;padding:2px 9px;color:var(--ink2)}
 .w-statchip.ok{color:var(--green);border-color:rgba(7,181,111,.35)}
 .w-statchip.bad{color:var(--error);border-color:var(--error-line)}
+.w-statchip.busy{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 35%,transparent)}
 /* 重新获取账号：整行宽、居中的主色 CTA，一眼能看出这是主要动作 */
 .w-relink{width:100%;justify-content:center;display:inline-flex;align-items:center;gap:6px;border:none;background:var(--accent);color:#fff;border-radius:999px;padding:9px 14px;font-size:13px;font-weight:700;transition:filter .15s}
 .w-relink:hover{filter:brightness(1.06)}
+/* 账号 → 频道：凭据卡里的频道列表（小宇宙节目 / 喜马拉雅专辑 / 荔枝播单） */
+.w-chlist{display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--line);padding-top:12px}
+.w-chhead{display:flex;align-items:center;justify-content:space-between}
+.w-chhead>span{font-family:var(--mono);font-size:10.5px;color:var(--ink3)}
+.w-chsync{border:1px solid var(--line);background:var(--card);border-radius:999px;font-size:11px;color:var(--ink2);padding:3px 10px;cursor:pointer;transition:border-color .15s,color .15s}
+.w-chsync:hover{border-color:var(--accent);color:var(--accent)}
+.w-chrow{display:flex;align-items:center;gap:8px;padding:7px 9px;border:1px solid var(--line);border-radius:10px;background:var(--paper)}
+.w-chdot{flex:0 0 8px;width:8px;height:8px;border-radius:3px}
+.w-chname{font-size:12.5px;font-weight:600;letter-spacing:-0.1px}
+.w-chmeta{margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--ink2)}
+/* 发布弹层：多频道平台的频道选择行 */
+.m-chrows{display:flex;flex-direction:column;gap:0;padding:4px 6px 0}
+.m-chrow{display:flex;align-items:center;gap:12px;padding:12px 4px 2px;margin-top:8px;border-top:1px dashed var(--line)}
+.m-chsq{flex:0 0 26px;width:26px;height:26px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700}
+.m-chlabel{font-size:13px;color:var(--ink2)}
+.m-chrow .w-selwrap{margin-left:auto}
+
+/* ===== 专注模式：macOS 红绿灯区 + 左侧栏折叠（⌘\） =====
+   桌面壳隐藏系统标题栏后，红绿灯悬浮在左栏上方；红绿灯右侧留一个折叠按钮，
+   收起后主区占满 —— 编辑器一屏只剩稿子（Obsidian/Typora 式心流）。 */
+.w-rail{transition:flex-basis .22s ease,opacity .16s ease}
+.w-rail{position:relative;overflow:hidden}
+.w-rail.fr-collapsed{flex-basis:0;opacity:0;pointer-events:none;border-right-color:transparent}
+.w-rail.fr-collapsed .w-railclip{min-width:208px} /* 收起过程中内容不回绕，靠 aside 裁切 */
+.w-lights{display:none} /* 红绿灯是系统控件，原型不模拟 */
+.fr-toggle{position:absolute;top:9px;right:12px;z-index:3;width:28px;height:28px;border:none;border-radius:8px;background:transparent;color:var(--ink2);display:grid;place-items:center;transition:background .15s,color .15s}
+.fr-toggle:hover{background:var(--hover);color:var(--ink)}
+.fr-toggle .fr-kbd{position:absolute;top:100%;left:50%;transform:translateX(-50%);margin-top:4px;font-family:var(--mono);font-size:9.5px;color:var(--ink3);opacity:0;transition:opacity .15s;white-space:nowrap}
+.fr-toggle:hover .fr-kbd{opacity:1}
+/* 收起后：左上角悬浮展开按钮 */
+/* 收起后：悬浮展开按钮放在红绿灯右侧；主区头部整体让位 ——
+   否则标题/返回压在红绿灯和按钮底下，既难看又点不了 */
+.fr-float{position:fixed;z-index:60;top:9px;left:14px;width:30px;height:30px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink2);display:grid;place-items:center;box-shadow:var(--shadow-card);transition:background .15s,color .15s}
+.fr-float:hover{background:var(--hover);color:var(--ink)}
+body.fr-collapsed .w-head,body.fr-collapsed .m-edbar{padding-left:64px;transition:padding-left .2s ease}
+/* 专注中的轻提示：右下角一枚，Esc / ⌘\ 都能退出 */
+.fr-hint{position:fixed;right:18px;bottom:18px;z-index:55;font-family:var(--mono);font-size:10.5px;color:var(--ink3);background:var(--card);border:1px solid var(--line);border-radius:999px;padding:6px 12px;pointer-events:none;opacity:0;transition:opacity .2s}
+.fr-hint.on{opacity:1}
 
 </style>
 </head>
@@ -590,16 +659,16 @@ body.w-dragging,body.w-dragging *{user-select:none;cursor:grabbing}
 <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
 <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
-<script type="text/babel" src="./jsx/data.jsx"></script>
-<script type="text/babel" src="./jsx/icons.jsx"></script>
-<script type="text/babel" src="./jsx/bits.jsx"></script>
-<script type="text/babel" src="./jsx/phone.jsx"></script>
-<script type="text/babel" src="./jsx/dnd.jsx"></script>
-<script type="text/babel" src="./jsx/library.jsx"></script>
-<script type="text/babel" src="./jsx/tasks.jsx"></script>
-<script type="text/babel" src="./jsx/publish.jsx"></script>
-<script type="text/babel" src="./jsx/settings.jsx"></script>
-<script type="text/babel" src="./jsx/editor.jsx"></script>
-<script type="text/babel" src="./jsx/app.jsx"></script>
+<script type="text/babel" src="./jsx/data.jsx?v=10"></script>
+<script type="text/babel" src="./jsx/icons.jsx?v=10"></script>
+<script type="text/babel" src="./jsx/bits.jsx?v=10"></script>
+<script type="text/babel" src="./jsx/phone.jsx?v=10"></script>
+<script type="text/babel" src="./jsx/dnd.jsx?v=10"></script>
+<script type="text/babel" src="./jsx/library.jsx?v=10"></script>
+<script type="text/babel" src="./jsx/tasks.jsx?v=10"></script>
+<script type="text/babel" src="./jsx/publish.jsx?v=10"></script>
+<script type="text/babel" src="./jsx/settings.jsx?v=10"></script>
+<script type="text/babel" src="./jsx/editor.jsx?v=10"></script>
+<script type="text/babel" src="./jsx/app.jsx?v=10"></script>
 </body>
 </html>

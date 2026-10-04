@@ -7,13 +7,14 @@ import { Check, Refresh, Send } from "reicon-react";
 import { PlatformMark } from "./platform-icons";
 
 export function PublishSheet({
-  post, platforms, selectedIds, onToggle, onReacquire, onClose, onConfirm,
+  post, platforms, selectedIds, onToggle, onImport, onClose, onConfirm,
 }: {
   post: PostDTO;
   platforms: PlatformDTO[];
   selectedIds: string[];
   onToggle: (id: string) => void;
-  onReacquire: (id: string) => void;
+  /** 失效平台点击：走全局「导入登录态」确认（覆盖 + 全部重校验），不再有单平台重新获取 */
+  onImport: () => void;
   onClose: () => void;
   onConfirm: () => void;
 }) {
@@ -59,7 +60,7 @@ export function PublishSheet({
                 const off = failed(p);
                 const on = selectedIds.includes(p.id);
                 return (
-                  <span key={p.id} title={p.name + (off ? " · 获取失败，点击重新获取" : problem ? ` · ${problem}` : "")} className="inline-flex">
+                  <span key={p.id} title={p.name + (off ? " · 账号未连接，点一下可修复" : problem ? ` · ${problem}` : "")} className="inline-flex">
                     <Button
                       className={
                         "relative flex h-14 w-14 items-center justify-center rounded-[16px] p-0 shadow-[0_1px_2px_rgba(15,15,15,0.04)] transition-[translate,transform,box-shadow] duration-150 data-[off=true]:shadow-none" +
@@ -67,7 +68,7 @@ export function PublishSheet({
                       }
                       style={{ ...skinOf(p), transform: "none" }}
                       data-off={off}
-                      onPress={() => (off ? onReacquire(p.id) : onToggle(p.id))}
+                      onPress={() => (off ? onImport() : onToggle(p.id))}
                       aria-label={p.name}
                     >
                       <PlatformMark id={p.id} char={p.char} size={24} imgScale={1.4} tone={off ? "off" : on ? "lit" : "dim"} className="m-0 h-6 w-6" />

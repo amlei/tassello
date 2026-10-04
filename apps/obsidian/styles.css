@@ -1,0 +1,208 @@
+/* Scoped Obsidian right-panel styles. Variables intentionally inherit the active Obsidian theme. */
+.tassello-publisher {
+  --tp-ink: var(--text-normal);
+  --tp-ink2: var(--text-muted);
+  --tp-ink3: var(--text-faint);
+  --tp-card: var(--background-primary);
+  --tp-rail: var(--background-secondary);
+  --tp-line: var(--background-modifier-border);
+  --tp-hover: var(--background-modifier-hover);
+  --tp-selected: var(--background-modifier-active-hover);
+  --tp-accent: var(--interactive-accent);
+  --tp-error: var(--text-error);
+  --tp-warn: var(--text-warning, #c88a00);
+  --tp-ok: var(--text-success, #089e79);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--tp-rail);
+  color: var(--tp-ink);
+  overflow: hidden;
+  font-size: 13px;
+}
+
+.tassello-publisher .panel-head {
+  flex: 0 0 auto;
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid var(--tp-line);
+  background: var(--tp-card);
+}
+
+.tassello-publisher .head-top { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.tassello-publisher .mark { width: 24px; height: 24px; padding: 4px; border-radius: 7px; background: var(--tp-ink); display: grid; grid-template-columns: 1fr 1fr; gap: 2px; }
+.tassello-publisher .mark i { border-radius: 2px; background: var(--tp-card); }
+.tassello-publisher .mark i:first-child { background: #2c6ff0; }
+.tassello-publisher .mark i:nth-child(2) { background: #d52088; }
+.tassello-publisher .mark i:last-child { background: #0ec3d4; }
+.tassello-publisher .panel-title { flex: 1; font-size: 15px; font-weight: 700; }
+
+.tassello-publisher .conn {
+  display: flex; align-items: center; gap: 8px;
+  min-height: 31px; padding: 0 9px; margin-bottom: 8px;
+  border: 1px solid var(--tp-line); border-radius: 9px; background: var(--tp-rail);
+  color: var(--tp-ink2); font-size: 11.5px;
+}
+.tassello-publisher .conn .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--tp-ink3); }
+.tassello-publisher .conn .conn-detail {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--tp-ink3); font-size: 10.5px;
+}
+.tassello-publisher .conn.on { color: var(--tp-ink); }
+.tassello-publisher .conn.on .dot { background: var(--tp-ok); }
+.tassello-publisher .conn.wait .dot { background: var(--text-accent); animation: tp-pulse 1.2s ease infinite; }
+.tassello-publisher .conn.bad { border-color: color-mix(in srgb, var(--tp-error) 35%, transparent); color: var(--tp-error); }
+.tassello-publisher .conn.bad .dot { background: var(--tp-error); }
+.tassello-publisher .conn button {
+  margin-left: auto; min-height: 23px; padding: 0 7px;
+  border-radius: 6px; border: 1px solid var(--tp-line); background: var(--tp-card); color: var(--tp-ink);
+  font-size: 11px;
+}
+
+.tassello-publisher .mode {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 3px;
+  padding: 3px; border: 1px solid var(--tp-line); border-radius: 10px; background: var(--tp-rail);
+}
+.tassello-publisher .mode button {
+  min-height: 30px; border: 0; border-radius: 8px; background: transparent; color: var(--tp-ink2); font-weight: 600;
+}
+.tassello-publisher .mode button.active { background: var(--tp-card); color: var(--tp-ink); box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+.tassello-publisher .mode-count {
+  min-width: 17px; height: 16px; padding: 0 4px; border-radius: 99px;
+  background: var(--tp-selected); color: var(--tp-ink2); font-size: 10px;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.tassello-publisher .mode-count.hidden { display: none; }
+
+.tassello-publisher .panel-body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 12px 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.tassello-publisher .panel-foot { flex: 0 0 auto; padding: 10px 14px; border-top: 1px solid var(--tp-line); background: var(--tp-card); }
+
+.tassello-publisher .section-title {
+  display: flex; align-items: center; justify-content: space-between;
+  margin: 2px 0; color: var(--tp-ink3); font-size: 11px; text-transform: uppercase; letter-spacing: .06em;
+}
+.tassello-publisher .section-title .hint { text-transform: none; letter-spacing: 0; font-family: var(--font-monospace); }
+
+.tassello-publisher .findings { display: flex; flex-direction: column; gap: 6px; }
+.tassello-publisher .finding {
+  display: flex; gap: 7px; padding: 8px; border-radius: 8px;
+  border: 1px solid var(--tp-line); background: var(--tp-card); color: var(--tp-ink2); line-height: 1.45;
+}
+.tassello-publisher .finding.ok { background: color-mix(in srgb, var(--tp-ok) 8%, var(--tp-card)); border-color: color-mix(in srgb, var(--tp-ok) 25%, transparent); }
+.tassello-publisher .finding.warn { background: color-mix(in srgb, var(--tp-warn) 8%, var(--tp-card)); border-color: color-mix(in srgb, var(--tp-warn) 30%, transparent); }
+.tassello-publisher .finding.bad { background: color-mix(in srgb, var(--tp-error) 8%, var(--tp-card)); border-color: color-mix(in srgb, var(--tp-error) 30%, transparent); }
+.tassello-publisher .finding .icon { width: 14px; color: var(--tp-ink2); }
+
+.tassello-publisher .chips { display: flex; gap: 7px; }
+.tassello-publisher .chip {
+  width: 30px; min-height: 30px; padding: 0; border: 0; border-radius: 8px;
+  background: transparent; display: inline-flex; align-items: center; justify-content: center;
+  opacity: .45; transition: opacity .12s ease;
+}
+.tassello-publisher .chip:hover { opacity: .75; }
+.tassello-publisher .chip.selected { opacity: 1; }
+
+.tassello-publisher .preview-frame {
+  min-height: 180px; padding: 12px; border: 1px solid var(--tp-line); border-radius: 11px;
+  background: var(--tp-card); box-shadow: 0 1px 2px rgba(0,0,0,.04); overflow-wrap: anywhere;
+}
+.tassello-publisher .preview-frame.empty { display: flex; align-items: center; justify-content: center; color: var(--tp-ink3); text-align: center; }
+.tassello-publisher .preview-frame img { max-width: 100%; }
+.tassello-publisher .rich p { line-height: 1.65; margin: 0 0 .7em; }
+.tassello-publisher .rich h1, .tassello-publisher .rich h2, .tassello-publisher .rich h3 { margin: .7em 0 .4em; }
+.tassello-publisher .rich img { border-radius: 4px; }
+
+.tassello-publisher .targets { display: flex; flex-direction: column; gap: 7px; }
+.tassello-publisher .target {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 10px 12px; border: 1px solid var(--tp-line); border-radius: 11px; background: var(--tp-card);
+}
+.tassello-publisher .target.selected { border-color: color-mix(in srgb, var(--tp-accent) 45%, transparent); }
+.tassello-publisher .target.disabled, .tassello-publisher .target.failed { opacity: .74; }
+.tassello-publisher .target .check {
+  flex: 0 0 auto; width: 20px; height: 20px; margin-top: 1px; padding: 0;
+  border: 1px solid var(--tp-line); border-radius: 6px; background: var(--tp-rail);
+  color: var(--tp-ink); font-size: 11px; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.tassello-publisher .target.selected .check { border-color: var(--tp-accent); background: var(--tp-accent); color: white; }
+.tassello-publisher .target-main { flex: 1 1 auto; min-width: 0; }
+.tassello-publisher .target-top { display: flex; align-items: center; gap: 6px; }
+.tassello-publisher .target-top .glyph, .tassello-publisher .chip .glyph {
+  border-radius: 6px; color: white; font-size: 10px; font-weight: 800;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.tassello-publisher .target-top .glyph svg, .tassello-publisher .chip .glyph svg { display: block; }
+.tassello-publisher .target-desc { margin-top: 4px; color: var(--tp-ink2); font-size: 11.5px; line-height: 1.4; }
+.tassello-publisher .target-desc.warning { color: var(--tp-warn); }
+.tassello-publisher .status {
+  margin-left: auto; padding: 2px 7px; border-radius: 99px;
+  background: var(--tp-hover); color: var(--tp-ink2); font-size: 10px; font-weight: 700;
+}
+.tassello-publisher .status.running { background: var(--tp-accent); color: white; }
+.tassello-publisher .status.waiting { background: color-mix(in srgb, var(--tp-warn) 18%, transparent); color: var(--tp-warn); }
+.tassello-publisher .status.success { background: color-mix(in srgb, var(--tp-ok) 18%, transparent); color: var(--tp-ok); }
+.tassello-publisher .status.failed { background: color-mix(in srgb, var(--tp-error) 16%, transparent); color: var(--tp-error); }
+
+.tassello-publisher .target-actions { display: flex; gap: 5px; margin-top: 7px; flex-wrap: wrap; }
+.tassello-publisher .mini {
+  min-height: 25px; padding: 0 8px; border: 0; border-radius: 7px;
+  background: var(--tp-hover); color: var(--tp-ink); font-size: 11px; font-weight: 600;
+}
+.tassello-publisher .mini.primary { background: var(--tp-accent); color: white; }
+
+.tassello-publisher .primary-cta {
+  width: 100%; min-height: 36px; border: 0; border-radius: 10px;
+  background: var(--tp-accent); color: white; font-size: 13px; font-weight: 700;
+}
+.tassello-publisher .foot-note { margin-top: 6px; color: var(--tp-ink3); font-size: 10px; text-align: center; }
+.tassello-publisher .empty { border-style: dashed; }
+
+@keyframes tp-pulse { 50% { opacity: .3; } }
+
+.tassello-setting-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: -8px 0 16px; }
+.tassello-setting-chips button { border: 1px solid var(--background-modifier-border); border-radius: 8px; }
+.tassello-setting-chips button.active { border-color: var(--interactive-accent); background: var(--background-modifier-active-hover); }
+
+.tassello-publisher .ledger-link {
+  margin-left: auto;
+  min-height: 20px;
+  padding: 0 7px;
+  border: 1px solid var(--tp-line);
+  border-radius: 99px;
+  background: var(--tp-card);
+  color: var(--tp-ink2);
+  font-size: 10px;
+  font-weight: 600;
+}
+.tassello-publisher .ledger-link:hover { background: var(--tp-hover); color: var(--tp-ink); }
+
+.tassello-publisher .completion-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--layer-modal, 1000);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, .34);
+}
+.tassello-publisher .completion-modal {
+  width: min(360px, 100%);
+  padding: 16px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 14px;
+  background: var(--background-primary);
+  box-shadow: var(--shadow-s);
+}
+.tassello-publisher .completion-modal h3 { margin: 0; font-size: 14px; }
+.tassello-publisher .completion-desc { margin-top: 6px; color: var(--text-muted); font-size: 11.5px; line-height: 1.45; }
+.tassello-publisher .completion-modal label { display: block; margin: 14px 0 5px; color: var(--text-muted); font-size: 11px; font-weight: 600; }
+.tassello-publisher .completion-modal input {
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  background: var(--background-primary);
+}
+.tassello-publisher .completion-actions { display: flex; justify-content: flex-end; gap: 7px; margin-top: 16px; }

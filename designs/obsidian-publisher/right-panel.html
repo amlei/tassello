@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Obsidian Publisher · 右侧面板结构原型</title>
+<script>
+  // 原型默认跟随系统主题，同时保留页面内切换，便于确认两种 Obsidian 环境。
+  (function(){
+    const saved = localStorage.getItem("obsidian-publisher-theme");
+    const dark = saved ? saved === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+    document.documentElement.dataset.theme = dark ? "dark" : "light";
+  })();
+</script>
+<style>
+  /* 视觉延续 onda-explore/mosaic：白底、发丝线、中性灰阶、功能色只做小面积信号。 */
+  :root{
+    --blue:#2C6FF0;
+    --magenta:#D52088;
+    --orange:#FD8D11;
+    --cyan:#0EC3D4;
+    --green:#07B56F;
+    --error:#C81E4E;
+    --error-soft:#FDF1F4;
+    --error-line:#F2C2D1;
+    --warn:#9A6700;
+    --warn-soft:#FFF8E6;
+    --warn-line:#EBDFAF;
+    --ok-soft:#EBF8F1;
+    --ok-line:#BEE5D2;
+    --ink:#37352F;
+    --ink2:#787672;
+    --ink3:#ABA9A4;
+    --paper:#FFFFFF;
+    --card:#FFFFFF;
+    --rail:#FBFBFA;
+    --line:#EDECE9;
+    --hover:#F4F3F1;
+    --selected:#F1F0EE;
+    --accent:#2383E2;
+    --accent-tint:#E9F3FB;
+    --shadow-card:0 1px 2px rgba(15,15,15,.04);
+    --shadow-pop:0 14px 40px rgba(15,15,15,.14);
+    --r-lg:20px;
+    --r-md:14px;
+    --r-sm:10px;
+    --font:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  }
+  [data-theme="dark"]{
+    --error:#E5484D;
+    --error-soft:rgba(229,72,77,.12);
+    --error-line:rgba(229,72,77,.38);
+    --warn:#D9A53F;
+    --warn-soft:rgba(217,165,63,.12);
+    --warn-line:rgba(217,165,63,.34);
+    --ok-soft:rgba(7,181,111,.13);
+    --ok-line:rgba(7,181,111,.32);
+    --ink:#E6E5E3;
+    --ink2:#9B9A97;
+    --ink3:#6F6E69;
+    --paper:#191919;
+    --card:#252525;
+    --rail:#202020;
+    --line:#2F2F2F;
+    --hover:#2A2A2A;
+    --selected:#2F2F2F;
+    --accent:#4A9EE8;
+    --accent-tint:#20304A;
+    --shadow-card:0 1px 2px rgba(0,0,0,.3);
+    --shadow-pop:0 14px 40px rgba(0,0,0,.5);
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body,#root{height:100%}
+  body{font-family:var(--font);background:var(--paper);color:var(--ink);-webkit-font-smoothing:antialiased;overflow:hidden}
+  button{font-family:inherit;color:inherit;background:none;border:none;cursor:pointer}
+  input{font-family:inherit}
+  ::-webkit-scrollbar{width:0;height:0}
+
+  .proto{height:100vh;display:flex;flex-direction:column;overflow:hidden}
+  .proto-top{
+    flex:0 0 auto;display:flex;align-items:center;gap:10px;
+    padding:9px 14px;border-bottom:1px solid var(--line);background:var(--rail);
+    font-size:12.5px;color:var(--ink2);
+  }
+  .proto-top strong{font-size:13px;color:var(--ink);letter-spacing:-.1px}
+  .proto-top .actions{margin-left:auto;display:flex;gap:6px}
+  .ghost-btn{
+    display:inline-flex;align-items:center;gap:6px;min-height:28px;padding:0 10px;
+    border:1px solid var(--line);border-radius:999px;background:var(--card);
+    font-size:12px;color:var(--ink);transition:.15s ease;
+  }
+  .ghost-btn:hover{background:var(--hover)}
+  .ghost-btn.active{border-color:color-mix(in srgb,var(--accent) 42%,transparent);background:var(--accent-tint);color:var(--accent)}
+
+  .stage{flex:1;min-height:0;display:flex;justify-content:center;overflow:auto}
+  @media (max-width:900px){.icon-rail{display:none}.obsidian{grid-template-columns:minmax(130px,170px) minmax(160px,1fr) minmax(300px,356px)}}
+  @media (max-width:660px){.obsidian{grid-template-columns:minmax(280px,1fr) minmax(300px,356px)}.vault{display:none}}
+  .obsidian{
+    width:min(1440px,100%);height:100%;display:grid;
+    grid-template-columns:48px minmax(140px,190px) minmax(170px,1fr) minmax(300px,366px);
+    overflow:hidden;
+  }
+  @media (max-width:900px){.icon-rail{display:none}.obsidian{grid-template-columns:minmax(130px,170px) minmax(160px,1fr) minmax(300px,356px)}}
+  @media (max-width:660px){.obsidian{grid-template-columns:minmax(280px,1fr) minmax(300px,356px)}.vault{display:none}}
+
+  .icon-rail{border-right:1px solid var(--line);background:var(--rail);display:flex;flex-direction:column;align-items:center;gap:8px;padding:12px 0}
+  .rail-dot{width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;color:var(--ink2);font-size:15px}
+  .rail-dot:hover{background:var(--hover);color:var(--ink)}
+  .rail-dot.active{background:var(--selected);color:var(--ink)}
+
+  .vault{border-right:1px solid var(--line);background:var(--rail);padding:12px 10px;overflow:auto}
+  .vault h2{font-size:11px;color:var(--ink3);font-weight:600;letter-spacing:.08em;text-transform:uppercase;padding:0 6px 8px}
+  .vault-group{font-size:11.5px;font-weight:700;color:var(--ink2);padding:8px 6px 5px}
+  .file{display:flex;align-items:center;gap:7px;min-height:28px;padding:0 6px;border-radius:7px;color:var(--ink2);font-size:12.8px}
+  .file:hover{background:var(--hover);color:var(--ink)}
+  .file.active{background:var(--selected);color:var(--ink);font-weight:600}
+  .file .glyph{width:14px;color:var(--ink3);font-family:var(--mono);font-size:10px;text-align:center}
+
+  .editor{min-width:0;display:flex;flex-direction:column;background:var(--paper)}
+  .editor-bar{
+    flex:0 0 auto;height:40px;display:flex;align-items:center;gap:8px;
+    padding:0 14px;border-bottom:1px solid var(--line);color:var(--ink3);font-size:11.5px;
+  }
+  .editor-scroll{flex:1;overflow:auto;padding:24px 36px 60px}
+  .note-title{font-size:27px;font-weight:700;letter-spacing:-.5px;line-height:1.3}
+  .note-meta{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0 20px}
+  .tag{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:999px;border:1px solid var(--line);color:var(--ink2);font-size:11px;background:var(--card)}
+  .tag b{font-weight:600;color:var(--ink)}
+  .note-body{max-width:680px;color:var(--ink);font-size:14px;line-height:1.9}
+  .note-body p{margin:0 0 12px}
+  .note-body h3{margin:18px 0 8px;font-size:17px;letter-spacing:-.2px}
+  .note-body blockquote{margin:0 0 12px;padding:3px 0 3px 11px;border-left:2px solid var(--line);color:var(--ink2)}
+  .note-photos{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:8px 0 14px;max-width:560px}
+  .photo{aspect-ratio:4/3;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:700}
+
+  /* ---------- 右侧面板 ---------- */
+  .panel{
+    min-width:0;display:flex;flex-direction:column;gap:0;overflow:hidden;
+    border-left:1px solid var(--line);background:var(--rail);
+  }
+  .panel-head{flex:0 0 auto;padding:13px 14px 10px;border-bottom:1px solid var(--line);background:var(--card)}
+  .head-top{display:flex;align-items:center;gap:8px}
+  .mark{
+    width:26px;height:26px;border-radius:8px;display:grid;grid-template-columns:1fr 1fr;gap:2px;
+    padding:4px;background:var(--ink);flex:0 0 auto;
+  }
+  .mark i{border-radius:2px;background:var(--paper)}
+  .mark i:nth-child(1){background:#2C6FF0}
+  .mark i:nth-child(2){background:#D52088}
+  .mark i:nth-child(4){background:#0EC3D4}
+  .panel-head h1{flex:1;font-size:15px;font-weight:700;letter-spacing:-.2px;line-height:1.2}
+  .theme-btn{width:27px;height:27px;border-radius:8px;color:var(--ink2);display:flex;align-items:center;justify-content:center}
+  .theme-btn:hover{background:var(--hover);color:var(--ink)}
+  .conn{
+    margin-top:10px;min-height:31px;display:flex;align-items:center;gap:8px;
+    padding:0 9px;border-radius:9px;border:1px solid var(--line);background:var(--rail);
+    font-size:11.5px;color:var(--ink2);
+  }
+  .conn .dot{width:7px;height:7px;border-radius:50%;background:var(--ink3);flex:0 0 auto}
+  .conn.on{color:var(--ink)}
+  .conn.on .dot{background:var(--green)}
+  .conn.wait .dot{background:var(--orange);animation:pulse 1.2s ease infinite}
+  .conn.bad{border-color:var(--error-line);background:var(--error-soft);color:var(--error)}
+  .conn.bad .dot{background:var(--error)}
+  .conn button{margin-left:auto;min-height:22px;padding:0 7px;border-radius:6px;background:var(--card);border:1px solid var(--line);font-size:11px;color:var(--ink)}
+  .conn button:hover{background:var(--hover)}
+  @keyframes pulse{50%{opacity:.28}}
+
+  .mode{
+    margin:10px 14px 0;display:grid;grid-template-columns:1fr 1fr;gap:3px;
+    padding:3px;border:1px solid var(--line);border-radius:10px;background:var(--rail);
+  }
+  .mode button{
+    min-height:31px;border-radius:8px;font-size:12.5px;font-weight:600;color:var(--ink2);
+    transition:.16s ease;display:flex;align-items:center;justify-content:center;gap:6px;
+  }
+  .mode button:hover{color:var(--ink)}
+  .mode button.active{background:var(--card);color:var(--ink);box-shadow:var(--shadow-card)}
+  .mode-count{min-width:17px;height:16px;padding:0 4px;border-radius:99px;background:var(--selected);color:var(--ink2);font-family:var(--mono);font-size:9.5px;display:flex;align-items:center;justify-content:center}
+  .mode button.active .mode-count{background:var(--accent-tint);color:var(--accent)}
+
+  .panel-body{flex:1;min-height:0;overflow:auto;padding:12px 14px 16px;display:flex;flex-direction:column;gap:11px}
+  .panel-foot{flex:0 0 auto;padding:10px 14px 12px;border-top:1px solid var(--line);background:var(--card)}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r-md);box-shadow:var(--shadow-card)}
+  .kv{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11px;color:var(--ink2)}
+  .kv b{color:var(--ink);font-weight:600}
+
+  .chips{display:flex;flex-wrap:wrap;gap:5px}
+  .chip{
+    display:inline-flex;align-items:center;gap:5px;min-height:27px;padding:0 8px;
+    border-radius:8px;border:1px solid var(--line);background:var(--card);
+    font-size:11.5px;color:var(--ink2);transition:.15s ease;
+  }
+  .chip:hover{background:var(--hover);color:var(--ink)}
+  .chip.selected{border-color:color-mix(in srgb,var(--accent) 40%,transparent);background:var(--accent-tint);color:var(--ink)}
+  .chip .glyph{width:16px;height:16px;border-radius:5px;color:#fff;font-size:9px;font-weight:800;display:flex;align-items:center;justify-content:center}
+  .chip.icon-only{width:34px;min-height:34px;justify-content:center;padding:0;border-radius:11px}
+  .chip.icon-only .glyph{width:19px;height:19px;border-radius:6px;font-size:10px}
+  .chip .state{width:5px;height:5px;border-radius:50%}
+
+  .section-title{display:flex;align-items:center;gap:6px;margin:1px 2px 0;font-size:11px;color:var(--ink3);text-transform:uppercase;letter-spacing:.07em}
+  .section-title .hint{margin-left:auto;text-transform:none;letter-spacing:0;font-family:var(--mono);font-size:10px}
+
+  .preview{padding:11px;display:flex;flex-direction:column;gap:9px}
+  .preview-head{display:flex;align-items:flex-start;gap:8px}
+  .preview-head .title{font-size:13.5px;font-weight:700;line-height:1.35}
+  .preview-head .sub{margin-top:3px;font-size:10.5px;color:var(--ink2);line-height:1.4}
+  .preview-head .glyph{width:26px;height:26px;border-radius:8px;color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800}
+  .preview-frame{border:1px solid var(--line);border-radius:11px;background:var(--card);padding:10px;min-height:168px;box-shadow:var(--shadow-card)}
+  .plain{font-size:12.5px;line-height:1.72;color:var(--ink);white-space:pre-wrap;text-wrap:pretty}
+  .rich h4{font-size:15px;margin:0 0 7px;letter-spacing:-.2px}
+  .rich p{font-size:12.3px;line-height:1.72;margin:0 0 8px;color:var(--ink)}
+  .rich blockquote{margin:0 0 8px;padding:2px 0 2px 9px;border-left:2px solid var(--line);color:var(--ink2)}
+  .rich .figure{height:78px;border-radius:8px;margin:6px 0 8px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:10px;font-weight:700}
+  .gallery{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin-bottom:8px}
+  .gallery .item{aspect-ratio:1;border-radius:7px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:10px;font-weight:700}
+  .metrics{display:flex;flex-wrap:wrap;gap:5px}
+  .metric{display:inline-flex;align-items:center;gap:4px;padding:3px 6px;border-radius:6px;background:var(--hover);color:var(--ink2);font-family:var(--mono);font-size:10px}
+  .metric.ok{background:var(--ok-soft);color:color-mix(in srgb,var(--green) 76%,var(--ink))}
+  .metric.warn{background:var(--warn-soft);color:var(--warn)}
+  .metric.bad{background:var(--error-soft);color:var(--error)}
+  .findings{display:flex;flex-direction:column;gap:5px}
+  .finding{display:flex;gap:7px;padding:7px 8px;border-radius:8px;border:1px solid var(--line);background:var(--card);font-size:11.3px;color:var(--ink2);line-height:1.45}
+  .finding.ok{border-color:var(--ok-line);background:var(--ok-soft)}
+  .finding.warn{border-color:var(--warn-line);background:var(--warn-soft)}
+  .finding.bad{border-color:var(--error-line);background:var(--error-soft)}
+  .finding .icon{width:14px;height:14px;border-radius:50%;flex:0 0 auto;color:#fff;font-size:8.5px;font-weight:800;display:flex;align-items:center;justify-content:center;margin-top:1px}
+  .finding.ok .icon{background:var(--green)}
+  .finding.warn .icon{background:var(--warn)}
+  .finding.bad .icon{background:var(--error)}
+
+  .targets{display:flex;flex-direction:column;gap:7px}
+  .target{
+    padding:10px 11px;border-radius:11px;border:1px solid var(--line);background:var(--card);
+    display:flex;gap:9px;align-items:flex-start;transition:.15s ease;
+  }
+  .target.selected{border-color:color-mix(in srgb,var(--accent) 36%,transparent)}
+  .target.disabled{opacity:.52}
+  .check{width:16px;height:16px;border-radius:5px;border:1px solid var(--line);background:var(--card);display:flex;align-items:center;justify-content:center;color:transparent;flex:0 0 auto;margin-top:1px}
+  .target.selected .check{background:var(--accent);border-color:var(--accent);color:#fff}
+  .target-main{min-width:0;flex:1}
+  .target-top{display:flex;align-items:center;gap:6px}
+  .target-top .glyph{width:18px;height:18px;border-radius:5px;color:#fff;font-size:9px;font-weight:800;display:flex;align-items:center;justify-content:center}
+  .target-top .name{font-size:12.6px;font-weight:700}
+  .status{margin-left:auto;display:inline-flex;align-items:center;gap:4px;height:19px;padding:0 6px;border-radius:99px;background:var(--hover);color:var(--ink2);font-size:10px;font-weight:700}
+  .status.running{background:var(--accent-tint);color:var(--accent)}
+  .status.waiting{background:var(--warn-soft);color:var(--warn)}
+  .status.success{background:var(--ok-soft);color:color-mix(in srgb,var(--green) 78%,var(--ink))}
+  .status.failed{background:var(--error-soft);color:var(--error)}
+  .target-desc{margin-top:4px;font-size:10.8px;color:var(--ink2);line-height:1.45}
+  .target-actions{display:flex;gap:5px;margin-top:7px}
+  .mini{min-height:24px;padding:0 8px;border-radius:7px;background:var(--hover);color:var(--ink);font-size:10.5px;font-weight:600}
+  .mini:hover{background:var(--selected)}
+  .mini.primary{background:var(--accent);color:#fff}
+  .mini.primary:hover{background:color-mix(in srgb,var(--accent) 88%,#000)}
+  .progress{margin-top:7px;height:3px;border-radius:99px;background:var(--hover);overflow:hidden}
+  .progress i{display:block;height:100%;border-radius:99px;background:var(--accent);transition:width .3s ease}
+
+  .notice{
+    display:flex;gap:8px;padding:9px 10px;border-radius:10px;border:1px solid var(--line);
+    background:var(--card);font-size:10.8px;color:var(--ink2);line-height:1.5;
+  }
+  .notice b{color:var(--ink)}
+  .approval{
+    border-color:color-mix(in srgb,var(--orange) 38%,transparent);
+    background:linear-gradient(0deg,color-mix(in srgb,var(--orange) 8%,transparent),color-mix(in srgb,var(--orange) 8%,transparent)),var(--card);
+  }
+
+  .primary-cta{
+    width:100%;min-height:36px;border-radius:10px;background:var(--accent);color:#fff;
+    font-size:12.8px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:7px;
+    transition:.16s ease;
+  }
+  .primary-cta:hover{background:color-mix(in srgb,var(--accent) 90%,#000)}
+  .primary-cta:disabled{background:var(--selected);color:var(--ink3);cursor:not-allowed}
+  .foot-note{margin-top:6px;text-align:center;font-size:10px;color:var(--ink3)}
+  .ledger-link{margin-left:auto;display:inline-flex;align-items:center;gap:4px;min-height:20px;padding:0 7px;border:1px solid var(--line);border-radius:99px;background:var(--card);color:var(--ink2);font-size:10px;font-weight:600;text-transform:none;letter-spacing:0}
+  .ledger-link:hover{background:var(--hover);color:var(--ink)}
+  .modal-backdrop{position:fixed;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(15,15,15,.34)}
+  .modal{width:min(380px,100%);padding:16px;border:1px solid var(--line);border-radius:16px;background:var(--card);box-shadow:var(--shadow-pop)}
+  .modal h3{font-size:14px;letter-spacing:-.2px}
+  .modal p{margin-top:5px;font-size:11.3px;line-height:1.5;color:var(--ink2)}
+  .modal label{display:block;margin:14px 0 6px;font-size:11px;font-weight:600;color:var(--ink2)}
+  .modal input{width:100%;height:32px;padding:0 10px;border:1px solid var(--line);border-radius:9px;background:var(--paper);color:var(--ink);font-size:12px;outline:none}
+  .modal input:focus{border-color:color-mix(in srgb,var(--accent) 50%,transparent);box-shadow:0 0 0 2px var(--accent-tint)}
+  .modal-actions{display:flex;justify-content:flex-end;gap:7px;margin-top:16px}
+
+  .empty{
+    min-height:220px;border:1px dashed var(--line);border-radius:var(--r-md);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;
+    color:var(--ink3);font-size:12px;text-align:center;background:var(--card);
+  }
+  /* 小窗口下优先保住右侧面板；完整 Obsidian 三栏布局在桌面宽度展示。 */
+  @media (max-width:900px){
+    .proto .icon-rail{display:none !important}
+    .proto .obsidian{grid-template-columns:minmax(130px,170px) minmax(160px,1fr) minmax(300px,356px)}
+  }
+  @media (max-width:660px){
+    .proto .vault{display:none !important}
+    .proto .obsidian{grid-template-columns:minmax(280px,1fr) minmax(300px,356px)}
+  }
+</style>
+<script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"></script>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState, useEffect, useMemo, useRef} = React;
+
+const PLATFORMS = [
+  {id:"weibo", name:"微博", short:"微", color:"#FD8D11", kind:"CDP · 填编辑器", limit:2000},
+  {id:"xhs", name:"小红书", short:"红", color:"#D52088", kind:"CDP · 存草稿", limit:1000},
+  {id:"wechat", name:"公众号", short:"公", color:"#2C6FF0", kind:"CDP · 草稿箱", limit:20000},
+  {id:"zhihu", name:"知乎", short:"知", color:"#2383E2", kind:"HTTP · 文章", limit:20000},
+];
+
+const PHOTOS = [
+  {name:"封面", color:"#7A6FF0"},
+  {name:"细节", color:"#0EC3D4"},
+  {name:"成品", color:"#FD8D11"},
+];
+
+const NOTE_BODY = `这一篇记录发布插件的结构假设：右侧面板只保留 Preview 和 Publish。\n\n预览不是模仿平台官方 UI，而是展示即将交给适配器的 payload。这样能避免「Obsidian 里看着对，发布时结构变了」的偏差。`;
+
+function icon(name){
+  const size = name === "settings" ? 15 : 14;
+  const paths = {
+    files: <><path d="M3 2.5h4l1.4 1.7H13a1 1 0 0 1 1 1V12a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1Z" /><path d="M2 6h12" /></>,
+    search: <><circle cx="7.2" cy="7.2" r="4.35" /><path d="m10.4 10.4 3.3 3.3" /></>,
+    publish: <><path d="M8 12.5V3" /><path d="m4.3 6.6 3.7-3.6 3.7 3.6" /><path d="M3 12.5h10" /></>,
+    link: <><path d="M6.7 9.3 9.3 6.7" /><path d="M8.3 4.3 9.6 3a2.55 2.55 0 0 1 3.6 3.6l-1.35 1.35" /><path d="M7.7 11.7 6.4 13a2.55 2.55 0 0 1-3.6-3.6l1.35-1.35" /></>,
+    settings: <><circle cx="8" cy="8" r="2.1" /><path d="M12.8 9.7a1.1 1.1 0 0 0 .22 1.21l.04.04a1.33 1.33 0 1 1-1.88 1.88l-.04-.04a1.1 1.1 0 0 0-1.87.78v.11a1.33 1.33 0 1 1-2.66 0v-.06a1.1 1.1 0 0 0-1.87-.79l-.04.04a1.33 1.33 0 1 1-1.88-1.88l.04-.04A1.1 1.1 0 0 0 3.2 9.7a1.33 1.33 0 1 1 0-2.66h.06a1.1 1.1 0 0 0 .78-1.87L4 5.13a1.33 1.33 0 1 1 1.88-1.88l.04.04a1.1 1.1 0 0 0 1.21.22h.05a1.1 1.1 0 0 0 .67-1v-.11a1.33 1.33 0 1 1 2.66 0v.06a1.1 1.1 0 0 0 .67 1 1.1 1.1 0 0 0 1.21-.22l.04-.04a1.33 1.33 0 1 1 1.88 1.88l-.04.04a1.1 1.1 0 0 0-.22 1.21v.05a1.1 1.1 0 0 0 1 .67h.11a1.33 1.33 0 1 1 0 2.66h-.06a1.1 1.1 0 0 0-1 .67Z" /></>,
+    moon: <path d="M13.2 9.55A5.6 5.6 0 0 1 6.45 2.8a5.6 5.6 0 1 0 6.75 6.75Z" />,
+    sun: <><circle cx="8" cy="8" r="3" /><path d="M8 1.5v1.6M8 12.9v1.6M1.5 8h1.6M12.9 8h1.6M3.4 3.4l1.1 1.1M11.5 11.5l1.1 1.1M12.6 3.4l-1.1 1.1M4.5 11.5l-1.1 1.1" /></>,
+  };
+  return <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
+}
+
+function initialTasks(){
+  const map = {};
+  PLATFORMS.forEach(p => map[p.id] = {status:"idle", stage:0, progress:0, url:null});
+  return map;
+}
+
+function App(){
+  const [theme, setTheme] = useState(document.documentElement.dataset.theme);
+  const [mode, setMode] = useState("preview");
+  const [activePlatform, setActivePlatform] = useState("xhs");
+  const [selected, setSelected] = useState({weibo:true, xhs:true, wechat:true, zhihu:false});
+  const [browser, setBrowser] = useState("disconnected");
+  const [tasks, setTasks] = useState(initialTasks);
+  const [running, setRunning] = useState(false);
+  const [completion, setCompletion] = useState(null);
+  const timers = useRef([]);
+
+  const body = NOTE_BODY;
+  const selectedCount = Object.values(selected).filter(Boolean).length;
+  const platform = PLATFORMS.find(p => p.id === activePlatform);
+  const blocked = browser !== "connected";
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem("obsidian-publisher-theme", theme);
+  }, [theme]);
+
+  useEffect(() => () => timers.current.forEach(clearTimeout), []);
+
+  const findings = useMemo(() => {
+    const common = [
+      {level:"warn", text:"Callout 会被转换为普通段落。"},
+      {level:"ok", text:"3 张附件均位于当前 vault，可直接上传。"},
+    ];
+    if(activePlatform === "xhs") return [...common, {level:"warn", text:"小红书正文是纯文本，不携带 Markdown 格式。"}];
+    if(activePlatform === "weibo") return [...common, {level:"ok", text:"话题会转为 #话题#，图片作为附件上传。"}];
+    if(activePlatform === "wechat") return [...common, {level:"ok", text:"图片将先进入公众号素材库，再替换正文引用。"}];
+    if(activePlatform === "zhihu") return [...common, {level:"bad", text:"公式块需要确认目标平台的渲染格式。"}];
+    return common;
+  }, [activePlatform]);
+
+  const payloadText = `标题：用 Obsidian 右侧面板完成多平台发布\n\n${body}`;
+  const weiboPayloadText = `标题：用 Obsidian 右侧面板完成多平台发布\n\n${body}\n\n#自媒体#`;
+
+  function toggleTheme(){ setTheme(theme === "light" ? "dark" : "light"); }
+
+  function connectBrowser(){
+    setBrowser("waiting");
+    const t = setTimeout(() => setBrowser("connected"), 1500);
+    timers.current.push(t);
+  }
+
+  function startPublish(){
+    if(blocked || running || selectedCount === 0) return;
+    setRunning(true);
+    setTasks(initialTasks());
+    const next = initialTasks();
+    PLATFORMS.forEach((p, index) => {
+      if(!selected[p.id]) return;
+      const stages = p.id === "zhihu"
+        ? [["queued",4],["running",38],["running",82],["success",100]]
+        : [["queued",6],["running",32],["running",68],["waiting",100]];
+      stages.forEach(([status, progress], stageIndex) => {
+        const t = setTimeout(() => {
+          setTasks(prev => ({
+            ...prev,
+            [p.id]: {
+              status,
+              stage:stageIndex,
+              progress,
+              url: status === "success" ? "https://example.com/receipt" : null,
+            },
+          }));
+        }, 350 + index*180 + stageIndex*680);
+        timers.current.push(t);
+      });
+    });
+    const done = setTimeout(() => setRunning(false), 3600);
+    timers.current.push(done);
+  }
+
+  function confirmTask(id){
+    setCompletion({id, url:""});
+  }
+
+  function submitCompletion(){
+    if(!completion) return;
+    const url = completion.url.trim();
+    setTasks(prev => ({...prev, [completion.id]:{...prev[completion.id], status:"success", progress:100, url:url || null}}));
+    setCompletion(null);
+  }
+
+  const statusText = {
+    idle:"未发布", queued:"排队", running:"执行中", waiting:"待确认", success:"完成", failed:"失败"
+  };
+
+  return (
+    <div className="proto">
+      <header className="proto-top">
+        <strong>Obsidian Publisher · 右侧面板结构原型</strong>
+        <span>Preview / Publish 共用同一份平台 payload</span>
+        <div className="actions">
+          <button className="ghost-btn active">右侧面板</button>
+          <button className="ghost-btn" onClick={toggleTheme}>
+            {icon(theme === "light" ? "moon" : "sun")}
+            {theme === "light" ? "深色" : "浅色"}
+          </button>
+        </div>
+      </header>
+
+      <main className="stage">
+        <section className="obsidian">
+          <nav className="icon-rail">
+            <button className="rail-dot active">{icon("files")}</button>
+            <button className="rail-dot">{icon("search")}</button>
+            <button className="rail-dot">{icon("publish")}</button>
+            <button className="rail-dot">{icon("settings")}</button>
+          </nav>
+
+          <aside className="vault">
+            <h2>Content</h2>
+            <div className="vault-group">发布</div>
+            <button className="file active"><span className="glyph">MD</span>发布插件结构假设</button>
+            <button className="file"><span className="glyph">MD</span>小红书图片贴</button>
+            <button className="file"><span className="glyph">MD</span>公众号长文草稿</button>
+            <div className="vault-group">Attachments</div>
+            <button className="file"><span className="glyph">IMG</span>cover.png</button>
+            <button className="file"><span className="glyph">IMG</span>detail.png</button>
+            <button className="file"><span className="glyph">IMG</span>final.png</button>
+          </aside>
+
+          <section className="editor">
+            <div className="editor-bar">
+              <span>Content / 发布 / 发布插件结构假设.md</span>
+              <span style={{marginLeft:"auto"}}>Markdown · 412 字</span>
+            </div>
+            <div className="editor-scroll">
+              <h1 className="note-title">发布插件结构假设</h1>
+              <div className="note-meta">
+                <span className="tag">type <b>image</b></span>
+                <span className="tag">platforms <b>xhs · weibo · wechat</b></span>
+                <span className="tag">status <b>draft</b></span>
+              </div>
+              <article className="note-body">
+                <p>这一篇记录发布插件的结构假设：右侧面板只保留 Preview 和 Publish。</p>
+                <h3>为什么不是精确复刻平台</h3>
+                <blockquote>预览应该展示适配器实际收到的 payload，而不是试图在 Obsidian 里还原一个平台客户端。</blockquote>
+                <p>发布时由适配器打开平台编辑器并填充内容，最终确认留给用户。</p>
+                <div className="note-photos">
+                  {PHOTOS.map(p => <div key={p.name} className="photo" style={{background:p.color}}>{p.name}</div>)}
+                </div>
+                <p>预览不是模仿平台官方 UI，而是展示即将交给适配器的 payload。这样能避免「Obsidian 里看着对，发布时结构变了」的偏差。</p>
+              </article>
+            </div>
+          </section>
+
+          <aside className="panel">
+            <div className="panel-head">
+              <div className="head-top">
+                <div className="mark"><i></i><i></i><i></i><i></i></div>
+                <h1>Publisher</h1>
+                <button className="theme-btn" onClick={toggleTheme} title="切换主题">{icon(theme === "light" ? "moon" : "sun")}</button>
+              </div>
+              <div className={`conn ${browser === "connected" ? "on" : browser === "waiting" ? "wait" : "bad"}`}>
+                <span className="dot"></span>
+                {browser === "connected" && <span>默认 Chrome · 已授权</span>}
+                {browser === "waiting" && <span>等待 Chrome 授权…</span>}
+                {browser === "disconnected" && <span>默认 Chrome 未连接</span>}
+                {browser !== "connected" && <button onClick={connectBrowser}>{browser === "waiting" ? "取消" : "连接"}</button>}
+              </div>
+              <div className="mode">
+                <button className={mode === "preview" ? "active" : ""} onClick={() => setMode("preview")}>
+                  {icon("search")} 预览
+                </button>
+                <button className={mode === "publish" ? "active" : ""} onClick={() => setMode("publish")}>
+                  {icon("publish")} 发布
+                  <span className="mode-count">{selectedCount}</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="panel-body">
+              {mode === "preview" ? (
+                <React.Fragment>
+                  <div className="section-title">
+                    转换检查
+                    <span className="hint">整篇文件</span>
+                  </div>
+                  <div className="findings">
+                    {findings.map((f, i) => (
+                      <div key={i} className={`finding ${f.level}`}>
+                        <span className="icon">{f.level === "ok" ? "✓" : f.level === "warn" ? "!" : "×"}</span>
+                        <span>{f.text}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="section-title">
+                    平台 payload
+                    <span className="hint">同一输入</span>
+                  </div>
+                  <div className="chips">
+                    {PLATFORMS.map(p => (
+                      <button
+                        key={p.id}
+                        className={`chip icon-only ${activePlatform === p.id ? "selected" : ""}`}
+                        title={p.name}
+                        aria-label={p.name}
+                        onClick={() => setActivePlatform(p.id)}
+                      >
+                        <span className="glyph" style={{background:p.color}}>{p.short}</span>
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="preview-frame">
+                    {activePlatform === "xhs" ? (
+                      <div>
+                        <div className="gallery">
+                          {PHOTOS.map((p,i) => <div key={p.name} className="item" style={{background:p.color}}>{i+1}</div>)}
+                        </div>
+                        <div className="plain">用 Obsidian 右侧面板完成多平台发布{'\n\n'}{body}</div>
+                      </div>
+                    ) : activePlatform === "weibo" ? (
+                      <div>
+                        <div className="gallery">
+                          {PHOTOS.map((p,i) => <div key={p.name} className="item" style={{background:p.color}}>{i+1}</div>)}
+                        </div>
+                        <div className="plain">{weiboPayloadText}</div>
+                      </div>
+                    ) : activePlatform === "wechat" ? (
+                      <div className="rich">
+                        <h4>用 Obsidian 右侧面板完成多平台发布</h4>
+                        <p>{body}</p>
+                        <blockquote>预览应该展示适配器实际收到的 payload，而不是试图在 Obsidian 里还原一个平台客户端。</blockquote>
+                        <div className="figure" style={{background:"#7A6FF0"}}>素材库图片 · cover.png</div>
+                        <p>发布时由适配器打开平台编辑器并填充内容，最终确认留给用户。</p>
+                      </div>
+                    ) : (
+                      <div className="plain">{payloadText}</div>
+                    )}
+                  </div>
+                </React.Fragment>
+              ) : (
+                <React.Fragment>
+                  <div className="section-title">
+                    发布目标
+                    <span className="hint">{selectedCount} / {PLATFORMS.length}</span>
+                    <button className="ledger-link" onClick={() => window.open("publishments-base.html", "_blank")}>发布库</button>
+                  </div>
+                  <div className="targets">
+                    {PLATFORMS.map(p => {
+                      const task = tasks[p.id];
+                      const isSelected = selected[p.id];
+                      const statusClass = task.status === "running" ? "running" : task.status === "waiting" ? "waiting" : task.status === "success" ? "success" : task.status === "failed" ? "failed" : "";
+                      return (
+                        <div key={p.id} className={`target ${isSelected ? "selected" : "disabled"}`}>
+                          <button className="check" onClick={() => setSelected(prev => ({...prev, [p.id]:!prev[p.id]}))} aria-label={`选择 ${p.name}`}>✓</button>
+                          <div className="target-main">
+                            <div className="target-top">
+                              <span className="glyph" style={{background:p.color}}>{p.short}</span>
+                              <span className="name">{p.name}</span>
+                              <span className={`status ${statusClass}`}>{statusText[task.status]}</span>
+                            </div>
+                            <div className="target-desc">
+                              {task.status === "idle" && p.kind}
+                              {task.status === "queued" && "等待工作线程。"}
+                              {task.status === "running" && (task.progress < 45 ? "渲染 payload / 上传素材…" : "填充平台编辑器…")}
+                              {task.status === "waiting" && "内容已填好，请在平台页面检查后手动发布。完成后可回填发布链接。"}
+                              {task.status === "success" && "任务完成，可保存回执链接。"}
+                            </div>
+                            {(task.status === "running" || task.status === "queued") && (
+                              <div className="progress"><i style={{width:`${task.progress}%`}}></i></div>
+                            )}
+                            {task.status === "waiting" && (
+                              <div className="target-actions">
+                                <button className="mini" onClick={() => window.open("https://example.com/draft", "_blank")}>打开草稿</button>
+                                <button className="mini primary" onClick={() => confirmTask(p.id)}>标记完成</button>
+                              </div>
+                            )}
+                            {task.status === "success" && task.url && (
+                              <div className="target-actions">
+                                <button className="mini" onClick={() => window.open(task.url, "_blank")}>查看回执</button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {browser !== "connected" ? (
+                    <div className="notice approval">
+                      <b>Chrome 授权：</b>
+                      <span>插件会读取本机 <code>DevToolsActivePort</code> 并直连浏览器级 WebSocket；授权在 Chrome 内完成，不复制默认 Profile。</span>
+                    </div>
+                  ) : (
+                    <div className="notice">
+                      <b>安全边界：</b>
+                      <span>仅连接 127.0.0.1，不开启局域网端口，也不自动代点最终发布。</span>
+                    </div>
+                  )}
+                </React.Fragment>
+              )}
+            </div>
+
+            <div className="panel-foot">
+              <button className="primary-cta" disabled={mode === "publish" && (blocked || running || selectedCount === 0)} onClick={startPublish}>
+                {mode === "preview" ? "把当前预览发送到 Publish" : blocked ? "先连接默认 Chrome" : running ? "发布任务执行中…" : `发布到 ${selectedCount} 个平台`}
+              </button>
+              <div className="foot-note">{mode === "preview" ? "切换后保留当前平台选择" : "CDP 平台停在人工确认"}</div>
+            </div>
+          </aside>
+        </section>
+      </main>
+      {completion && (
+        <div className="modal-backdrop" onClick={() => setCompletion(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <h3>标记完成</h3>
+            <p>如果你已经在平台页面完成发布，可以把最终内容链接粘贴到这里。没有链接时任务也会标记完成。</p>
+            <label htmlFor="publish-url">发布链接（可选）</label>
+            <input
+              id="publish-url"
+              value={completion.url}
+              placeholder="https://..."
+              autoFocus
+              onChange={e => setCompletion({...completion, url:e.target.value})}
+              onKeyDown={e => e.key === "Enter" && submitCompletion()}
+            />
+            <div className="modal-actions">
+              <button className="mini" onClick={() => setCompletion(null)}>取消</button>
+              <button className="mini primary" onClick={submitCompletion}>保存到发布库</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);

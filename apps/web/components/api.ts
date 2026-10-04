@@ -78,6 +78,11 @@ export const api = {
     });
     return unwrap<AccountDTO>(res);
   },
+  /** 导入登录态：整体覆盖应用 profile，服务端随后后台重校验全部账号（结果靠轮询平台状态） */
+  async importProfile(): Promise<{ ok: boolean; message?: string; code?: string }> {
+    const res = await fetch("/api/profile/import", { method: "POST" });
+    return unwrap<{ ok: boolean; message?: string; code?: string }>(res);
+  },
   async getSettings(): Promise<AppSettings> {
     const res = await fetch("/api/settings", { cache: "no-store" });
     return unwrap<AppSettings>(res);
@@ -121,5 +126,9 @@ export const api = {
       body: JSON.stringify({ action: "retry" }),
     });
     return unwrap<TaskDTO>(res);
+  },
+  async deleteTask(id: string): Promise<void> {
+    const res = await fetch(`/api/tasks/${id}`, { method: "DELETE" });
+    return unwrap<void>(res);
   },
 };

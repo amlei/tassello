@@ -49,10 +49,10 @@ const PLATFORMS = [
   { id: "jike",      name: "即刻",       char: "即", color: "#FFD400", fg: "#16130E", state: "ok", link: "web.okjike.com/originalPost/", supports: ["article", "image", "video"],
     account: { name: "九漾", kind: "个人号", uid: "即刻 ID 9A3F7C", until: "2026-10-20", checked: "09-14 11:03", lands: "直接发一条动态" } },
   { id: "bili",      name: "B站",        char: "B",  color: "#00A1D6", state: "fail", link: "www.bilibili.com/video/",    supports: ["article", "image", "video"], lands: "进投稿页，需要你确认封面与分区后提交",
-    account: null, accountError: "登录态已过期（08-30 失效），需要重新登录 B站 账号" },
+    account: null, accountError: "账号已掉线（08-30），请重新登录 B站" },
   /* X 是单色品牌：品牌色跟主题翻转（亮色黑标 / 深色白标），见 index.html 的 --plat-x */
   { id: "x",         name: "X",          char: "X",  color: "var(--plat-x)", fg: "var(--plat-x-fg)", state: "fail", link: "x.com/i/status/",            supports: ["article", "image", "video"], lands: "直接发一条推文（长文走 X Article）",
-    account: null, accountError: "授权被平台撤销，需要重新登录 X 账号" },
+    account: null, accountError: "账号连接已被 X 取消，请重新登录" },
   { id: "zhihu",     name: "知乎",       char: "知", color: "#0084FF", state: "ok",   link: "zhuanlan.zhihu.com/p/",      supports: ["article", "image", "video"],
     account: { name: "九漾 Onda", kind: "机构号授权", uid: "zhuanlan.zhihu.com/people/onda", until: "2026-12-08", checked: "09-16 08:30", lands: "存成一篇专栏草稿，发布按钮在知乎后台" } },
   { id: "douban",    name: "豆瓣",       char: "豆", color: "#2E963D", state: "ok",   link: "www.douban.com/note/",       supports: ["article", "image"],
@@ -64,14 +64,37 @@ const PLATFORMS = [
   { id: "douyin",    name: "抖音",       char: "抖", color: "#25F4EE", fg: "#16130E", state: "ok", link: "www.douyin.com/video/", supports: ["article", "image", "video"],
     account: { name: "九漾 Onda", kind: "企业号", uid: "抖音号 onda2026", until: "2026-10-05", checked: "09-12 16:40", lands: "传成草稿，发布要你在抖音 App 里点" } },
   /* 四个音频出口：只收声音，不收图文/视频 —— 音频稿的发布面就是靠它们撑起来的 */
+  /*
+   * 账号 → 频道：播客/音频平台的一个账号底下往往不止一个发布目标 ——
+   * 小宇宙一个账号可以有多个播客节目，喜马拉雅一个主播号可以有多个专辑，
+   * 荔枝播客一个账号可以有多个播单。凭据挂在账号上，发布目标落在频道上：
+   * 单频道的平台（荔枝 / 蜻蜓）发布时不用选；多频道的平台发布弹层里要挑一个频道。
+   */
   { id: "xiaoyuzhou", name: "小宇宙",    char: "宇", color: "#6E4AFF", state: "ok",   link: "www.xiaoyuzhoufm.com/episode/", supports: ["audio"],
-    account: { name: "九漾电台", kind: "播客", uid: "小宇宙 ID onda", until: "2027-03-01", checked: "09-16 11:02", lands: "单集进草稿，发布要你去小宇宙创作者后台点一次" } },
+    account: { name: "九漾电台", kind: "播客", uid: "小宇宙 ID onda", until: "2027-03-01", checked: "09-16 11:02", lands: "单集进所选节目的草稿，发布要你去小宇宙创作者后台点一次",
+      channels: [
+        { id: "xyz-radio", name: "九漾电台", uid: "小宇宙节目 ID onda", items: "EP.01 – EP.12" },
+        { id: "xyz-talk",  name: "九漾闲聊", uid: "小宇宙节目 ID onda-talk", items: "Vol.01 – Vol.07" },
+      ] } },
   { id: "ximalaya",  name: "喜马拉雅",   char: "喜", color: "#F86442", state: "ok",   link: "www.ximalaya.com/sound/",       supports: ["audio"],
-    account: { name: "九漾 Onda", kind: "主播号", uid: "喜马拉雅 ID 3f9c…", until: "2026-12-15", checked: "09-16 11:05", lands: "上传成一条声音，审核通过后才对外可见" } },
+    account: { name: "九漾 Onda", kind: "主播号", uid: "喜马拉雅 ID 3f9c…", until: "2026-12-15", checked: "09-16 11:05", lands: "上传到所选专辑，成为一条待审核的声音",
+      channels: [
+        { id: "xm-onda",  name: "九漾 Onda", uid: "专辑 ID 3f9c01", items: "128 条声音" },
+        { id: "xm-noise", name: "白噪音收藏夹", uid: "专辑 ID 3f9c02", items: "34 条声音" },
+      ] } },
   { id: "lizhi",     name: "荔枝播客",     char: "荔", color: "#D6336C", state: "ok",   link: "www.lizhi.fm/",                supports: ["audio"],
-    account: { name: "九漾电台", kind: "播客号", uid: "荔枝 ID lz8823", until: "2026-11-20", checked: "09-16 11:08", lands: "进草稿箱，发布要你去荔枝后台点" } },
+    account: { name: "九漾电台", kind: "播客号", uid: "荔枝 ID lz8823", until: "2026-11-20", checked: "09-16 11:08", lands: "进草稿箱，发布要你去荔枝后台点",
+      channels: [
+        { id: "lz-main", name: "九漾电台", uid: "荔枝播单 lz8823", items: "56 期" },
+      ] } },
   { id: "qingting",  name: "蜻蜓FM",     char: "蜻", color: "#1FA2E0", state: "ok",   link: "www.qtfm.cn/programs/",        supports: ["audio"],
-    account: { name: "九漾 Onda", kind: "主播号", uid: "蜻蜓 ID qtf_39a2", until: "2027-01-08", checked: "09-16 11:12", lands: "直接发成一条声音" } },
+    account: { name: "九漾 Onda", kind: "主播号", uid: "蜻蜓 ID qtf_39a2", until: "2027-01-08", checked: "09-16 11:12", lands: "上传到所选专辑，成为一条待审核的声音",
+      /* 蜻蜓FM 后台同样是「专辑管理」结构：一个主播号可建多个专辑，
+         还能认领 rss 节目 / podcast 托管 —— 频道与账号同样要分开 */
+      channels: [
+        { id: "qt-train", name: "青春列车", uid: "蜻蜓专辑 · rss 内容", items: "20 集" },
+        { id: "qt-main",  name: "九漾 Onda", uid: "蜻蜓专辑 qtf_39a2", items: "89 条声音" },
+      ] } },
 ];
 
 /** 这个平台收不收这种稿子 */
@@ -95,8 +118,14 @@ const DEFAULT_TARGETS = {
   article: ["wechat", "xhs"],
   image: ["xhs", "jike"],
   video: ["douyin", "bili"],
-  audio: ["wechat"],
+  audio: ["wechat", "xiaoyuzhou"],
 };
+
+/* 这个平台账号底下有几个发布目标：单频道平台发布时不用选 */
+function channelsOf(platform) {
+  const list = platform.account && platform.account.channels;
+  return list && list.length ? list : null;
+}
 
 /* 发布成功后的回执链接 */
 function platformLink(platformId, token) {
@@ -453,5 +482,5 @@ const POSTS = [
 
 Object.assign(window, {
   TYPES, TYPE_ORDER, PALETTE, PLATFORMS, STAGES, POSTS, DEFAULT_TARGETS,
-  asset, shots, platformLink, newToken, supportsType,
+  asset, shots, platformLink, newToken, supportsType, channelsOf,
 });

@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tassello · 发布库 Base 原型</title>
+<script>
+  const saved = localStorage.getItem("obsidian-publisher-theme");
+  const dark = saved ? saved === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+  document.documentElement.dataset.theme = dark ? "dark" : "light";
+</script>
+<style>
+  :root{
+    --accent:#2383E2; --accent-tint:#E9F3FB; --green:#07B56F; --warn:#9A6700; --error:#C81E4E;
+    --ink:#37352F; --ink2:#787672; --ink3:#ABA9A4; --paper:#fff; --card:#fff; --rail:#FBFBFA;
+    --line:#EDECE9; --hover:#F4F3F1; --selected:#F1F0EE;
+    --ok-soft:#EBF8F1; --ok-line:#BEE5D2; --warn-soft:#FFF8E6; --warn-line:#EBDFAF;
+    --error-soft:#FDF1F4; --error-line:#F2C2D1;
+    --font:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  }
+  [data-theme="dark"]{
+    --accent:#4A9EE8; --accent-tint:#20304A; --green:#3FB68B; --warn:#D9A53F; --error:#E5484D;
+    --ink:#E6E5E3; --ink2:#9B9A97; --ink3:#6F6E69; --paper:#191919; --card:#252525; --rail:#202020;
+    --line:#2F2F2F; --hover:#2A2A2A; --selected:#2F2F2F;
+    --ok-soft:rgba(7,181,111,.13); --ok-line:rgba(7,181,111,.32);
+    --warn-soft:rgba(217,165,63,.12); --warn-line:rgba(217,165,63,.34);
+    --error-soft:rgba(229,72,77,.12); --error-line:rgba(229,72,77,.38);
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{min-height:100vh;background:var(--paper);color:var(--ink);font-family:var(--font);-webkit-font-smoothing:antialiased}
+  button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+  .app{max-width:1320px;margin:0 auto;padding:22px 26px 40px}
+  .top{display:flex;align-items:center;gap:12px;margin-bottom:18px}
+  .top h1{font-size:18px;letter-spacing:-.3px}
+  .top .desc{font-size:12px;color:var(--ink2)}
+  .theme{margin-left:auto;display:inline-flex;align-items:center;min-height:28px;padding:0 10px;border:1px solid var(--line);border-radius:999px;background:var(--card);font-size:12px}
+  .theme:hover{background:var(--hover)}
+  .cards{display:grid;grid-template-columns:260px minmax(0,1fr);gap:14px;align-items:start}
+  @media(max-width:860px){.cards{grid-template-columns:1fr}}
+  .side{padding:14px;border:1px solid var(--line);border-radius:14px;background:var(--rail)}
+  .side h2{font-size:11px;color:var(--ink3);letter-spacing:.08em;text-transform:uppercase}
+  .side .file{display:flex;gap:7px;align-items:center;min-height:29px;padding:0 7px;margin-top:4px;border-radius:8px;color:var(--ink2);font-size:12px}
+  .side .file.active{background:var(--selected);color:var(--ink)}
+  .side .badge{width:34px;padding:3px 0;border-radius:6px;background:var(--accent-tint);color:var(--accent);font-family:var(--mono);font-size:9px;font-weight:800;text-align:center}
+  .side .note{margin-top:13px;padding-top:12px;border-top:1px solid var(--line);font-size:11px;line-height:1.55;color:var(--ink2)}
+  .main{min-width:0;border:1px solid var(--line);border-radius:16px;background:var(--card);overflow:hidden;box-shadow:0 1px 2px rgba(15,15,15,.04)}
+  .main-head{padding:13px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px;background:var(--rail)}
+  .main-head h2{font-size:14px}
+  .path{margin-left:auto;padding:4px 8px;border-radius:99px;background:var(--selected);color:var(--ink2);font-family:var(--mono);font-size:10px}
+  .filters{display:flex;gap:5px;padding:11px 16px;border-bottom:1px solid var(--line);overflow:auto}
+  .filter{min-height:27px;padding:0 10px;border-radius:99px;border:1px solid var(--line);background:var(--card);color:var(--ink2);font-size:11.5px;font-weight:600;white-space:nowrap}
+  .filter:hover{background:var(--hover);color:var(--ink)}
+  .filter.active{border-color:color-mix(in srgb,var(--accent) 42%,transparent);background:var(--accent-tint);color:var(--accent)}
+  .table-wrap{overflow:auto}
+  table{width:100%;min-width:930px;border-collapse:collapse}
+  th{position:sticky;top:0;padding:9px 14px;border-bottom:1px solid var(--line);background:var(--rail);color:var(--ink3);font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;text-align:left;white-space:nowrap}
+  td{padding:11px 14px;border-bottom:1px solid var(--line);vertical-align:top;font-size:12px;line-height:1.45}
+  tr:last-child td{border-bottom:0}
+  tr:hover td{background:color-mix(in srgb,var(--hover) 72%,transparent)}
+  .note-title{font-weight:700;color:var(--ink);text-decoration:none}
+  .note-title:hover{color:var(--accent)}
+  .folder{margin-top:2px;color:var(--ink3);font-family:var(--mono);font-size:10px}
+  .status{display:inline-flex;align-items:center;height:20px;padding:0 7px;border-radius:99px;background:var(--selected);color:var(--ink2);font-size:10px;font-weight:800;white-space:nowrap}
+  .status.success{background:var(--ok-soft);color:color-mix(in srgb,var(--green) 78%,var(--ink))}
+  .status.waiting{background:var(--warn-soft);color:var(--warn)}
+  .status.failed{background:var(--error-soft);color:var(--error)}
+  .platforms{display:flex;flex-wrap:wrap;gap:4px}
+  .platform{padding:2px 6px;border:1px solid var(--line);border-radius:99px;background:var(--rail);color:var(--ink2);font-size:10px}
+  .cell-title{font-size:11px;font-weight:700;margin-bottom:4px}
+  .links{display:flex;flex-direction:column;gap:2px}
+  .links a{color:var(--accent);text-decoration:none;font-size:11px}
+  .links a:hover{text-decoration:underline}
+  .muted{color:var(--ink3);font-size:11px}
+  .time{color:var(--ink2);font-family:var(--mono);font-size:10.5px;white-space:nowrap}
+  .reason{margin-top:4px;color:var(--error);font-size:10.5px}
+  .legend{padding:11px 16px;border-top:1px solid var(--line);background:var(--rail);color:var(--ink2);font-size:10.5px;line-height:1.5}
+  code{font-family:var(--mono);font-size:10px;color:var(--accent)}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div>
+      <h1>发布库</h1>
+      <div class="desc">用户笔记保留在原位置；插件只维护这个 Base 视图。</div>
+    </div>
+    <button class="theme" onclick="toggleTheme()">切换主题</button>
+  </header>
+
+  <div class="cards">
+    <aside class="side">
+      <h2>Vault</h2>
+      <button class="file active"><span class="badge">BASE</span>Publishments.base</button>
+      <button class="file"><span class="badge">MD</span>Content/发布/产品拆解.md</button>
+      <button class="file"><span class="badge">MD</span>Journal/2026/10/一点想法.md</button>
+      <button class="file"><span class="badge">MD</span>Projects/发布计划.md</button>
+      <div class="note">
+        日期、状态、草稿链接、发布链接写在各篇笔记的 frontmatter。<br><br>
+        Base 只读取 <code>tassello-*</code> 属性；不生成台账 Markdown。
+      </div>
+    </aside>
+
+    <main class="main">
+      <div class="main-head">
+        <h2>Publishments</h2>
+        <span class="path">Tassello/Publishments.base</span>
+      </div>
+      <div class="filters" id="filters">
+        <button class="filter active" data-filter="all">全部发布</button>
+        <button class="filter" data-filter="pending">待处理</button>
+        <button class="filter" data-filter="published">已发布</button>
+        <button class="filter" data-filter="failed">失败</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>内容</th><th>状态</th><th>平台</th><th>微博</th><th>知乎</th><th>小红书</th><th>更新时间</th>
+            </tr>
+          </thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+      <div class="legend">
+        手动确认时可回填发布链接；只有草稿时显示“草稿”。没有回执链接的完成记录不会伪造发布链接。
+      </div>
+    </main>
+  </div>
+</div>
+
+<script>
+  const rows = [
+    {id:1, title:"产品拆解", folder:"Content/发布", status:"部分完成", kind:"published", platforms:["weibo","zhihu"],
+     weibo:{status:"完成", publish:"https://example.com/weibo/1"}, zhihu:{status:"待确认", draft:"https://example.com/zhihu/draft"}, updated:"2026-10-04 09:48"},
+    {id:2, title:"一点想法", folder:"Journal/2026/10", status:"待确认", kind:"pending", platforms:["xhs"],
+     xhs:{status:"待确认", draft:"https://example.com/xhs/draft"}, updated:"2026-10-04 10:12"},
+    {id:3, title:"发布计划", folder:"Projects", status:"失败", kind:"failed", platforms:["weibo"],
+     weibo:{status:"失败"}, reason:"平台登录已失效，请重新授权。", updated:"2026-10-04 10:31"},
+    {id:4, title:"产品拆解", folder:"Content/发布", status:"完成", kind:"published", platforms:["zhihu"],
+     zhihu:{status:"完成", publish:"https://example.com/zhihu/9"}, updated:"2026-10-03 18:20"},
+  ];
+
+  const statusClass = value => value.includes("完成") && !value.includes("部分") ? "success" : value.includes("待确认") ? "waiting" : value.includes("失败") ? "failed" : "";
+  const platformName = {weibo:"微博", zhihu:"知乎", xhs:"小红书"};
+  const filters = {all:()=>true, pending:r=>r.status==="待确认", published:r=>["完成","部分完成"].includes(r.status), failed:r=>r.status==="失败"};
+
+  function platformCell(row, key){
+    const item = row[key];
+    if(!item) return '<span class="muted">—</span>';
+    const links=[];
+    if(item.draft) links.push(`<a href="${item.draft}" target="_blank">草稿</a>`);
+    if(item.publish) links.push(`<a href="${item.publish}" target="_blank">发布</a>`);
+    return `<div class="cell-title"><span class="status ${statusClass(item.status)}">${item.status}</span></div><div class="links">${links.join("")||'<span class="muted">无链接</span>'}</div>`;
+  }
+
+  function render(key){
+    document.getElementById("rows").innerHTML = rows.filter(filters[key]).map(r=>`
+      <tr>
+        <td><a class="note-title" href="#">${r.title}</a><div class="folder">${r.folder}</div></td>
+        <td><span class="status ${statusClass(r.status)}">${r.status}</span>${r.reason?`<div class="reason">${r.reason}</div>`:""}</td>
+        <td><div class="platforms">${r.platforms.map(p=>`<span class="platform">${platformName[p]}</span>`).join("")}</div></td>
+        <td>${platformCell(r,"weibo")}</td>
+        <td>${platformCell(r,"zhihu")}</td>
+        <td>${platformCell(r,"xhs")}</td>
+        <td class="time">${r.updated}</td>
+      </tr>`).join("");
+  }
+
+  document.getElementById("filters").addEventListener("click", e=>{
+    const btn=e.target.closest(".filter"); if(!btn) return;
+    document.querySelectorAll(".filter").forEach(x=>x.classList.remove("active"));
+    btn.classList.add("active"); render(btn.dataset.filter);
+  });
+
+  function toggleTheme(){
+    const dark=document.documentElement.dataset.theme==="dark";
+    document.documentElement.dataset.theme=dark?"light":"dark";
+    localStorage.setItem("obsidian-publisher-theme",dark?"light":"dark");
+  }
+  render("all");
+</script>
+</body>
+</html>

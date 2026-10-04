@@ -4,7 +4,7 @@
   "private": true,
   "main": "dist/main.js",
   "scripts": {
-    "build": "bun build src/main.ts src/preload.ts --outdir dist --target node",
+    "build": "bun build src/main.ts src/preload.ts --outdir dist --target node --external electron",
     "desktop": "bun run build && electron dist/main.js"
   },
   "devDependencies": {

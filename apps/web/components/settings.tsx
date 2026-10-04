@@ -3,7 +3,7 @@
 
 import React from "react";
 import { TYPE_META, TYPE_ORDER, type PlatformDTO, type ContentType, type AppSettings, IMPORT_BROWSERS, type ImportBrowserDTO, type ImportBrowserId } from "@tassello/shared";
-import { AlertDialog, Button, Modal, Popover } from "@heroui/react";
+import { Button, Modal, Popover } from "@heroui/react";
 import { Alert, Check, Refresh, X } from "reicon-react";
 import { ChevronDown, ChevronLeft, ChevronRight } from "reicon-react";
 import { PLATFORM_IMAGE_MARKS, PLATFORM_MARKS, PlatformMark } from "./platform-icons";
@@ -34,22 +34,21 @@ const CHIP = "inline-block flex-none min-w-[66px] rounded-full border px-[9px] p
 
 function StatusChip({ p, busy }: { p: PlatformDTO; busy: boolean }) {
   const off = p.status !== "active" || !p.account || p.account.state !== "ok";
-  if (busy) return <span className={CHIP}>校验中…</span>;
+  if (busy) return <span className={CHIP}>检查中…</span>;
   if (p.status !== "active") return <span className={CHIP + " border-error/30 bg-error/10 text-error"}>planned</span>;
-  if (off) return <span className={CHIP + " border-[#F2C2D1] text-error"}>获取失败</span>;
+  if (off) return <span className={CHIP + " border-[#F2C2D1] text-error"}>未连接</span>;
   return <span className={CHIP + " border-[#B7E3CD] text-green"}>已获取</span>;
 }
 
 /* 账号行 = Popover 触发器；浮卡跟随行、自动翻转，不再手算 fixed 坐标 */
 function AccountRow({
-  p, open, busy, onOpenChange, onVerify, onAcquire, side,
+  p, open, busy, onOpenChange, onVerify, side,
 }: {
   p: PlatformDTO;
   open: boolean;
   busy: boolean;
   onOpenChange: (id: string | null) => void;
   onVerify: (id: string) => void;
-  onAcquire: (id: string) => void;
   side: "left" | "right";
 }) {
   const off = p.status !== "active" || !p.account || p.account.state !== "ok";
@@ -88,7 +87,7 @@ function AccountRow({
         </Button>
       </Popover.Trigger>
       <Popover.Content placement={side === "left" ? "right" : "left"} className="w-[336px] rounded-2xl border border-line bg-card p-0 shadow-[0_14px_40px_rgba(15,15,15,0.14)]">
-        <AccountPopBody p={p} busy={busy} onVerify={onVerify} onAcquire={onAcquire} onClose={() => onOpenChange(null)} />
+        <AccountPopBody p={p} busy={busy} onVerify={onVerify} onClose={() => onOpenChange(null)} />
       </Popover.Content>
     </Popover>
   );
@@ -101,17 +100,16 @@ function IcChevronStatic({ dir }: { dir: "left" | "right" }) {
 }
 
 function AccountPopBody({
-  p, busy, onVerify, onAcquire, onClose,
+  p, busy, onVerify, onClose,
 }: {
   p: PlatformDTO;
   busy: boolean;
   onVerify: (id: string) => void;
-  onAcquire: (id: string) => void;
   onClose: () => void;
 }) {
   const off = p.status !== "active" || !p.account || p.account.state !== "ok";
   const a = p.account;
-  /* 原型 .w-relink：通栏 accent 主按钮（重新获取 / 重新校验共用一套动作样式） */
+  /* 原型 .w-relink：通栏 accent 主按钮（重新检查 / 导入登录态共用一套动作样式） */
   const relinkCls =
     "w-full flex-none items-center justify-center gap-1.5 rounded-full border-none bg-accent px-3.5 py-[9px] text-[13px] font-bold text-white transition-[filter] duration-150 data-[hovered=true]:brightness-105 data-[disabled=true]:opacity-50";
   return (
@@ -128,10 +126,12 @@ function AccountPopBody({
         </div>
       ) : off ? (
         <div className="flex flex-col gap-3.5 pt-3.5">
-          <p className="flex items-start gap-2 text-[12.5px] leading-[1.65] text-error"><Alert size={12} strokeWidth={3.3} /> {a?.failReason || "凭据未获取"}</p>
-          <Button variant="ghost" isDisabled={busy} className={relinkCls} onPress={() => onAcquire(p.id)}>
-            <Refresh size={11} strokeWidth={3.3} /> {busy ? "处理中…" : "重新获取"}
+          <p className="flex items-start gap-2 text-[12.5px] leading-[1.65] text-error"><Alert size={12} strokeWidth={3.3} /> {a?.failReason || "账号信息未获取"}</p>
+          {/* 只校验当前选中的平台；登录态源头过期时引导去全局「导入」（覆盖 + 全部重校验） */}
+          <Button variant="ghost" isDisabled={busy} className={relinkCls} onPress={() => onVerify(p.id)}>
+            <Refresh size={11} strokeWidth={3.3} /> {busy ? "检查中…" : "重新检查"}
           </Button>
+          <p className="m-0 text-[11.5px] leading-[1.7] text-ink2">在浏览器里重新登录过？点上方「导入」，所有平台账号自动更新。</p>
         </div>
       ) : (
         <div className="flex flex-col gap-3.5 pt-3.5">
@@ -152,7 +152,7 @@ function AccountPopBody({
           <dl className="m-0 flex flex-col gap-2.5">
             <div>
               <dt className="mb-[3px] font-mono text-[10.5px] text-ink3">授权</dt>
-              <dd className="text-[12.5px] leading-[1.7] text-ink">{a?.authExpiresAt ? `有效至 ${fmtShort(a.authExpiresAt)} · ` : "会话型登录 · "}最近校验 {fmtShort(a?.lastCheckedAt ?? null)}</dd>
+              <dd className="text-[12.5px] leading-[1.7] text-ink">{a?.authExpiresAt ? `有效期至 ${fmtShort(a.authExpiresAt)} · ` : "会话型登录 · "}上次检查 {fmtShort(a?.lastCheckedAt ?? null)}</dd>
             </div>
             <div>
               <dt className="mb-[3px] font-mono text-[10.5px] text-ink3">发布去向</dt>
@@ -160,7 +160,7 @@ function AccountPopBody({
             </div>
           </dl>
           <Button variant="ghost" isDisabled={busy} className={relinkCls} onPress={() => onVerify(p.id)}>
-            <Refresh size={11} strokeWidth={3.3} /> {busy ? "校验中…" : "重新校验"}
+            <Refresh size={11} strokeWidth={3.3} /> {busy ? "检查中…" : "重新检查"}
           </Button>
         </div>
       )}
@@ -169,27 +169,24 @@ function AccountPopBody({
 }
 
 export function SettingsSheet({
-  platforms, settings, browsers, busyId, onToggleDefault, onAcquireAndSetDefault, onVerify, onAcquire, onImportBrowser, onClose,
+  platforms, settings, browsers, busyId, importing, onToggleDefault, onVerify, onImport, onImportBrowser, onClose,
 }: {
   platforms: PlatformDTO[];
   settings: AppSettings;
   /** 导入候选浏览器与检测状态（rail 打开设置时随平台/设置一并拉取） */
   browsers: ImportBrowserDTO[];
   busyId: string | null;
+  /** 全局导入进行中（覆盖 + 后台全量重校验）：所有账号行统一显示「检查中…」 */
+  importing: boolean;
   onToggleDefault: (type: ContentType, id: string) => void;
-  onAcquireAndSetDefault: (type: ContentType, id: string) => void;
   onVerify: (id: string) => void;
-  onAcquire: (id: string) => void;
+  /** 请求导入登录态：弹全局确认框（确认框挂在调用方） */
+  onImport: () => void;
   onImportBrowser: (id: ImportBrowserId) => void;
   onClose: () => void;
 }) {
   const [popId, setPopId] = React.useState<string | null>(null);
-  /* 获取账号会先关闭工作台浏览器再复制登录态（pkill 不能静默发生）——
-     设置里的两个获取入口都先过这枚确认弹窗，确认后才真正执行 */
-  const [confirmAcquire, setConfirmAcquire] = React.useState<{ platformId: string; type?: ContentType } | null>(null);
-  const browserName = IMPORT_BROWSERS.find((b) => b.id === settings.importBrowser)?.name ?? "所选浏览器";
   const SelIcon = settings.importBrowser === "edge" ? EdgeIcon : ChromeIcon;
-  const confirmPlatform = platforms.find((p) => p.id === confirmAcquire?.platformId);
 
   return (
     <>
@@ -215,34 +212,40 @@ export function SettingsSheet({
                   </div>
                 </section>
                 <section className="mt-[30px] border-t border-line pt-[26px]">
-                  {/* 浏览器选择：获取账号时从哪个日常浏览器复制登录态。
-                      切换只落偏好不动数据；再次获取以当前选择整体覆盖（原型 w-selwrap/w-selhint） */}
+                  {/* 浏览器选择 + 导入登录态：导入是随时可用的独立动作（原型 w-sethead + w-importbtn）。
+                      切换只落偏好不动数据；点「导入」才以当前选择整体覆盖并自动重校验全部平台 */}
                   <div className="flex items-center justify-between gap-3.5">
                     <h4 className="text-[15px] font-bold tracking-[-0.2px]">浏览器选择</h4>
-                    <span className="relative inline-flex items-center">
-                      <span className="pointer-events-none absolute left-3 flex">
-                        <SelIcon size={14} />
+                    <span className="inline-flex items-center gap-2">
+                      <span className="relative inline-flex items-center">
+                        <span className="pointer-events-none absolute left-3 flex">
+                          <SelIcon size={14} />
+                        </span>
+                        <select
+                          value={settings.importBrowser}
+                          onChange={(e) => onImportBrowser(e.target.value as ImportBrowserId)}
+                          aria-label="浏览器选择"
+                          className="cursor-pointer appearance-none rounded-full border border-line bg-card py-[6px] pl-[33px] pr-[30px] text-[12px] font-bold text-ink outline-none transition-[border-color] duration-150 hover:border-[#DEDCD8] focus-visible:border-accent"
+                        >
+                          {(browsers.length ? browsers : IMPORT_BROWSERS.map((b) => ({ ...b, detected: true }))).map((b) => (
+                            <option key={b.id} value={b.id} disabled={!b.detected}>
+                              {b.name}{b.detected ? "" : "（未安装）"}
+                            </option>
+                          ))}
+                        </select>
+                        <span className="pointer-events-none absolute right-3 flex text-ink2">
+                          <ChevronDown size={10} strokeWidth={2.4} />
+                        </span>
                       </span>
-                      <select
-                        value={settings.importBrowser}
-                        onChange={(e) => onImportBrowser(e.target.value as ImportBrowserId)}
-                        aria-label="浏览器选择"
-                        className="cursor-pointer appearance-none rounded-full border border-line bg-card py-[6px] pl-[33px] pr-[30px] text-[12px] font-bold text-ink outline-none transition-[border-color] duration-150 hover:border-[#DEDCD8] focus-visible:border-accent"
+                      <Button
+                        isDisabled={importing}
+                        className="flex-none items-center justify-center gap-1.5 rounded-full border-none bg-accent px-[14px] py-[6px] text-[12px] font-bold text-white transition-[filter] duration-150 data-[hovered=true]:brightness-105 data-[disabled=true]:opacity-50"
+                        onPress={onImport}
                       >
-                        {(browsers.length ? browsers : IMPORT_BROWSERS.map((b) => ({ ...b, detected: true }))).map((b) => (
-                          <option key={b.id} value={b.id} disabled={!b.detected}>
-                            {b.name}{b.detected ? "" : "（未安装）"}
-                          </option>
-                        ))}
-                      </select>
-                      <span className="pointer-events-none absolute right-3 flex text-ink2">
-                        <ChevronDown size={10} strokeWidth={2.4} />
-                      </span>
+                        <Refresh size={11} strokeWidth={3.3} /> {importing ? "导入中…" : "导入"}
+                      </Button>
                     </span>
                   </div>
-                  <p className="mt-3 text-[11.5px] leading-[1.7] text-ink3">
-                    获取账号时从这个浏览器复制登录态；再次获取会整体覆盖，以当前选择的为准。
-                  </p>
                 </section>
                 <section className="mt-[30px] border-t border-line pt-[26px]">
                   <h4 className="mb-3.5 flex items-center gap-2.5 text-[15px] font-bold tracking-[-0.2px]">平台账号</h4>
@@ -252,11 +255,10 @@ export function SettingsSheet({
                         key={p.id}
                         p={p}
                         open={popId === p.id}
-                        busy={busyId === p.id}
+                        busy={busyId === p.id || importing}
                         onOpenChange={setPopId}
-                         onVerify={onVerify}
-                         onAcquire={(id) => setConfirmAcquire({ platformId: id })}
-                         side={i % 2 === 0 ? "left" : "right"}
+                        onVerify={onVerify}
+                        side={i % 2 === 0 ? "left" : "right"}
                       />
                     ))}
                   </div>
@@ -286,7 +288,7 @@ export function SettingsSheet({
                                   ? { background: p.color, color: p.fg || "#fff" }
                                   : { background: p.color + "2E", color: p.fg ? "var(--color-ink)" : p.color };
                               return (
-                                <span key={p.id} title={p.name + (off ? ` · 获取失败，点一下重新获取并设为${t.zh}的默认平台` : on ? ` · 已是${t.zh}的默认平台` : ` · 点一下设为${t.zh}的默认平台`)} className="inline-flex">
+                                <span key={p.id} title={p.name + (off ? ` · 账号未连接，点一下可修复` : on ? ` · 已是${t.zh}的默认平台` : ` · 点一下设为${t.zh}的默认平台`)} className="inline-flex">
                                   <Button
                                     className={
                                       "relative flex h-[38px] w-[38px] items-center justify-center rounded-[12px] p-0 shadow-[0_1px_2px_rgba(15,15,15,0.04)] transition-[translate,transform,box-shadow] duration-150 data-[off=true]:shadow-none" +
@@ -294,7 +296,7 @@ export function SettingsSheet({
                                     }
                                     style={{ ...skin, transform: "none" }}
                                     data-off={off}
-                                    onPress={() => (off ? setConfirmAcquire({ platformId: p.id, type: k }) : onToggleDefault(k, p.id))}
+                                    onPress={() => (off && p.status === "active" ? onImport() : onToggleDefault(k, p.id))}
                                     aria-label={p.name}
                                   >
                                     <PlatformMark id={p.id} char={p.char} size={20} imgScale={1.4} tone={off ? "off" : on ? "lit" : "dim"} className="m-0 h-5 w-5" />
@@ -334,40 +336,6 @@ export function SettingsSheet({
         </Modal.Container>
       </Modal.Backdrop>
     </Modal>
-
-    {/* 导入确认：与删稿确认同构（Esc / 点背景取消）；按钮走主色 —— 有打断、不毁数据 */}
-    <AlertDialog>
-      <AlertDialog.Backdrop isOpen={!!confirmAcquire} onOpenChange={(o) => { if (!o) setConfirmAcquire(null); }}>
-        <AlertDialog.Container>
-          <AlertDialog.Dialog className="max-w-[420px] rounded-[20px] bg-paper p-6 shadow-[0_14px_40px_rgba(15,15,15,0.14)]" role="alertdialog" aria-label="导入登录态确认">
-            <AlertDialog.Header className="flex items-start gap-3">
-              <AlertDialog.Heading className="text-[17px] font-bold tracking-[-0.2px]">从 {browserName} 导入登录态？</AlertDialog.Heading>
-            </AlertDialog.Header>
-            <AlertDialog.Body className="mt-1.5 text-sm leading-relaxed text-ink2">
-              工作台浏览器会先关闭一次，并以 {browserName} 的登录态整体覆盖后重新校验
-              {confirmPlatform ? `「${confirmPlatform.name}」` : ""}账号；日常浏览器不受影响。
-            </AlertDialog.Body>
-            <AlertDialog.Footer className="mt-5 flex items-center justify-end gap-3">
-              <Button variant="ghost" className="rounded-full px-4 py-2 text-[13.5px] font-bold text-ink2 data-[hovered=true]:bg-hover" onPress={() => setConfirmAcquire(null)}>
-                取消
-              </Button>
-              <Button
-                className="rounded-full bg-accent px-6 py-2.5 text-sm font-bold text-white data-[hovered=true]:brightness-105"
-                onPress={() => {
-                  const c = confirmAcquire;
-                  setConfirmAcquire(null);
-                  if (!c) return;
-                  if (c.type) onAcquireAndSetDefault(c.type, c.platformId);
-                  else onAcquire(c.platformId);
-                }}
-              >
-                导入并校验
-              </Button>
-            </AlertDialog.Footer>
-          </AlertDialog.Dialog>
-        </AlertDialog.Container>
-      </AlertDialog.Backdrop>
-    </AlertDialog>
     </>
   );
 }
