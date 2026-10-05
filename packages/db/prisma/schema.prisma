@@ -48,6 +48,31 @@ model PlatformAccount {
   updatedAt     DateTime  @updatedAt
 }
 
+// 平台素材上传去重：内容指纹 + 平台账号 + 通道 scope 对应一次远端素材引用。
+// remoteId 可能是素材库 ID、对象存储 key 或图床 photo id；没有稳定远端引用的平台不写这张表。
+model PlatformAssetUpload {
+  id          String   @id @default(cuid())
+  platformId  String
+  accountId   String
+  scope       String   @default("default")
+  kind        String
+  contentHash String
+  byteSize    Int
+  mime        String
+  sourceName  String?
+  remoteId    String
+  remoteUrl   String?
+  payloadJson String   @default("{}")
+  status      String   @default("available")
+  uploadedAt  DateTime @default(now())
+  lastUsedAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([platformId, accountId, scope, kind, contentHash, byteSize, mime])
+  @@index([platformId, accountId, lastUsedAt])
+}
+
 model PublishTask {
   id         String    @id @default(cuid())
   postId     String

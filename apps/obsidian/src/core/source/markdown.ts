@@ -46,16 +46,21 @@ export function titleFromMarkdown(body: string, fallback: string): string {
   return fallback;
 }
 
-/** 仅剥离与平台标题重复的首个 H1；其余标题都是正文结构，必须保留。 */
+/** 剥离被选为平台标题的首个 H1；其余标题都是正文结构，必须保留。 */
 export function stripLeadingTitleHeading(body: string, title: string): string {
-  const stripped = body.replace(/^(?:[ \t]*\r?\n)+/, "");
-  const firstLineEnd = stripped.search(/\r?\n/);
-  const firstLine = (firstLineEnd === -1 ? stripped : stripped.slice(0, firstLineEnd)).trim();
-  const headingText = firstLine.match(/^ {0,3}#\s+(.+?)$/)?.[1]?.trim();
-  if (headingText && stripInlineMarkdown(headingText) === title) {
-    return stripped
-      .slice(firstLineEnd === -1 ? stripped.length : firstLineEnd + 1)
-      .replace(/^(?:[ \t]*\r?\n)+/, "");
+  let inFence = false;
+  const lines = body.replace(/\r\n?/g, "\n").split("\n");
+  for (const [index, line] of lines.entries()) {
+    if (/^ {0,3}(?:```|~~~)/.test(line)) inFence = !inFence;
+    if (inFence) continue;
+    const heading = line.match(/^ {0,3}#\s+(.+?)\s*$/);
+    if (heading?.[1] && stripInlineMarkdown(heading[1]) === title) {
+      return [...lines.slice(0, index), ...lines.slice(index + 1)]
+        .join("\n")
+        .replace(/^(?:[ \t]*\n)+/, "")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
+    }
   }
   return body;
 }

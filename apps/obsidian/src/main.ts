@@ -1,9 +1,10 @@
-import { Notice, Plugin, PluginSettingTab, App, Setting, TFile, normalizePath } from "obsidian";
+import { Notice, Plugin, PluginSettingTab, App, Setting, TAbstractFile, TFile, normalizePath } from "obsidian";
 import { DefaultChromeManager } from "./core/browser/default-chrome";
 import { TaskEngine } from "./core/tasks/task-engine";
 import { TaskStore } from "./core/tasks/task-store";
 import { PLATFORMS, type PlatformId, type PublishTask } from "./core/types";
 import { PublicationLedger } from "./core/publication-ledger/publication-ledger";
+import { DEFAULT_PUBLICATION_BASE_PATH } from "./core/publication-ledger/types";
 import { PUBLISHER_VIEW_TYPE, PublisherView, type PublisherServices } from "./views/publisher-view";
 
 type ChromeChannel = "stable" | "beta" | "canary" | "dev";
@@ -16,7 +17,6 @@ type TasselloData = {
     publicationAutoCreate?: boolean;
     publicationIncludeFailReason?: boolean;
   };
-  publicationMigrationVersion?: number;
   selectedPlatforms?: PlatformId[];
   tasks?: PublishTask[];
 };
@@ -124,7 +124,7 @@ class TasselloSettingTab extends PluginSettingTab {
       });
     new Setting(containerEl)
       .setName("自动创建发布库")
-      .setDesc("路径不存在时创建默认 Publishments.base。")
+      .setDesc("路径不存在时创建默认 Tassello Publisher.base。")
       .addToggle((toggle) => {
         toggle
           .setValue(this.plugin.settings.publicationAutoCreate)
@@ -186,12 +186,10 @@ export class TasselloPublisherPlugin extends Plugin {
       article: ["zhihu"],
       image: ["xhs", "weibo"],
     },
-    publicationBasePath: "Tassello/Publishments.base",
+    publicationBasePath: DEFAULT_PUBLICATION_BASE_PATH,
     publicationAutoCreate: true,
     publicationIncludeFailReason: true,
   };
-
-  private publicationMigrationVersion = 0;
 
   private selectedPlatforms: PlatformId[] = ["weibo", "zhihu", "xhs"];
   private browser!: DefaultChromeManager;
@@ -210,11 +208,10 @@ export class TasselloPublisherPlugin extends Plugin {
         article: ["zhihu"],
         image: ["xhs", "weibo"],
       },
-      publicationBasePath: data?.settings?.publicationBasePath ?? "Tassello/Publishments.base",
+      publicationBasePath: data?.settings?.publicationBasePath ?? DEFAULT_PUBLICATION_BASE_PATH,
       publicationAutoCreate: data?.settings?.publicationAutoCreate ?? true,
       publicationIncludeFailReason: data?.settings?.publicationIncludeFailReason ?? true,
     };
-    this.publicationMigrationVersion = data?.publicationMigrationVersion ?? 0;
     this.selectedPlatforms = data?.selectedPlatforms ?? ["weibo", "zhihu", "xhs"];
     this.dataTasks = data?.tasks ?? [];
 
@@ -295,8 +292,8 @@ export class TasselloPublisherPlugin extends Plugin {
     });
 
     this.registerEvent(this.app.vault.on("rename", (file, oldPath) => {
-      if (!(file instanceof TFile)) return;
-      void this.engine.renamePath(oldPath, file.path);
+      if (file instanceof TFile) void this.engine.renamePath(oldPath, file.path);
+      this.followPublicationBaseRename(file, oldPath);
     }));
   }
 
@@ -316,21 +313,29 @@ export class TasselloPublisherPlugin extends Plugin {
     if (focus) this.app.workspace.revealLeaf(leaf);
   }
 
+  private followPublicationBaseRename(file: TAbstractFile, oldPath: string): void {
+    const previousPath = normalizePath(this.settings.publicationBasePath);
+    const old = normalizePath(oldPath);
+    let nextPath: string | null = null;
+    if (old === previousPath) {
+      nextPath = file.path;
+    } else if (previousPath.startsWith(`${old}/`)) {
+      nextPath = `${file.path}/${previousPath.slice(old.length + 1)}`;
+    }
+    if (!nextPath || normalizePath(nextPath) === previousPath) return;
+
+    this.settings.publicationBasePath = normalizePath(nextPath);
+    this.ledger.updateSettings({
+      basePath: this.settings.publicationBasePath,
+      autoCreate: this.settings.publicationAutoCreate,
+      includeFailReason: this.settings.publicationIncludeFailReason,
+    });
+    void this.saveSettings();
+  }
+
   private async initializePublicationLedger(): Promise<void> {
     try {
       await this.ledger.ensureBase();
-      if (this.publicationMigrationVersion < 1) {
-        const tasks = this.store.all();
-        await this.ledger.syncTasks(tasks);
-        this.store.replace(tasks.filter((task) =>
-          task.status === "failed" ||
-          task.status === "queued" ||
-          task.status === "running" ||
-          task.status === "awaiting_confirm",
-        ));
-        this.publicationMigrationVersion = 1;
-        await this.saveSettings();
-      }
     } catch (error) {
       new Notice(error instanceof Error ? error.message : String(error));
     }
@@ -341,7 +346,6 @@ export class TasselloPublisherPlugin extends Plugin {
     await this.saveData({
       settings: this.settings,
       selectedPlatforms: this.selectedPlatforms,
-      publicationMigrationVersion: this.publicationMigrationVersion,
       tasks,
     });
   }

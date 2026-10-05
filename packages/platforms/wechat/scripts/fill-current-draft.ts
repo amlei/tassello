@@ -132,12 +132,13 @@ async function pasteIntoProseMirror(cdp: Cdp, sessionId: string, pickJs: string,
       dt.setData("text/plain", ${JSON.stringify(plain)});
       const ev = new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: dt });
       el.dispatchEvent(ev);
-      await new Promise((r) => setTimeout(r, 400));
+      await new Promise((r) => setTimeout(r, 3000));
       return true;
     })()`,
     { timeoutMs: 15_000 },
   );
 }
+
 
 /** 正文 HTML 粘贴后，公众号可能弹「继续插入」确认框；只处理正文粘贴这一步 */
 async function confirmContinueInsert(cdp: Cdp, sessionId: string): Promise<boolean> {
@@ -176,9 +177,28 @@ const plainText = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 const digest = arg("digest") ?? plainText.slice(0, 120);
 const saveDraft = process.argv.includes("--save-draft");
 
-await withPage("wechat", { url: EDITOR_URL(0, null), keepOpen: true, activate: true, mode: "visible" }, async (cdp, sid) => {
+await withPage("wechat", { url: process.env.DRAFT_URL ?? EDITOR_URL(0, null), keepOpen: true, activate: true, mode: "visible" }, async (cdp, sid) => {
   const token = await openEditor(cdp, sid);
   console.log(`[wechat] 编辑器就绪 token=${token ?? "?"}`);
+
+  // 重跑保护：这里用于填空草稿；已有正文时直接失败，避免整套图文再粘贴一遍。
+  const bodyState = await evaluateScalar<{ chars: number; images: number }>(
+    cdp,
+    sid,
+    `(() => {
+      const body = Array.from(document.querySelectorAll(".ProseMirror"))
+        .filter((e) => e.offsetHeight > 80)
+        .sort((a, b) => b.offsetHeight - a.offsetHeight)[0];
+      return JSON.parse(JSON.stringify({
+        chars: body ? body.textContent.replace(/\s+/g, "").length : 0,
+        images: body ? body.querySelectorAll("img").length : 0,
+      }));
+    })()`,
+    { timeoutMs: 10_000 },
+  );
+  if (bodyState.chars > 0 || bodyState.images > 0) {
+    throw new Error(`当前草稿已有正文（${bodyState.chars} 字 / ${bodyState.images} 图）；请先清空正文，避免重复插入`);
+  }
 
   // 2. 逐张上传本地图 → CDN，回填正文
   for (let i = 0; i < uniq.length; i++) {
@@ -234,6 +254,8 @@ await withPage("wechat", { url: EDITOR_URL(0, null), keepOpen: true, activate: t
     "正文填充校验",
   );
   console.log("[wechat] 正文已粘贴");
+  await new Promise((r) => setTimeout(r, 10_000));
+  console.log("[wechat] 已等待编辑器状态稳定");
 
   // 5.5 可选：自动「保存为草稿」并取回 appmsgid（草稿编辑 URL）
   if (saveDraft) {

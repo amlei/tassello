@@ -5,6 +5,7 @@ import { PLATFORMS, PLATFORM_BY_ID } from "../types";
 import { publicationBaseTemplate } from "./base-template";
 import { deriveOverallStatus, isPlatformStatus } from "./status";
 import {
+  DEFAULT_PUBLICATION_BASE_PATH,
   PLATFORM_STATUS_BY_TASK_STATUS,
   PUBLICATION_STATUSES,
   type PlatformPublicationMeta,
@@ -45,13 +46,6 @@ export class PublicationLedger {
     }
   }
 
-  async syncTasks(tasks: PublishTask[]): Promise<void> {
-    const applicable = tasks.filter((task) => PublicationLedger.accepts(task));
-    for (const task of applicable) {
-      await this.applyTask(task);
-    }
-  }
-
   async ensureBase(): Promise<TFile | null> {
     const path = normalizePath(this.settings.basePath);
     if (!path || path === "/" || path.endsWith("/")) {
@@ -82,12 +76,14 @@ export class PublicationLedger {
   }
 
   private async isManagedBase(file: TFile): Promise<boolean> {
+    // 先识别标记再解析：插件早期生成的 Base 若有语法错误，也要允许自动修复。
+    const raw = await this.app.vault.cachedRead(file);
+    if (!raw.match(/^\s*tassello-managed:\s*publication-ledger\/v1\s*(?:#.*)?$/m)) return false;
     try {
-      const raw = await this.app.vault.cachedRead(file);
       const parsed = (parseYaml(raw) ?? {}) as Record<string, unknown>;
       return parsed["tassello-managed"] === "publication-ledger/v1";
     } catch {
-      return false;
+      return true;
     }
   }
 

@@ -3,6 +3,25 @@
 > 通道选型依据 + 真机验证记录。验证环境：macOS + Chrome + tassello 专用 profile
 > （`~/.local/share/tassello/chrome-profile`，由日常 Chrome 会话种子 + 手动登录），2026-09-19。
 
+## 0. 浏览器模式与发布确认（2026-10-05 决策）
+
+- **自动化默认统一 headless**：verify、profile 导入后的重校验、以及所有能自动完成/能落成持久草稿的
+  发布自动化都用 `--headless=new`。适配器不再声明或选择 `mode`；可见性由 Runtime 按发布批次决定。
+- **verify 不需要 visible**：2026-10-05 强制 headless 复测，已有登录态的豆瓣、即刻、公众号、微博、
+  小红书、小宇宙、喜马拉雅、知乎全部通过；X / 荔枝 / 蜻蜓失败均是登录态缺失或过期，不是 headless 限制。
+- **发布可见性按“本次选中平台集合”决定，不做成用户设置**：
+  - 所有选中目标都能自动提交，或能落成**持久草稿/可恢复草稿** → 本次批次 headless；自动化结束后关闭
+    任务页，只返回回执或草稿链接。
+  - 任一选中目标在**当前内容类型**下没有持久草稿，只停留在编辑器/上传器的**页面状态** →
+    **本次全部选中平台都使用 visible Chrome**，并且整批操作完成后不关闭浏览器，让用户在同一会话里
+    检查和完成最终发布。除小宇宙、喜马拉雅、蜻蜓外，即刻/知乎/微博的贴图也是 state；
+    知乎/微博的文章另有草稿通道，所以按文章发布时仍是 draft。
+  - mixed batch 采用全 visible，避免同一 profile 的 headless/visible 切换，也让用户只面对一次收尾流程。
+  - Runtime 用 `withBrowserLease` 在任务边界持有批次浏览器；`awaiting_confirm` 会继续保留 visible 租约，
+    直到用户确认、重试或删除该任务。期间相反模式排队，profile 导入也会被阻断。
+- **人工确认语义拆开**：`needsManualConfirm` 表示“用户还要做最后动作”，不再隐含“必须保留一个可见标签页”。
+  headless 草稿流返回 URL，由用户自己打开；只有 state-only batch 才保留 visible 会话。
+
 ## 1. 平台矩阵（15 平台）
 
 | 平台 | 通道 | 账号信息来源（已验证=✅） | 阶段 |
@@ -142,10 +161,21 @@ mp 后台首页「新的创作」四项与 tassello 内容类型一一对应，*
     **图文混排 = `"vertical"`**（atomic block `{type:"atomic", text:" ", entityRanges:[{key,offset:0,length:1}]}` +
     entityMap `{type:"IMAGE", mutability:"IMMUTABLE", data:{src,width,height,id}}`）。
     坑：`data.id` 缺失时编辑器报「有未上传完成的图片」；**horizontal 也必须在 content 里放 atomic 图块**，否则草稿恢复不出图。
+  atomic 图块可以插在段落之间，恢复时位置原样保留（2026-10-05 真机验证，图文混排不必固定在顶部）
+- **富文本（2026-10-05 真机验证）**：draft_props 的 blocks 直接带 Draft.js 结构，编辑器（Lexical）能完整恢复：
+  - 块类型：`header-one/two/three` 一律恢复成平台标题（DRE-h3）；`unordered/ordered-list-item`、
+    `blockquote`、`code-block` 原样保留
+  - 行内样式：`BOLD`/`ITALIC`/`UNDERLINE`/`STRIKETHROUGH`（`LINE_THROUGH` 同义）/`CODE`/`MARK`（高亮）全保留。
+    **高亮的样式名是 `MARK` 不是 `HIGHLIGHT`**（后者静默丢弃；出处是编辑器 bundle 里 Draft→Lexical 的样式映射表）
+  - 实体：`LINK`（`data.url`）恢复成链接；`IMAGE` atomic 块按位置恢复
+  - 适配器实现：`src/html-to-blocks.ts`（Tiptap bodyHtml → blocks，`figure.m-fig[data-asset]` 原位落图），
+    e2e 见 `scripts/e2e-rich.ts`；纯文本回退仍保留历史语义（图片固定在文字前）
 - **verify**：页面 `__INIT_STATE__.user`（`{id, name}`）+ `_GLOBAL_NAV.USER_ID` 兜底 + cookie `ck`；导航「X的账号」文本再兜底 name。
   **不能用 rexxar `/user/self`**：免鉴权参数时返回占位账号（id 1178175「风凌子」，账号状态异常），与真实登录态无关。
-- **⚠️ 豆瓣 CDN 对 headless Chrome 返回空响应体**（curl 与 visible Chrome 均正常，疑似指纹识别）→ 豆瓣一切页面任务必须 `mode: "visible"`。
-  且**绝不能用共享 profile 跑 headless 探测**：空响应带 `cache-control: max-age=1年`，会缓存投毒，之后 visible 也吃坏缓存（本次真踩，重拷 profile 才恢复）。
+- **浏览器模式（2026-10-05 复测）**：旧结论「headless 空响应体 / 必须 visible」不再成立。
+  Chrome 154 / macOS `--headless=new` 下，全新空 profile 打开首页正常；共享登录态强制 headless
+  建文字草稿也成功（探针草稿 `586930`，随后 `DELETE` 返回 200 清理）。豆瓣不再需要 visible 特判。
+  若未来复现空响应，先当作站点指纹/缓存异常单独排查，不要再把 visible 当成永久结论。
 - 认证：共享 cookie（`dbcl2`，.douban.com 全域）+ `ck`；m.douban.com 无独立登录态。
 - 适配器 `packages/platforms/douban`，脚本 `scripts/`（verify-smoke / e2e-draft / probe-upload）。
 - 遗留：`GET/POST …/dwarf/drafts/:id`（单条读写）实测 404（bundle 里是 `:id` 字面量路径，疑似 axios 实例有模板拦截器，未深究）；
@@ -203,8 +233,9 @@ mp 后台首页「新的创作」四项与 tassello 内容类型一一对应，*
   序列化成字符串会 200 但不落库；② 想法草稿无删除接口（405），只能在创作中心手动删；
   ③ CDP 回退链路已验证（点「发想法」→ 真实鼠标点 Draft.js 编辑器聚焦 + `Input.insertText` →
   发布解禁，合成 click 即可），探针 `scripts/probe-cdp-pin.ts`——签名头若未来收紧按此回退。
-- **限制/遗留**：视频（独立分片上传协议）与带图想法（vupload 图片上传链路未打通）本期显式报错；
-  签名头存在收紧风险。
+- **媒体（2026-10-05 已打通）**：文章本地图片走 `POST api.zhihu.com/images` + 阿里云 OSS PUT，
+  再替换正文 `<img>`；图片想法上传后用 `media.medias[].image` 提交；视频打开官方上传页并注入文件，
+  等待自动保存为想法视频草稿。签名头存在收紧风险。
 
 ### 2.9 播客四平台（2026-10-02 真机接入：账号→频道两级，一律只存草稿/填好即停）
 
@@ -248,12 +279,16 @@ mp 后台首页「新的创作」四项与 tassello 内容类型一一对应，*
 - **verify**：headless 打开 `/home`，轮询登录控件；能看到 account switcher 时提取 `@handle`
   与头像（提取不到不阻断登录判定）。落到 `/login` / `/i/flow/login` 立即失败，让
   `acquireAccount` 打开登录页。
-- **publish**：visible composer 里先传图/视频再填正文；等媒体预览与 Post 按钮解禁后真实点击。composer
+- **登录态来源**：X 登录态在日常 Chrome Default profile 里；仍走全局「导入登录态」复制到应用专用
+  profile 后再校验/发布。不直接把 CDP 挂到日常 Default user-data-dir——Chrome 136+ 对默认目录
+  禁远程调试，且运行中的 profile 会被锁。
+- **publish**：headless composer 里先传图/视频再填正文；等媒体预览与 Post 按钮解禁后真实点击。composer
   关闭视为提交信号，再从 timeline 最佳努力匹配当前 handle 的 `/status/<id>` 回执；拿不到不伪造。
 - **范围/红线**：`intent=auto` 自动发布；`intent=draft` 只填好 composer 停住。Articles、音频显式
   报错；单视频与多图互斥，单帖图片超过 4 张在任务创建后可归因失败。
-- **已验证**：`bun run typecheck`、`bun test` 通过；当前专用 profile 无 X 登录态时 verify
-  稳定返回 fail。真实发送链路待用户登录 X 后做一次非破坏/真机验证。
+- **已验证（2026-10-05）**：从日常 Chrome Default 导入后，headless verify 通过
+  （`@yatudou14`）。此前误判失败是 verify 表达式少一个右括号，30 秒超时后被兜底成未登录；
+  修正表达式并改从 `UserAvatar-Container-<handle>` 提取 handle。真实发送链路仍待一次可清理验证。
 
 ## 3. 共性工程结论
 
@@ -261,6 +296,11 @@ mp 后台首页「新的创作」四项与 tassello 内容类型一一对应，*
 2. **verify 两派**：JSON 接口派（微博/知乎/xhs-creator，页面上下文 fetch 即可）与 DOM 派（公众号）。差异收在平台包内部，接口层统一为「返回 profile 片段」。
 3. **profile 非只读**：session token（公众号）、capabilities（xhs permissions）都会变，verify 必须把刷新写回 `PlatformAccount.profile`。
 4. **Chrome 136+ 限制**：默认 user-data-dir 禁止远程调试端口；专用 profile 是硬前提，不是偏好。
+5. **素材上传去重只信稳定远端引用**：`PlatformAssetUpload` 以
+   `platform + account + scope + kind + sha256 + byteSize + mime` 为指纹，缓存素材库 ID、对象存储 key
+   或图床 photo id；发送失败/草稿保存失败会失效引用。公众号 filetransfer content id、即刻 picture key
+   与豆瓣 photo id 均已接入中心缓存。X / 小红书 / 播客平台当前通过 DOM file input 上传且拿不到稳定引用，
+   不伪造缓存，重跑仍会上传。
 
 ## 4. 二期待验证清单
 

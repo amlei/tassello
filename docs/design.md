@@ -41,9 +41,10 @@ Next.js standalone server（核心，127.0.0.1:<port>，独立进程）
 
 - **双形态，单数据源**：server 不依赖任何 Electron API，Electron 只是宿主之一。网页模式不是为了给人当第二产品入口，**就是给 Agent 留的使用与调试通道**（走 HTTP API 或直接操作页面）；两者读写同一个 `TASSELLO_DATA_DIR`。
 - **凭据加密抽象 `SecretBox`**：当前实现 `FileSecretBox`（`dataDir/secrets.json`，chmod 600）；桌面模式后续可无缝换 Electron safeStorage 实现，平台适配器无感知。
-- **人工确认闭环**：CDP 适配器把内容填进真实浏览器后，任务停在 `stage 3 / progress 100 / running`；队列方块出现「等」字按钮，用户在浏览器点完发布回来点它（`POST /api/tasks/:id {action:"confirm", url?}`，可附回执链接）完成任务。
+- **浏览器模式统一由 Runtime 决定**：verify 和可自动完成/可持久草稿的发布默认 `headless=new`；适配器不声明 `mode`。持久化能力按「平台 + 内容类型」声明：例如知乎/微博文章是 draft，但两者与即刻的贴图是 state。若本批选中任一平台在当前稿子类型下只能停留在页面状态，则整批改用 visible，并在整批完成后继续保留浏览器给用户收尾。
+- **人工确认闭环**：自动化完成后，可持久草稿的任务返回 URL 并停在 `stage 3 / progress 100 / running`；state-only visible 批次保留浏览器会话。用户完成平台侧动作后回队列确认（`POST /api/tasks/:id {action:"confirm", url?}`，可附回执链接）完成任务。
 - 任务状态机：`queued → rendering(渲染排版) → uploading(上传素材) → filling(填充编辑器) → awaiting_confirm(人工确认) → success | failed`
-- CDP 平台的「人工确认」是常态而非可选：脚本把编辑器填好，用户在真实浏览器里检查后自己点发布；可信平台可声明 `autoSubmit`。
+- 「人工确认」由平台能力与发布批次决定，不再是所有 CDP 平台的固定形态；`autoSubmit` 平台可直接 success。
 - 任务引擎按阶段发结构化 JSON 事件 → 同时喂 UI 与 `PublishLog`。
 
 ## 4. 目录结构（脚手架已落位）
@@ -63,7 +64,7 @@ tassello/
 │       └── package.json                       # devDeps: electron
 ├── packages/
 │   ├── shared/      # @tassello/shared —— 领域类型 + zod schema
-│   ├── db/          # @tassello/db —— Prisma schema / 迁移 / 种子（prisma + @prisma/client，均为 7.10）
+│   ├── db/          # @tassello/db —— Prisma schema（prisma + @prisma/client，均为 7.10）
 │   ├── server/      # @tassello/server —— 发布任务引擎、账号管理、注册表、设置
 │   ├── cdp/         # @tassello/cdp —— baoyu-chrome-cdp 移植 + 浏览器会话池
 │   ├── render/      # @tassello/render —— md→html、各平台版式适配
@@ -102,6 +103,29 @@ model Asset {
   kind   String // image | video | audio | file
   path   String
   meta   String @default("{}")
+}
+
+// 平台素材上传去重：只有拿得到稳定远端引用的通道才写入。
+model PlatformAssetUpload {
+  id          String   @id @default(cuid())
+  platformId  String
+  accountId   String
+  scope       String   @default("default") // 同平台的通道差异（scene / photo / picture…）
+  kind        String
+  contentHash String
+  byteSize    Int
+  mime        String
+  sourceName  String?
+  remoteId    String   // remoteId 的含义归平台：素材库 ID / object key / photo id
+  remoteUrl   String?
+  payloadJson String   @default("{}")
+  status      String   @default("available")
+  uploadedAt  DateTime @default(now())
+  lastUsedAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([platformId, accountId, scope, kind, contentHash, byteSize, mime])
 }
 
 model PlatformAccount {
@@ -202,9 +226,12 @@ export type PlatformMeta = {
 ## 7. CDP 封装层（packages/cdp）
 
 - 移植 `baoyu-chrome-cdp`（launch / discover / waitForDebugPort / CdpConnection / openPageSession 全套），外加一层**浏览器会话池**：
-  - 共享 Chrome profile：`~/.local/share/tassello/chrome-profile`（= `TASSELLO_DATA_DIR` 下，`TASSELLO_CHROME_PROFILE` 可覆盖；已初始化并登录验证）
-  - 按平台互斥占用：同一时刻一个平台一个 page session，发布与 verify 排队
-  - 登录态生命周期：每平台手动登录一次 → verify 定期校验（对应账号卡「最近校验」）→ fail 时 UI 提示重登
+  - 共享 Chrome profile：`~/.local/share/tassello/chrome-profile`（= `TASSELLO_DATA_DIR` 下，`TASSELLO_CHROME_PROFILE` 可覆盖；登录态从日常浏览器 Default profile 导入，不直接挂默认 user-data-dir）
+  - 浏览器模式默认 `headless=new`；adapter-facing `PageRunOptions` 不暴露 `mode`，由 `serverAdapterContext` 注入
+  - 发布批次包含 state-only 平台时整批 visible；`withBrowserLease` 的模式租约跨越一个任务的所有 page 调用，`awaiting_confirm` 会继续保留 visible Chrome，直到 confirm/retry/delete 释放
+  - 按平台互斥占用：同一时刻一个平台一个 page session，发布与 verify 排队；相反浏览器模式必须等待对方租约归零，不能直接 shutdown 正在等待人工收尾的浏览器
+  - profile 导入前检查 `hasBrowserLease()`；有登录页或人工发布租约时阻断导入
+  - 登录态生命周期：从日常浏览器导入 → verify 定期校验（账号卡显示「最近校验」）→ fail 时提示重新导入或人工登录
 - **工程铁律**：小红书等 Vue 站点的页面对象是响应式 Proxy，直接序列化会炸。封装层只提供 `evaluateScalar`（只允许标量/纯数组出页面），禁止把页面对象直接带回 Node 侧。
 - 文件上传：优先 CDP `DOM.setFileInputFiles`；对小红书视频类大文件，预研「permit + 直传存储」路线（见 platforms.md）。
 

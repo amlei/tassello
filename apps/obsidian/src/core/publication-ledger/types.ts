@@ -24,6 +24,9 @@ export type PlatformPublicationMeta = {
   sourceChanged?: boolean;
 };
 
+/** 默认放在 Vault 根，文件名与插件名保持一致。 */
+export const DEFAULT_PUBLICATION_BASE_PATH = "Tassello Publisher.base";
+
 export type PublicationSettings = {
   basePath: string;
   autoCreate: boolean;

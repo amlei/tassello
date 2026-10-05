@@ -1,6 +1,6 @@
 /* @tassello/platform-core —— PlatformAdapter 接口 + 平台注册表（唯一不放具体平台实现的地方） */
 import type { ZodType } from "zod";
-import type { PlatformMeta, StageEvent } from "@tassello/shared";
+import type { ContentType, PlatformMeta, PublishPersistence, StageEvent } from "@tassello/shared";
 
 /* ---------- 发布稿子的输入（服务层从 Post + Asset 组装） ---------- */
 export type PostDraft = {
@@ -35,14 +35,26 @@ export type CdpLike = {
   ): Promise<T>;
 };
 
-export type BrowserRunMode = "headless" | "visible";
+/** 未标注的内容类型按 state 处理：宁可 visible 人工收尾，也不要误判成可 headless 草稿。 */
+export function publishPersistenceFor(
+  meta: Pick<PlatformMeta, "publishPersistence">,
+  contentType: ContentType,
+): PublishPersistence {
+  return meta.publishPersistence[contentType] ?? "state";
+}
+
+/** autoSubmit 也受内容类型约束：state 通道不能默认 auto。 */
+export function autoSubmitFor(
+  meta: Pick<PlatformMeta, "autoSubmit" | "publishPersistence">,
+  contentType: ContentType,
+): boolean {
+  return meta.autoSubmit && publishPersistenceFor(meta, contentType) === "draft";
+}
 
 export type PageRunOptions = {
   url: string;
   keepOpen?: boolean;
   activate?: boolean;
-  /** web shared pool 支持；Obsidian 默认 Chrome runner 永远保持 visible。 */
-  mode?: BrowserRunMode;
 };
 
 /** 宿主注入一次页面任务；adapter 不得自己选择浏览器。 */
@@ -60,11 +72,35 @@ export type AdapterPublishOptions = {
   channel?: string;
 };
 
+/** 平台侧素材引用：远端 ID 的含义由平台决定（素材库 ID / object key / photo id）。 */
+export type PlatformAssetUploadRef = {
+  id: string;
+  url?: string | null;
+  payload?: Record<string, unknown>;
+};
+
+export type PlatformAssetUploadQuery = {
+  accountId: string;
+  assetPath: string;
+  kind: string;
+  /** 同平台内的通道差异，例如公众号 scene、知乎想法/专栏。 */
+  scope?: string;
+};
+
+/** 宿主注入素材上传去重仓；无该能力的宿主可直接省略，adapter 走普通上传。 */
+export type PlatformAssetUploadStore = {
+  find(query: PlatformAssetUploadQuery): Promise<PlatformAssetUploadRef | null>;
+  save(query: PlatformAssetUploadQuery, ref: PlatformAssetUploadRef): Promise<PlatformAssetUploadRef>;
+  forget(query: PlatformAssetUploadQuery): Promise<void>;
+};
+
 export type AdapterCtx = {
   secrets?: SecretBox;
   /** 结构化事件/日志（web 写 PublishLog；Obsidian 可写本地日志）。 */
   log: (event: string, payload?: unknown) => void;
   runPage: PlatformPageRunner;
+  /** 有稳定远端素材引用的平台才使用；DOM file input 型上传不伪造引用。 */
+  assets?: PlatformAssetUploadStore;
 };
 
 export type StageReporter = (e: { stage: number; progress: number; message?: string | null }) => void;

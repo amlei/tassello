@@ -21,6 +21,7 @@ export const TYPE_ORDER: ContentType[] = ["article", "image", "video", "audio"];
 export const AUTH_MODES = ["api", "cdp", "rss-downstream"] as const;
 export type AuthMode = (typeof AUTH_MODES)[number];
 export type PlatformStatus = "active" | "planned";
+export type PublishPersistence = "draft" | "state";
 export type AccountState = "ok" | "fail";
 
 export type PlatformMeta = {
@@ -38,6 +39,8 @@ export type PlatformMeta = {
   authMode: AuthMode;
   /** true = 适配器可自动点发布；false = 停在人工确认 */
   autoSubmit: boolean;
+  /** 按内容类型区分：draft = 可持久恢复；state = 页面状态，不保留就丢弃 */
+  publishPersistence: Partial<Record<ContentType, PublishPersistence>>;
   /** 发布去向文案（账号卡渲染用，平台级静态） */
   lands: string;
   status: PlatformStatus;

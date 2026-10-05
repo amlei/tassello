@@ -14,7 +14,7 @@
 |---|---|---|
 | 想法（贴图） | **API 直发** | `POST https://www.zhihu.com/api/v4/content/publish`，`action:"pin"` |
 | 文章（专栏） | **API 直发** | 建草稿 → PATCH 正文 → 发布（三步见下） |
-| 视频 | 未实现 | 创作平台视频是独立分片上传协议，本期显式报错（见 §4） |
+| 视频 | 官方上传页 + DOM.setFileInputFiles，等待自动保存为想法视频草稿 | 2026-10-05 真机验证 |
 
 ## 2. 接口明细（真机实测）
 
@@ -71,16 +71,26 @@ CDP 链路踩坑（若接口通道未来被签名封死，按此回退）：
 - `insertText` 写入后「发布」按钮才解禁；合成 `btn.click()` 对该按钮有效（无需坐标点击）。
 - 页面里有多个隐藏的 Draft 编辑器实例（0×0），选元素必须过滤 `getBoundingClientRect().width > 0`。
 
-## 4. 遗留问题
+## 4. 媒体上传（2026-10-05 真机验证）
 
-- **视频**：未实现。创作平台视频上传是独立分片协议（非 content/publish），工作量大，本期 `publish` 显式报错引导手动上传。
-- **图片想法（贴图）**：文字想法已通，带图想法需先走知乎图片上传（vupload）拿图片 token 再拼进 `hybrid.content`，未实现；当前带图资产会显式报错。
+- **图片通用链路**：`POST https://api.zhihu.com/images`，body
+  `{image_hash:"<md5>",source:"article"|"pin"}` → `upload_token` + `upload_file.object_key`；
+  用阿里云 OSS SDK `put(objectKey, file)` 上传到 `zhihu-pics-upload.zhimg.com`；
+  `PUT /images/<id>/uploading_status` 报 success；`GET /images/<id>` 等待 `status:"success"`。
+- **图片想法**：提交 `media:{medias:[{image:{width,height,url,originalUrl,watermark,watermarkUrl}}]}`。
+- **文章图片**：保留正文 `<img>` 位置，顺序替换本地 `src` 为上传后的 URL，再走文章三步接口。
+- **视频**：打开 `https://www.zhihu.com/zvideo/upload-video`，用 `DOM.setFileInputFiles`
+  注入视频；上传完成后知乎自动创建想法视频草稿，可从 drafts 列表拿 `content_id` 和 `video_id`。
+
+## 7. 遗留问题
+
+
 - 签名头 `x-zse-96/x-zst-81` 目前非强制，但知乎随时可能收紧（小程序/风控变更）；若未来被强制，回退方案是 CDP UI 链路（§3 探针），或页面内定位签名闭包（xhs `_webmsxyw` 同类思路）。
 - 探针期间在账号上发布并删除了 3 条想法 + 2 篇文章（均已确认删除成功，回收站里可能仍可见，可在知乎后台彻底清除）。
 
 ## 5. 文件
 
-- `src/index.ts` 适配器（verify + publish 想法/文章）
+- `src/index.ts` 适配器（verify + publish 想法/文章/视频）
 - `scripts/verify-smoke.ts` verify 冒烟
 - `scripts/e2e-publish.ts` 想法 + 文章直发 e2e（内置探针内容清理）
 - `scripts/cleanup-e2e.ts` 按回执 id 删除测试想法/文章
@@ -113,6 +123,6 @@ TASSELLO_CHROME_PROFILE=~/.local/share/tassello/probe-profiles/zhihu \
   每条草稿编辑页是 `https://zhuanlan.zhihu.com/p/<draftId>/edit`——发布第 3 步失败时兜底回执就用它。
 - **图片想法（贴图）实测**：创作平台弹窗里的 `input[type=file]`（接受 jpg/png/webp/gif/avif/heic）
   对 `DOM.setFileInputFiles` 有效（blob 预览立即出现），但**上传到服务端的请求在选图后 15s 内不发生**
-  （疑为发布时才触发或走 worker），纯接口上传链路未打通 → 维持「带图资产显式报错」策略。
+  （疑为发布时才触发或走 worker）；2026-10-05 已改为直接复用编辑器加载的 OSS SDK / POST `/images` 链路。
 - **pin 大整数 id**：接口响应里 id 是 15-19 位数字，页面内 `JSON.parse` 会丢精度——解析一律在
   原始文本上用正则抠字符串（适配器与脚本均已如此处理）。

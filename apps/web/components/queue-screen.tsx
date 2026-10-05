@@ -54,7 +54,7 @@ export function QueueScreen({
       context={{ title: "发布队列", meta: `${tasks.length} 条发布` }}
     >
       <div className="mx-auto flex min-h-0 w-full max-w-[1560px] flex-1 flex-col">
-        <div className="scroll-thin min-h-0 flex-1 overflow-auto px-[34px] pb-[120px]">
+        <div className="scroll-thin min-h-0 flex-1 overflow-auto px-[34px] pt-3 pb-[120px]">
           <TasksView
             tasks={tasks}
             posts={postMins}

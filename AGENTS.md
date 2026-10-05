@@ -17,7 +17,7 @@
 - `bun run dev` — web 开发服务器（apps/web，Next.js）
 - `bun run typecheck` — 全仓逐包 tsgo（TS7 native preview）`--noEmit`，改完代码必跑
 - `bun test` — 目前只有 packages/cdp 有测试（源码用 node:test 写，但 bun test 可跑）
-- `bun run db:migrate` — Prisma 迁移（packages/db）
+- `bun run db:push` — Prisma schema 推送（packages/db，无迁移历史）
 - lint 只在 apps/web 配置：`cd apps/web && bun run lint`
 - 桌面壳 `bun run desktop`：Electron 会 spawn `bun run dev -p 4311`（端口可用 `TASSELLO_PORT` 覆盖）；纯网页模式直接 `bun run dev` 即可调试
 

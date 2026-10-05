@@ -70,17 +70,16 @@ async function waitForLoginState(
         sessionId,
         `JSON.parse(JSON.stringify((() => {
           const button = document.querySelector('[data-testid="SideNav_AccountSwitcher_Button"]');
+          const avatarContainer = document.querySelector('[data-testid^="UserAvatar-Container-"]');
           const avatar = button?.querySelector("img")?.getAttribute("src") || null;
-          const rawHandle = button?.getAttribute("href") || "";
-          const handle = rawHandle.startsWith("/") && rawHandle.length > 1
-            ? decodeURIComponent(rawHandle.slice(1).split("/")[0])
-            : null;
+          const rawHandle = avatarContainer?.getAttribute("data-testid")?.slice("UserAvatar-Container-".length) || "";
+          const handle = rawHandle || null;
           return {
             loggedIn: !!document.querySelector('[data-testid="tweetTextarea_0"], [data-testid="tweetButtonInline"], [data-testid="SideNav_AccountSwitcher_Button"]'),
             handle,
             avatarUrl: avatar,
           };
-        })())`,
+        })()))`,
         { timeoutMs: 5_000 },
       );
       if (state.loggedIn) return state;
@@ -160,7 +159,7 @@ export const xAdapter: PlatformAdapter<XProfile> = {
       try {
         const state = await ctx.runPage(
           "x",
-          { url: "https://x.com/home", keepOpen: false, activate: false, mode: "headless" },
+          { url: "https://x.com/home", keepOpen: false, activate: false },
           async (cdp, sid) => await waitForLoginState(cdp, sid),
         );
         if (!state.loggedIn) {

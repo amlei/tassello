@@ -80,7 +80,7 @@ tassello:
 插件只维护一个默认 Base：
 
 ```text
-Tassello/Publishments.base
+Tassello Publisher.base
 ```
 
 发布后源笔记会得到一组 `tassello-*` 属性，例如：
@@ -95,7 +95,7 @@ tassello-weibo-draft-url: https://example.com/draft
 tassello-weibo-publish-url: https://example.com/post
 ```
 
-Base 内置“全部发布 / 待处理 / 已发布 / 失败”视图。任务面板只保留排队、执行中、待确认和失败；成功或取消的任务写入发布库后从短期队列移除。
+Base 文件默认放在 Vault 根目录，文件名和插件名一致；在 Obsidian 中移动或重命名它后，插件会自动记住新位置。Base 内置“全部发布 / 待处理 / 已发布 / 失败”视图。任务面板只保留排队、执行中、待确认和失败；成功或取消的任务写入发布库后从短期队列移除。
 
 ## 命令
 

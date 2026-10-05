@@ -12,7 +12,6 @@
  *   只改 DOM 不进编辑器状态，发表时内容会丢。
  */
 import { z } from "zod";
-import fs from "node:fs";
 import type {
   PlatformAdapter,
   PostDraft,
@@ -25,6 +24,7 @@ import type { CdpLike } from "@tassello/platform-core";
 type CdpConnection = CdpLike;
 import { getPlatformMeta } from "@tassello/platform-core";
 import { evaluateScalar } from "@tassello/cdp";
+import { uploadWechatMaterial, wechatSourceFilename } from "./upload";
 
 export const wechatProfileSchema = z.object({
   ghId: z.string().optional(),
@@ -186,6 +186,28 @@ async function pasteIntoProseMirror(
   );
 }
 
+
+/** 正文 HTML 粘贴后，公众号可能弹「继续插入」确认框；只在文章正文粘贴后处理 */
+async function confirmContinueInsert(cdp: PageClient, sessionId: string): Promise<boolean> {
+  return evaluateScalar<boolean>(
+    cdp,
+    sessionId,
+    `(async () => {
+      for (let i = 0; i < 8; i++) {
+        const btn = Array.from(document.querySelectorAll("button, .weui-desktop-btn, a"))
+          .find((b) => b.offsetHeight > 0 && (b.textContent || "").trim() === "继续插入");
+        if (btn) {
+          btn.click();
+          return true;
+        }
+        await new Promise((r) => setTimeout(r, 400));
+      }
+      return false;
+    })()`,
+    { timeoutMs: 10_000 },
+  );
+}
+
 /** textarea 填充：原生 value setter + input 事件（mp 的框架监听原生事件） */
 async function fillTextarea(
   cdp: PageClient,
@@ -248,48 +270,6 @@ async function openEditor(
   }
 }
 
-/** 页面上下文上传素材（编辑器同款 filetransfer 接口）→ 素材 id + cdn 地址（图片才有） */
-async function uploadMaterial(
-  cdp: PageClient,
-  sessionId: string,
-  filePath: string,
-  { fname, ftype, scene }: { fname: string; ftype: string; scene: number },
-): Promise<{ id: string; cdn: string | null }> {
-  const b64 = fs.readFileSync(filePath).toString("base64");
-  const r = await evaluateScalar<{ ret?: number; errMsg?: string; content?: string; cdn?: string | null; body?: string }>(
-    cdp,
-    sessionId,
-    `(async () => {
-      const b64 = ${JSON.stringify(b64)};
-      const bin = atob(b64);
-      const bytes = new Uint8Array(bin.length);
-      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-      const fd = new FormData();
-      fd.append("file", new Blob([bytes], { type: ${JSON.stringify(ftype)} }), ${JSON.stringify(fname)});
-      const cd = (window.wx && window.wx.commonData && window.wx.commonData.data) || {};
-      const seq = Date.now();
-      const url = "/cgi-bin/filetransfer?action=upload_material&f=json&scene=${scene}&writetype=doublewrite&groupid=1"
-        + "&ticket_id=" + (cd.ticket_id || "") + "&ticket_token=" + (cd.ticket_token || "")
-        + "&svr_time=" + Math.floor(seq / 1000) + "&lang=zh_CN&seq=" + seq;
-      const res = await fetch(url, { method: "POST", body: fd, credentials: "include" });
-      const j = await res.json().catch(() => null);
-      const base = j && j.base_resp;
-      if (!base) return { body: (await res.text().catch(() => ""))?.slice(0, 200) };
-      return {
-        ret: base.ret,
-        errMsg: base.err_msg,
-        content: j.content ? String(j.content) : undefined,
-        cdn: j.cdn_url || (j.content && j.content.url) || null,
-      };
-    })()`,
-    { timeoutMs: 120_000 },
-  );
-  if (r.ret !== 0 || !r.content) {
-    throw new Error(`素材上传失败（${r.errMsg || r.body || "无响应"}）`);
-  }
-  return { id: r.content, cdn: r.cdn ?? null };
-}
-
 /** 编辑区 HTML → 公众号正文 HTML：配图换成 mp cdn 地址，figure 展开成裸 img 段落。
  *  没有配图时原样返回；换源失败抛错（由调用方决定是否降级剔除配图） */
 function buildMpBodyHtml(post: PostDraft, urlByAsset: Map<string, string>): string {
@@ -322,7 +302,7 @@ export const wechatAdapter: PlatformAdapter<WechatProfile> = {
       ctx.log("wechat.verify.start");
       /* headless 打开 mp 后台等它就绪（登录态下有跳转），再读会话信息 */
       try {
-        const r = await ctx.runPage("wechat", { url: MP_HOME, keepOpen: false, activate: false, mode: "headless" }, (cdp, sid) =>
+        const r = await ctx.runPage("wechat", { url: MP_HOME, keepOpen: false, activate: false }, (cdp, sid) =>
           waitForMpReady(cdp, sid),
         );
         if (!r.loggedIn) return { state: "fail", failReason: "公众号后台未登录，请在浏览器里扫码登录" };
@@ -368,7 +348,11 @@ export const wechatAdapter: PlatformAdapter<WechatProfile> = {
   },
 };
 
-type PublishArgs = { post: PostDraft; acct: { profile?: unknown }; ctx: AdapterCtx; onStage: StageReporter };
+type PublishArgs = { post: PostDraft; acct: { id?: string; uid?: string | null; profile?: unknown }; ctx: AdapterCtx; onStage: StageReporter };
+
+function uploadAccountId(acct: PublishArgs["acct"]): string {
+  return acct.id?.trim() || acct.uid?.trim() || "unknown-account";
+}
 
 /* ---------- 文章（createType=0：标题 + 摘要 + 富文本正文，配图上传到素材库换 mp 地址） ---------- */
 async function publishArticle({ post, acct, ctx, onStage }: PublishArgs): Promise<PublishResult> {
@@ -401,7 +385,9 @@ async function publishArticle({ post, acct, ctx, onStage }: PublishArgs): Promis
       if (!path) continue;
       onStage({ stage: 1, progress: 10 + Math.round(((i + 1) / figIds.length) * 80), message: `上传配图 ${i + 1}/${figIds.length}` });
       try {
-        urlByAsset.set(id, (await uploadMaterial(cdp, sid, path, { fname: "img.png", ftype: "image/png", scene: 8 })).cdn ?? "");
+        const upload = await uploadWechatMaterial(cdp, sid, path, { accountId: uploadAccountId(acct), scene: 8, assets: ctx.assets });
+        urlByAsset.set(id, upload.cdn ?? "");
+        ctx.log("wechat.article.figure-uploaded", { id, filename: upload.filename, materialId: upload.id, cached: upload.cached });
       } catch (e) {
         degraded = true;
         ctx.log("wechat.article.figure-failed", { id, error: e instanceof Error ? e.message : String(e) });
@@ -446,6 +432,7 @@ async function publishArticle({ post, acct, ctx, onStage }: PublishArgs): Promis
       plainText,
     );
     if (!pasted) throw new Error("未找到公众号正文编辑区（页面结构可能变更）");
+    if (await confirmContinueInsert(cdp, sid)) ctx.log("wechat.article.continue-insert-confirmed");
     await waitForJs(
       cdp,
       sid,
@@ -569,20 +556,10 @@ async function publishVideo({ post, acct, ctx, onStage }: PublishArgs): Promise<
 
 /* ---------- 播客/音频（createType=7）：filetransfer 直传素材库（scene=4，实测可入「插入音频」列表），
    弹窗里按文件名勾选 → 插入；封面选择留给人工（人工确认本来就是常态） ---------- */
-function audioMime(path: string): string {
-  const lower = path.toLowerCase();
-  if (lower.endsWith(".m4a")) return "audio/mp4";
-  if (lower.endsWith(".wav")) return "audio/wav";
-  if (lower.endsWith(".aac")) return "audio/aac";
-  if (lower.endsWith(".flac")) return "audio/flac";
-  return "audio/mpeg";
-}
-
 async function publishAudio({ post, acct, ctx, onStage }: PublishArgs): Promise<PublishResult> {
   onStage({ stage: 0, progress: 30, message: "整理音频" });
   const audio = post.assets.find((a) => a.kind === "audio" && a.path);
   if (!audio) throw new Error("音频稿没有音频素材");
-  const fname = audio.path!.split("/").pop() || "audio.mp3";
   const desc = (post.body || "").trim();
   onStage({ stage: 0, progress: 100 });
   onStage({ stage: 1, progress: 10, message: "打开播客编辑器" });
@@ -591,8 +568,9 @@ async function publishAudio({ post, acct, ctx, onStage }: PublishArgs): Promise<
     await openEditor(cdp, sid, 7, (acct.profile as WechatProfile).sessionToken);
 
     onStage({ stage: 1, progress: 30, message: "上传音频到素材库" });
-    await uploadMaterial(cdp, sid, audio.path!, { fname, ftype: audioMime(audio.path!), scene: 4 });
-    ctx.log("wechat.audio.uploaded", { fname });
+    const upload = await uploadWechatMaterial(cdp, sid, audio.path!, { accountId: uploadAccountId(acct), scene: 4, assets: ctx.assets });
+    const fname = upload.filename;
+    ctx.log("wechat.audio.uploaded", { fname, materialId: upload.id, cached: upload.cached });
 
     onStage({ stage: 1, progress: 60, message: "打开「插入音频」弹窗" });
     await evaluateScalar(

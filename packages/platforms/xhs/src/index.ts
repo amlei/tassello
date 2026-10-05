@@ -384,7 +384,7 @@ export const xhsAdapter: PlatformAdapter<XhsProfile> = {
       try {
         const r = await ctx.runPage(
           "xhs",
-          { url: XHS_PUBLISH_URL, keepOpen: false, activate: false, mode: "headless" },
+          { url: XHS_PUBLISH_URL, keepOpen: false, activate: false },
           async (cdp, sid) => {
             await waitForCreatorReady(cdp, sid);
             return evaluateScalar<VerifyJsResult>(cdp, sid, VERIFY_JS, { timeoutMs: 20_000 });

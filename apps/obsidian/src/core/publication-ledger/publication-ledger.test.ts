@@ -1,16 +1,18 @@
 import { describe, expect, test } from "bun:test";
 import { parse } from "yaml";
 import { publicationBaseTemplate } from "./base-template";
+import { DEFAULT_PUBLICATION_BASE_PATH } from "./types";
 import { deriveOverallStatus } from "./status";
 
 describe("publication ledger", () => {
   test("generates valid Bases YAML", () => {
     const raw = publicationBaseTemplate({
-      basePath: "Tassello/Publishments.base",
+      basePath: DEFAULT_PUBLICATION_BASE_PATH,
       autoCreate: true,
       includeFailReason: true,
     });
     const parsed = parse(raw) as Record<string, any>;
+    expect(DEFAULT_PUBLICATION_BASE_PATH).toBe("Tassello Publisher.base");
     expect(parsed["tassello-managed"]).toBe("publication-ledger/v1");
     expect(parsed.views).toHaveLength(4);
     expect(parsed.views[0].type).toBe("table");

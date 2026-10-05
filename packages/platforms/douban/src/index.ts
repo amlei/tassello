@@ -9,6 +9,8 @@
  *   DELETE .../dwarf/drafts?id=<id>                        删草稿（清理探针/重试时用，200）
  *   草稿链接：https://www.douban.com/topic/create?draft_id=<id>（真机验证可恢复标题+正文，
  *   编辑器带「可投递到小组 / 收到文集」，投递与发布由用户手动完成）
+ *   富文本：draft_props 的 blocks 能带格式，编辑器恢复保留标题/粗/斜/删/下划线/高亮(MARK)/行内码/
+ *   代码块/列表/引用/链接，atomic IMAGE 可插段落间（映射表见 html-to-blocks.ts，2026-10-05 真机验证）
  *   图片：POST https://upload.douban.com/j/group/topic/add_photo（FormData：ck / image_file /
  *   primary_color / upload_auth_token，token 读页面 __INIT_STATE__）→ { r:0, photo:{id,url,width,height} }。
  *   画廊模式（正文空）image_layout:"horizontal"；图文混排 image_layout:"vertical"，
@@ -17,8 +19,7 @@
  *
  * 真机踩坑（docs/platforms.md §2.6）：
  * - 豆瓣 CDN 对 headless Chrome 返回空响应体（curl / visible Chrome 均正常）→ 一切页面任务
- *   必须 mode: "visible"；且绝不能用共享 profile 跑 headless 探测（空响应按 cache-control
- *   一年缓存，会污染 profile，之后 visible 也吃坏缓存）
+ *   2026-10-05 复测 headless 可用；旧的「必须 visible」结论不再成立。
  * - subtype：发言（可投递小组）= "personal"；日记 = "note"。tassello 只发 personal
  * - 认证走共享 cookie（dbcl2，.douban.com 域全域有效），m.douban.com 无独立登录态；
  *   rexxar /user/self 免鉴权参数时返回占位账号（id 1178175「风凌子」，状态异常），
@@ -31,6 +32,7 @@ import type { PlatformAdapter, PostDraft, AdapterCtx, StageReporter, PublishResu
 type CdpConnection = CdpLike;
 import { getPlatformMeta } from "@tassello/platform-core";
 import { evaluateScalar } from "@tassello/cdp";
+import { htmlToDoubanBlocks, type DoubanBlockDraft, type DoubanLinkEntity } from "./html-to-blocks";
 
 export const doubanProfileSchema = z.object({
   uid: z.string(),
@@ -89,7 +91,7 @@ export const doubanAdapter: PlatformAdapter<DoubanProfile> = {
         // 豆瓣 CDN 对 headless 返回空响应体，必须 visible
         const r = await ctx.runPage(
           "douban",
-          { url: DOUBAN_HOME_URL, keepOpen: false, activate: false, mode: "visible" },
+          { url: DOUBAN_HOME_URL, keepOpen: false, activate: false },
           async (cdp, sid) => {
             if (!(await waitForHomeReady(cdp, sid))) {
               return evaluateScalar<{ uid: string | null; name: string | null; ck: string | null; avatarUrl: string | null }>(
@@ -139,7 +141,7 @@ export const doubanAdapter: PlatformAdapter<DoubanProfile> = {
     },
   },
 
-  async publish(post: PostDraft, _acct, ctx: AdapterCtx, onStage: StageReporter) {
+  async publish(post: PostDraft, acct, ctx: AdapterCtx, onStage: StageReporter) {
     onStage({ stage: 0, progress: 20, message: "整理豆瓣发言草稿" });
 
     const title = (post.title || "").trim();
@@ -152,54 +154,107 @@ export const doubanAdapter: PlatformAdapter<DoubanProfile> = {
     }
 
     /* 形态（豆瓣编辑器规则，真机验证见 docs/platforms.md §2.6）：
-     * - 正文为空 + 有图 → 画廊模式（image_layout: "horizontal"，图块连续排列）
-     * - 正文非空 + 有图 → 图文混排（image_layout: "vertical"，atomic IMAGE block 插在段落间）
-     *   正文行 `[图N]`（N 从 1 起）单独成行时该图插入此位置，未标记的图依次追加在文末
+     * - bodyHtml 非空 → 富文本转 blocks：标题/粗/斜/删/下划线/高亮/行内码/代码块/列表/引用/链接全保留，
+     *   figure.m-fig[data-asset] 原位落图（图文混排位置保留）；转换异常或产物为空回退纯文本分段
+     * - 纯文本回退：正文空 + 有图 → 画廊（horizontal）；否则图片块固定在文字前（vertical，历史语义）
      * 图片必须先经 add_photo 上传拿 photo.id，实体 data 无 id 的图编辑器校验不通过 */
     const paras = body ? body.split(/\n+/).map((s) => s.trim()).filter(Boolean) : [];
-    const isGallery = imageAssets.length > 0 && paras.length === 0;
+    let items: DoubanBlockDraft[] = [];
+    let linkEntities: Record<string, DoubanLinkEntity> = {};
+    let richSource = false;
+    if (post.bodyHtml && post.bodyHtml.trim()) {
+      try {
+        const converted = htmlToDoubanBlocks(post.bodyHtml);
+        if (converted.items.length) {
+          items = converted.items;
+          linkEntities = converted.entities;
+          richSource = true;
+        }
+      } catch (e) {
+        ctx.log("douban.publish.html_fallback", { err: e instanceof Error ? e.message : String(e) });
+      }
+    }
+    if (!items.length) {
+      items = paras.map((line) => ({ kind: "text" as const, type: "unstyled", depth: 0, text: line, inlineStyleRanges: [], entityRanges: [] }));
+    }
+    /* bodyHtml 不带 figure（旧稿/纯文本路径）时保留历史语义：图片固定在文字前 */
+    if (imageAssets.length && !items.some((it) => it.kind === "image")) {
+      items = [...imageAssets.map((a) => ({ kind: "image" as const, assetId: a.id })), ...items];
+    }
+    const isGallery = imageAssets.length > 0 && !items.some((it) => it.kind === "text");
 
-    ctx.log("douban.publish.rendered", { titleLen: title.length, paras: paras.length, images: imageAssets.length, layout: isGallery ? "horizontal" : imageAssets.length ? "vertical" : "none" });
+    ctx.log("douban.publish.rendered", { titleLen: title.length, paras: paras.length, blocks: items.length, rich: richSource, images: imageAssets.length, layout: isGallery ? "horizontal" : imageAssets.length ? "vertical" : "none" });
     onStage({ stage: 0, progress: 100 });
     onStage({ stage: 1, progress: 20, message: imageAssets.length ? `上传 ${imageAssets.length} 张图` : "调用豆瓣草稿接口" });
 
-    // 图片读成 base64 带进页面（页面上下文 FormData fetch 上传，带共享 cookie）
+    // 图片先查平台素材缓存；只有没有稳定远端引用的字节才带进页面上传。
+    type DoubanPhoto = { id: string; url: string; width: number; height: number };
+    const accountId = acct?.id || "shared";
+    const uploadQuery = (asset: typeof imageAssets[number]) => ({ accountId, assetPath: asset.path, kind: "image", scope: "photo" });
+    const photoRefs: (DoubanPhoto | null)[] = Array.from({ length: imageAssets.length }, () => null);
+    const refByPath = new Map<string, DoubanPhoto>();
+    const pending = [] as { index: number; asset: typeof imageAssets[number] }[];
+    for (const [index, asset] of imageAssets.entries()) {
+      const reused = refByPath.get(asset.path);
+      if (reused) {
+        photoRefs[index] = reused;
+        continue;
+      }
+      const cached = ctx.assets ? await ctx.assets.find(uploadQuery(asset)) : null;
+      const payload = cached?.payload as { id?: unknown; url?: unknown; width?: unknown; height?: unknown } | undefined;
+      if (cached && typeof payload?.id === "string" && typeof payload?.url === "string") {
+        const photo: DoubanPhoto = {
+          id: payload.id,
+          url: payload.url,
+          width: Number(payload.width ?? 0),
+          height: Number(payload.height ?? 0),
+        };
+        photoRefs[index] = photo;
+        refByPath.set(asset.path, photo);
+        ctx.log("douban.image.cache-hit", { assetId: asset.id, photoId: photo.id });
+        continue;
+      }
+      pending.push({ index, asset });
+    }
+    const cachedCount = imageAssets.length - pending.length;
+
     const fsp = await import("node:fs/promises");
-    const imagesB64: string[] = [];
-    for (const a of imageAssets) {
-      const buf = await fsp.readFile(a.path);
-      imagesB64.push(Buffer.from(buf).toString("base64"));
+    const pendingUploads = [] as { name: string; base64: string }[];
+    for (const item of pending) {
+      const buf = await fsp.readFile(item.asset.path);
+      pendingUploads.push({
+        name: item.asset.path.split("/").pop() || `image-${item.index}.png`,
+        base64: Buffer.from(buf).toString("base64"),
+      });
     }
 
     // 接口通道：www 页面上下文 fetch（带共享 cookie），不碰编辑器 DOM
     const r = await ctx.runPage(
       "douban",
-      { url: DOUBAN_HOME_URL, keepOpen: false, activate: false, mode: "visible" },
+      { url: DOUBAN_HOME_URL, keepOpen: false, activate: false },
       async (cdp, sid) => {
         if (!(await waitForHomeReady(cdp, sid))) {
           throw new Error("豆瓣登录态已失效，请重新登录");
         }
 
-        /* 上传图片：POST upload.douban.com/j/group/topic/add_photo
-         * FormData: ck / image_file / primary_color / upload_auth_token → { r: 0, photo: { id, url, width, height, … } } */
-        let photos: { id: string; url: string; width: number; height: number }[] = [];
-        if (imagesB64.length) {
-          onStage({ stage: 1, progress: 40, message: `上传图片（0/${imagesB64.length}）` });
-          const up = await evaluateScalar<{ ok: boolean; photos: { id: string; url: string; width: number; height: number }[]; msg: string | null }>(
+        /* 只上传缓存 miss 的图片：POST upload.douban.com/j/group/topic/add_photo。 */
+        if (pending.length) {
+          onStage({ stage: 1, progress: 40, message: `上传图片（0/${pending.length}）` });
+          const up = await evaluateScalar<{ ok: boolean; photos: DoubanPhoto[]; msg: string | null }>(
             cdp,
             sid,
             `(async () => {
-              const imgs = ${JSON.stringify(imagesB64)};
+              const imgs = ${JSON.stringify(pendingUploads)};
               const ck = (document.cookie.match(/(?:^|;\\s*)ck=([^;]+)/) || [])[1] || "";
               const authToken = (window.__INIT_STATE__ || {}).upload_auth_token || "";
               const photos = [];
               for (let i = 0; i < imgs.length; i++) {
-                const bin = atob(imgs[i]);
+                const bin = atob(imgs[i].base64);
                 const bytes = new Uint8Array(bin.length);
                 for (let j = 0; j < bin.length; j++) bytes[j] = bin.charCodeAt(j);
                 const fd = new FormData();
                 fd.append("ck", ck);
-                fd.append("image_file", new File([bytes], "image" + i + ".png", { type: "image/png" }));
+                fd.append("image_file", new File([bytes], imgs[i].name, { type: "image/png" }));
                 fd.append("primary_color", "");
                 fd.append("upload_auth_token", authToken);
                 const res = await fetch("https://upload.douban.com/j/group/topic/add_photo", { method: "POST", credentials: "include", body: fd });
@@ -217,13 +272,26 @@ export const doubanAdapter: PlatformAdapter<DoubanProfile> = {
             ctx.log("douban.publish.upload_fail", { msg: up.msg });
             throw new Error(up.msg || "豆瓣图片上传失败");
           }
-          photos = up.photos;
-          onStage({ stage: 1, progress: 90, message: `图片上传完成（${photos.length}/${imagesB64.length}）` });
+          for (const [i, photo] of up.photos.entries()) {
+            const item = pending[i]!;
+            photoRefs[item.index] = photo;
+            refByPath.set(item.asset.path, photo);
+            await ctx.assets?.save(uploadQuery(item.asset), {
+              id: photo.id,
+              url: photo.url,
+              payload: { id: photo.id, url: photo.url, width: photo.width, height: photo.height },
+            });
+          }
+          onStage({ stage: 1, progress: 90, message: `图片处理完成（新上传 ${up.photos.length}，缓存 ${cachedCount}）` });
+        } else if (imageAssets.length) {
+          onStage({ stage: 1, progress: 90, message: `图片全部复用平台缓存（${cachedCount}）` });
         }
-
-        /* 组 draft_props：
-         * - 产品语义：图片固定在正文顶部，Markdown 图文混排位置不保留
-         * - 画廊：只有图片；图文：全部图片 block 在文字 block 前 */
+        /* 组 draft_props：IMAGE 实体等图片上传完才落 key；LINK 实体沿用转换器分配的 key */
+        const photos = photoRefs.map((photo) => {
+          if (!photo) throw new Error("豆瓣图片引用缺失");
+          return photo;
+        });
+        const assetIndexById = new Map(imageAssets.map((a, i) => [a.id, i]));
         let keySeq = 0;
         const nextKey = () => "ts" + Date.now().toString(36) + keySeq++;
         type DraftBlock = {
@@ -231,22 +299,22 @@ export const doubanAdapter: PlatformAdapter<DoubanProfile> = {
           inlineStyleRanges: unknown[]; entityRanges: { key: string; offset: number; length: number }[];
           data: { align: string };
         };
-        const textBlock = (text: string): DraftBlock => ({ key: nextKey(), text, type: "unstyled", depth: 0, inlineStyleRanges: [], entityRanges: [], data: { align: "" } });
-        const imageBlock = (idx: number): DraftBlock => ({
-          key: nextKey(), text: " ", type: "atomic", depth: 0, inlineStyleRanges: [],
-          entityRanges: [{ key: "e" + idx, offset: 0, length: 1 }], data: { align: "" },
-        });
         const blocks: DraftBlock[] = [];
         const entityMap: Record<string, unknown> = {};
-        if (isGallery) {
-          imageAssets.forEach((_, i) => blocks.push(imageBlock(i)));
-        } else {
-          imageAssets.forEach((_, i) => blocks.push(imageBlock(i)));
-          paras.forEach((line) => blocks.push(textBlock(line)));
+        let imgEntitySeq = 0;
+        for (const item of items) {
+          if (item.kind === "image") {
+            const assetIndex = assetIndexById.get(item.assetId);
+            if (assetIndex === undefined) continue; /* figure 引用了非图片素材（视频等）：跳过 */
+            const photo = photos[assetIndex]!;
+            const key = "e" + imgEntitySeq++;
+            entityMap[key] = { type: "IMAGE", mutability: "IMMUTABLE", data: { src: photo.url, width: photo.width, height: photo.height, id: photo.id } };
+            blocks.push({ key: nextKey(), text: " ", type: "atomic", depth: 0, inlineStyleRanges: [], entityRanges: [{ key, offset: 0, length: 1 }], data: { align: "" } });
+          } else {
+            blocks.push({ key: nextKey(), text: item.text, type: item.type, depth: item.depth, inlineStyleRanges: item.inlineStyleRanges, entityRanges: item.entityRanges, data: { align: "" } });
+          }
         }
-        photos.forEach((p, i) => {
-          entityMap["e" + i] = { type: "IMAGE", mutability: "IMMUTABLE", data: { src: p.url, width: p.width, height: p.height, id: p.id } };
-        });
+        Object.assign(entityMap, linkEntities);
         const draftProps = JSON.stringify({
           ...(title ? { title } : {}),
           content: { blocks, entityMap },
@@ -282,6 +350,8 @@ export const doubanAdapter: PlatformAdapter<DoubanProfile> = {
 
     if (!r.ok || !r.id) {
       ctx.log("douban.publish.fail", { status: r.status, msg: r.msg });
+      // 草稿保存失败时不要让刚拿到的 photo id 变成永久缓存；下一轮重传更安全。
+      await Promise.all(imageAssets.map((asset) => ctx.assets?.forget(uploadQuery(asset)).catch(() => {})));
       throw new Error(`豆瓣草稿保存失败（HTTP ${r.status}）：${r.msg || "未知错误"}`);
     }
     const url = DOUBAN_DRAFT_URL + r.id;

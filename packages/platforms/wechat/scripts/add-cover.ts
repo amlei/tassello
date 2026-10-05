@@ -10,13 +10,13 @@
 import { CdpConnection, findChromeExecutable, findExistingChromeDebugPort, launchChrome, resolveChromeProfileDir, waitForChromeDebugPort } from "@tassello/cdp";
 import fs from "node:fs";
 import path from "node:path";
+import { uploadWechatMaterial } from "../src/upload";
 
 function arg(name: string): string | undefined {
   const i = process.argv.indexOf(`--${name}`);
   return i >= 0 ? process.argv[i + 1] : undefined;
 }
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
 const appmsgid = arg("appmsgid");
 const coverPath = path.resolve(arg("cover") ?? "");
 const itemidx = arg("itemidx") ?? "1";
@@ -87,28 +87,14 @@ for (let i = 0; i < 20 && !(await coverReady()); i++) {
 }
 if (!(await coverReady())) throw new Error("编辑器封面区未就绪");
 
-/* 4. filetransfer 上传封面 → 唯一 cdn 标识 */
-const b64 = fs.readFileSync(coverPath).toString("base64");
-const up = await ev(`(async () => {
-  const b64 = ${JSON.stringify(b64)};
-  const bin = atob(b64);
-  const bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  const fd = new FormData();
-  fd.append("file", new Blob([bytes], { type: "image/png" }), "cover.png");
-  const cd = (window.wx && window.wx.commonData && window.wx.commonData.data) || {};
-  const seq = Date.now();
-  const url = "/cgi-bin/filetransfer?action=upload_material&f=json&scene=8&writetype=doublewrite&groupid=1"
-    + "&ticket_id=" + (cd.ticket_id || "") + "&ticket_token=" + (cd.ticket_token || "")
-    + "&svr_time=" + Math.floor(seq / 1000) + "&lang=zh_CN&seq=" + seq;
-  const res = await fetch(url, { method: "POST", body: fd, credentials: "include" });
-  return await res.json().catch(() => null);
-})()`, 120_000);
-const cdn: string = up?.cdn_url || up?.content?.url || "";
-if (!cdn) throw new Error("封面素材上传失败: " + JSON.stringify(up).slice(0, 200));
-// 取 cdn 路径里的唯一文件段（如 mmbiz_jpg/yoibPC.../xxx）
+/* 4. filetransfer 上传封面 → 唯一 cdn 标识；若同一文件刚作为正文图上传，这里直接复用缓存 */
+const up = await uploadWechatMaterial(cdp, sessionId, coverPath, { scene: 8 });
+const cdn = up.cdn ?? "";
+if (!cdn) throw new Error(`封面素材没有 CDN 地址：${up.filename}`);
 const m = cdn.match(/mmbiz_[a-z]+\/([^/?]+)/);
 const uniqueId = m ? m[1]! : cdn.slice(0, 80);
+console.log(`[upload] filename: ${up.filename}${up.cached ? "（缓存复用）" : ""}`);
+console.log("[upload] materialId:", up.id);
 console.log("[upload] cdn:", cdn.slice(0, 80));
 console.log("[upload] uniqueId:", uniqueId);
 

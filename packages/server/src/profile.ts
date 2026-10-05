@@ -5,7 +5,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { getDefaultChromeUserDataDirs, resolveChromeProfileDir, resetConnection } from "@tassello/cdp";
+import { getDefaultChromeUserDataDirs, hasBrowserLease, resolveChromeProfileDir, resetConnection } from "@tassello/cdp";
 import { IMPORT_BROWSERS, type ImportBrowserDTO, type ImportBrowserId } from "@tassello/shared";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -132,6 +132,9 @@ export async function syncBrowserProfile(browser: ImportBrowserId): Promise<{ ok
     if (sourceBrowserRunning(browser)) {
       const b = IMPORT_BROWSERS.find((x) => x.id === browser);
       return { ok: false, code: "browser_running", message: `${b?.name ?? "日常浏览器"}正在运行，无法导入` };
+    }
+    if (hasBrowserLease()) {
+      return { ok: false, code: "browser_running", message: "应用浏览器还有登录页或人工发布批次未完成，无法导入" };
     }
     const { copied } = await refreshAppProfileFromDefault(browser);
     return { ok: true, message: copied.join("、") };

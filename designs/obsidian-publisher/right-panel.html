@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Obsidian Publisher · 右侧面板结构原型</title>
+<title>Obsidian Publisher · 显式发布目标原型</title>
 <script>
   // 原型默认跟随系统主题，同时保留页面内切换，便于确认两种 Obsidian 环境。
   (function(){
@@ -39,6 +39,8 @@
     --selected:#F1F0EE;
     --accent:#2383E2;
     --accent-tint:#E9F3FB;
+    --plat-x:#16130E;
+    --plat-x-fg:#FFFFFF;
     --shadow-card:0 1px 2px rgba(15,15,15,.04);
     --shadow-pop:0 14px 40px rgba(15,15,15,.14);
     --r-lg:20px;
@@ -67,6 +69,8 @@
     --selected:#2F2F2F;
     --accent:#4A9EE8;
     --accent-tint:#20304A;
+    --plat-x:#E6E5E3;
+    --plat-x-fg:#191919;
     --shadow-card:0 1px 2px rgba(0,0,0,.3);
     --shadow-pop:0 14px 40px rgba(0,0,0,.5);
   }
@@ -183,6 +187,12 @@
   .panel-body{flex:1;min-height:0;overflow:auto;padding:12px 14px 16px;display:flex;flex-direction:column;gap:11px}
   /* 预览页下部固定在视口内：检查与平台选择保持可见，长正文只在 payload 卡片里滚动。 */
   .panel-body:has(.preview-frame){overflow:hidden}
+  .source-type{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;margin-bottom:1px}
+  .source-type button{min-height:38px;padding:4px;border:1px solid var(--line);border-radius:11px;background:var(--card);color:var(--ink2);font-size:11px;font-weight:700;line-height:1.2;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px}
+  .source-type button .dot{width:10px;height:10px;border-radius:3px}
+  .source-type button.active{border-color:color-mix(in srgb,var(--accent) 45%,transparent);background:var(--accent-tint);color:var(--ink)}
+  .mode{grid-template-columns:repeat(3,minmax(0,1fr))}
+
   .panel-foot{flex:0 0 auto;padding:10px 14px 12px;border-top:1px solid var(--line);background:var(--card)}
 
   .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r-md);box-shadow:var(--shadow-card)}
@@ -210,15 +220,50 @@
   .preview-head .title{font-size:13.5px;font-weight:700;line-height:1.35}
   .preview-head .sub{margin-top:3px;font-size:10.5px;color:var(--ink2);line-height:1.4}
   .preview-head .glyph{width:26px;height:26px;border-radius:8px;color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800}
-  .preview-frame{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;overflow:hidden;border:1px solid var(--line);border-radius:11px;background:var(--card);padding:10px;box-shadow:var(--shadow-card)}
-  .preview-frame>.plain,.preview-frame>.rich{flex:1 1 auto;min-height:0;overflow:auto;padding-right:2px}
+  .selector-card{
+    padding:7px;border:1px solid var(--line);border-radius:10px;background:var(--card);
+    display:flex;flex-direction:column;gap:6px;box-shadow:var(--shadow-card);
+  }
+  .selector-row{display:flex;align-items:center;gap:6px;min-width:0}
+  .selector-label{width:24px;flex:0 0 auto;color:var(--ink3);font-size:9.5px;font-weight:800;text-align:center}
+  .type-options{flex:1;min-width:0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:3px}
+  .type-option{min-height:25px;padding:2px;border:1px solid var(--line);border-radius:7px;background:var(--rail);color:var(--ink2);font-size:9.5px;font-weight:800;display:grid;place-items:center}
+  .type-option.active{border-color:color-mix(in srgb,var(--accent) 45%,transparent);background:var(--accent-tint);color:var(--ink)}
+  .platform-options{flex:1;min-width:0;display:flex;gap:4px;overflow-x:auto;scrollbar-width:none;padding-bottom:1px}
+  .platform-options::-webkit-scrollbar{display:none}
+  .platform-option{position:relative;flex:0 0 auto;width:27px;height:27px;border:1px solid transparent;border-radius:8px;display:grid;place-items:center;color:#fff;font-size:10px;font-weight:900;opacity:.46}
+  .platform-option:hover{opacity:.76}
+  .platform-option.active{opacity:1;box-shadow:0 0 0 1px var(--card),0 0 0 3px var(--accent)}
+  .findings-panel{border:1px solid var(--line);border-radius:9px;background:var(--card);overflow:hidden}
+  .findings-panel summary{
+    list-style:none;cursor:pointer;padding:6px 8px;color:var(--ink2);font-size:10px;font-weight:800;
+    display:flex;align-items:center;justify-content:space-between;gap:8px;
+  }
+  .findings-panel summary::-webkit-details-marker{display:none}
+  .findings-panel summary::after{content:"展开";color:var(--ink3);font-size:9px}
+  .findings-panel[open] summary::after{content:"收起"}
+  .findings-panel .findings{padding:0 7px 7px}
+  .preview-frame{
+    flex:1 1 auto;min-height:0;overflow:auto;border:1px solid var(--line);border-radius:11px;
+    background:var(--card);padding:10px;box-shadow:var(--shadow-card);overscroll-behavior:contain;
+  }
+  .preview-content{display:flex;flex-direction:column;gap:9px}
+  .preview-content .gallery{gap:6px;margin:0 0 8px}
+  .preview-content .gallery .item{flex:0 0 31%}
+  .preview-content .gallery .media{height:52px;font-size:8px}
   .plain{font-size:12.5px;line-height:1.72;color:var(--ink);white-space:pre-wrap;text-wrap:pretty}
   .rich h4{font-size:15px;margin:0 0 7px;letter-spacing:-.2px}
   .rich p{font-size:12.3px;line-height:1.72;margin:0 0 8px;color:var(--ink)}
   .rich blockquote{margin:0 0 8px;padding:2px 0 2px 9px;border-left:2px solid var(--line);color:var(--ink2)}
   .rich .figure{height:78px;border-radius:8px;margin:6px 0 8px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:10px;font-weight:700}
-  .gallery{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin-bottom:8px}
-  .gallery .item{aspect-ratio:1;border-radius:7px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:10px;font-weight:700}
+  .gallery{
+    display:flex;gap:7px;width:100%;margin:0 -2px 8px;padding:0 2px 2px;
+    overflow-x:auto;scrollbar-width:none;cursor:grab;touch-action:pan-y;
+  }
+  .gallery::-webkit-scrollbar{display:none}
+  .gallery.dragging{cursor:grabbing}
+  .gallery .item{flex:0 0 min(52%,180px);min-width:0}
+  .gallery .media{height:118px;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:10px;font-weight:700}
   .metrics{display:flex;flex-wrap:wrap;gap:5px}
   .metric{display:inline-flex;align-items:center;gap:4px;padding:3px 6px;border-radius:6px;background:var(--hover);color:var(--ink2);font-family:var(--mono);font-size:10px}
   .metric.ok{background:var(--ok-soft);color:color-mix(in srgb,var(--green) 76%,var(--ink))}
@@ -271,6 +316,23 @@
     background:linear-gradient(0deg,color-mix(in srgb,var(--orange) 8%,transparent),color-mix(in srgb,var(--orange) 8%,transparent)),var(--card);
   }
 
+  .platform-wall{display:flex;flex-wrap:wrap;gap:8px}
+  .platform-icon{position:relative;width:42px;height:42px;border-radius:12px;display:grid;place-items:center;color:var(--ink2);font-size:14px;font-weight:800;transition:transform .16s ease,opacity .16s ease}
+  .platform-icon:hover{transform:translateY(-2px)}
+  .platform-icon.active{color:var(--ink)}
+  .platform-icon.selected{box-shadow:0 0 0 2px var(--paper),0 0 0 4px var(--accent)}
+  .platform-icon.fail,.platform-icon.muted{background:var(--hover)!important;color:var(--ink3)!important;box-shadow:none}
+  .platform-icon.fail:hover,.platform-icon.muted:hover{transform:none}
+  .platform-icon .check{position:absolute;top:-5px;right:-5px;width:16px;height:16px;border-radius:6px;background:var(--accent);color:#fff;display:grid;place-items:center;font-size:9px;font-weight:900}
+  .platform-icon .retry{position:absolute;bottom:-5px;right:-5px;width:16px;height:16px;border-radius:6px;background:var(--card);border:1px solid var(--line);color:var(--ink2);display:grid;place-items:center;font-size:9px}
+  .config-list{display:flex;flex-direction:column;gap:7px}
+  .config-item{display:grid;grid-template-columns:20px minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 11px;border:1px solid var(--line);border-radius:12px;background:var(--card)}
+  .config-item.on{border-color:color-mix(in srgb,var(--accent) 40%,transparent)}
+  .config-item.off{opacity:.52}
+  .config-check{width:19px;height:19px;border:1px solid var(--line);border-radius:6px;background:var(--rail);display:grid;place-items:center;color:transparent;font-size:10px;font-weight:900}
+  .config-item.on .config-check{background:var(--accent);border-color:var(--accent);color:#fff}
+  .config-state{padding:2px 6px;border-radius:99px;background:var(--hover);color:var(--ink3);font-size:9px;font-weight:800}
+  .config-item.on .config-state{background:var(--accent-tint);color:var(--accent)}
   .primary-cta{
     width:100%;min-height:36px;border-radius:10px;background:var(--accent);color:#fff;
     font-size:12.8px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:7px;
@@ -314,18 +376,40 @@
 <script type="text/babel">
 const {useState, useEffect, useMemo, useRef} = React;
 
+const TYPE_META = {
+  article: { key:"article", zh:"文章", color:"#2C6FF0", glyph:"文" },
+  image:   { key:"image",   zh:"贴图", color:"#D52088", glyph:"图" },
+  video:   { key:"video",   zh:"视频", color:"#FD8D11", glyph:"影" },
+  audio:   { key:"audio",   zh:"音频", color:"#0EC3D4", glyph:"声" },
+};
+const TYPE_ORDER = ["article", "image", "video", "audio"];
+
 const PLATFORMS = [
-  {id:"weibo", name:"微博", short:"微", color:"#FD8D11", kind:"CDP · 填编辑器", limit:2000},
-  {id:"xhs", name:"小红书", short:"红", color:"#D52088", kind:"CDP · 存草稿", limit:1000},
-  {id:"jike", name:"即刻", short:"即", color:"#FFD400", kind:"HTTP · 图文", limit:1000},
-  {id:"wechat", name:"公众号", short:"公", color:"#2C6FF0", kind:"CDP · 草稿箱", limit:20000},
-  {id:"zhihu", name:"知乎", short:"知", color:"#2383E2", kind:"HTTP · 文章", limit:20000},
+  {id:"wechat", name:"微信公众号", short:"微", color:"#07C160", state:"ok", supports:["article","image","video","audio"], kind:"文章 / 图片 / 视频 / 音频"},
+  {id:"xhs", name:"小红书", short:"红", color:"#D52088", state:"ok", supports:["article","image","video"], kind:"长文 / 图文 / 视频"},
+  {id:"weibo", name:"微博", short:"微", color:"#FD8D11", state:"ok", supports:["article","image","video"], kind:"头条文章 / 微博 / 视频"},
+  {id:"jike", name:"即刻", short:"即", color:"#FFD400", state:"ok", supports:["image","video"], kind:"动态 / 视频"},
+  {id:"bili", name:"B站", short:"B", color:"#00A1D6", state:"fail", supports:["article","image","video"], kind:"专栏 / 动态 / 视频"},
+  {id:"x", name:"X", short:"X", color:"var(--plat-x)", state:"fail", supports:["article","image","video"], kind:"Article / 帖子 / 视频"},
+  {id:"zhihu", name:"知乎", short:"知", color:"#2383E2", state:"ok", supports:["article","image","video"], kind:"文章 / 想法 / 视频"},
+  {id:"douban", name:"豆瓣", short:"豆", color:"#2E963D", state:"ok", supports:["article","image"], kind:"日记 / 广告图文"},
+  {id:"toutiao", name:"头条号", short:"头", color:"#F04142", state:"ok", supports:["article","image","video"], kind:"文章 / 微头条 / 视频"},
+  {id:"baijiahao", name:"百家号", short:"百", color:"#2932E1", state:"ok", supports:["article","image","video"], kind:"图文 / 图集 / 视频"},
+  {id:"douyin", name:"抖音", short:"抖", color:"#25F4EE", state:"ok", supports:["article","image","video"], kind:"长图文 / 图文 / 视频"},
+  {id:"xiaoyuzhou", name:"小宇宙", short:"宇", color:"#6E4AFF", state:"ok", supports:["audio"], kind:"播客节目"},
+  {id:"ximalaya", name:"喜马拉雅", short:"喜", color:"#F86442", state:"ok", supports:["audio"], kind:"播客专辑"},
+  {id:"lizhi", name:"荔枝播客", short:"荔", color:"#D6336C", state:"ok", supports:["audio"], kind:"播客播单"},
+  {id:"qingting", name:"蜻蜓FM", short:"蜻", color:"#1FA2E0", state:"ok", supports:["audio"], kind:"播客专辑"},
 ];
 
+
 const PHOTOS = [
-  {name:"封面", color:"#7A6FF0"},
-  {name:"细节", color:"#0EC3D4"},
-  {name:"成品", color:"#FD8D11"},
+  {name:"封面：跑步圣经更快更远更久", color:"#7A6FF0"},
+  {name:"科学训练体系", color:"#0EC3D4"},
+  {name:"负荷与恢复", color:"#FD8D11"},
+  {name:"马拉松备赛周期", color:"#2E963D"},
+  {name:"营养与恢复", color:"#D52088"},
+  {name:"力量训练动作", color:"#2383E2"},
 ];
 
 const NOTE_BODY = `这一篇记录发布插件的结构假设：右侧面板只保留 Preview 和 Publish。\n\n预览不是模仿平台官方 UI，而是展示即将交给适配器的 payload。这样能避免「Obsidian 里看着对，发布时结构变了」的偏差。`;
@@ -344,10 +428,45 @@ function icon(name){
   return <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
 }
 
-function PayloadAttachments(){
+function PayloadAttachments({compact=false}){
+  const trackRef = useRef(null);
+  const dragRef = useRef(null);
+  const [dragging, setDragging] = useState(false);
+
+  const startDrag = (event) => {
+    const track = trackRef.current;
+    if (!track) return;
+    dragRef.current = { x:event.clientX, left:track.scrollLeft };
+    setDragging(true);
+    try { track.setPointerCapture(event.pointerId); } catch {}
+  };
+  const moveDrag = (event) => {
+    const track = trackRef.current;
+    const drag = dragRef.current;
+    if (!track || !drag) return;
+    track.scrollLeft = drag.left - (event.clientX - drag.x);
+  };
+  const endDrag = () => {
+    dragRef.current = null;
+    setDragging(false);
+  };
+
   return (
-    <div className="gallery" aria-label="正文顶部附件">
-      {PHOTOS.map((p,i) => <div key={p.name} className="item" style={{background:p.color}}>{i+1}</div>)}
+    <div
+      ref={trackRef}
+      className={`gallery${compact ? " compact" : ""}${dragging ? " dragging" : ""}`}
+      aria-label="单行滑动的完整图片附件"
+      onPointerDown={startDrag}
+      onPointerMove={moveDrag}
+      onPointerUp={endDrag}
+      onPointerCancel={endDrag}
+      onPointerLeave={endDrag}
+    >
+      {PHOTOS.map((p,i) => (
+        <figure key={p.name} className="item">
+          <div className="media" style={{background:p.color}}>fit · full</div>
+        </figure>
+      ))}
     </div>
   );
 }
@@ -361,8 +480,15 @@ function initialTasks(){
 function App(){
   const [theme, setTheme] = useState(document.documentElement.dataset.theme);
   const [mode, setMode] = useState("preview");
-  const [activePlatform, setActivePlatform] = useState("xhs");
-  const [selected, setSelected] = useState({weibo:true, xhs:true, wechat:true, zhihu:false});
+  const [sourceType, setSourceType] = useState("article");
+  const [activePlatform, setActivePlatform] = useState("zhihu");
+  const [selected, setSelected] = useState({wechat:true, xhs:true, zhihu:true});
+  const [defaultTargets, setDefaultTargets] = useState({
+    article:["wechat","xhs","zhihu"],
+    image:["xhs","weibo","jike","douban"],
+    video:["bili","douyin"],
+    audio:["xiaoyuzhou","ximalaya","lizhi","qingting"],
+  });
   const [browser, setBrowser] = useState("disconnected");
   const [tasks, setTasks] = useState(initialTasks);
   const [running, setRunning] = useState(false);
@@ -370,7 +496,9 @@ function App(){
   const timers = useRef([]);
 
   const body = NOTE_BODY;
-  const selectedCount = Object.values(selected).filter(Boolean).length;
+  const supportedPlatforms = PLATFORMS.filter(p => p.supports.includes(sourceType));
+  const supportedCount = supportedPlatforms.length;
+  const selectedCount = supportedPlatforms.filter(p => selected[p.id]).length;
   const platform = PLATFORMS.find(p => p.id === activePlatform);
   const blocked = browser !== "connected";
 
@@ -397,6 +525,24 @@ function App(){
 
   const payloadText = `标题：用 Obsidian 右侧面板完成多平台发布\n\n${body}`;
   const weiboPayloadText = `标题：用 Obsidian 右侧面板完成多平台发布\n\n${body}\n\n#自媒体#`;
+
+  function selectSourceType(type){
+    if(type === sourceType) return;
+    setSourceType(type);
+    const first = PLATFORMS.find(p => p.supports.includes(type));
+    setActivePlatform(first?.id ?? "");
+    setSelected(Object.fromEntries(defaultTargets[type].map(id => [id,true])));
+  }
+
+  function toggleDefault(type, id){
+    setDefaultTargets(prev => {
+      const current = prev[type] ?? [];
+      const next = current.includes(id)
+        ? current.filter(value => value !== id)
+        : [...current, id];
+      return {...prev, [type]:next};
+    });
+  }
 
   function toggleTheme(){ setTheme(theme === "light" ? "dark" : "light"); }
 
@@ -532,127 +678,209 @@ function App(){
                   {icon("publish")} 发布
                   <span className="mode-count">{selectedCount}</span>
                 </button>
+                <button className={mode === "defaults" ? "active" : ""} onClick={() => setMode("defaults")}>
+                  默认
+                </button>
               </div>
             </div>
 
             <div className="panel-body">
               {mode === "preview" ? (
                 <React.Fragment>
-                  <div className="section-title">
-                    转换检查
-                    <span className="hint">整篇文件</span>
-                  </div>
-                  <div className="findings">
-                    {findings.map((f, i) => (
-                      <div key={i} className={`finding ${f.level}`}>
-                        <span className="icon">{f.level === "ok" ? "✓" : f.level === "warn" ? "!" : "×"}</span>
-                        <span>{f.text}</span>
+                  <div className="selector-card">
+                    <div className="selector-row">
+                      <span className="selector-label">类型</span>
+                      <div className="type-options">
+                        {TYPE_ORDER.map(type => {
+                          const meta = TYPE_META[type];
+                          return (
+                            <button
+                              key={type}
+                              className={`type-option ${sourceType === type ? "active" : ""}`}
+                              onClick={() => selectSourceType(type)}
+                            >
+                              {meta.zh}
+                            </button>
+                          );
+                        })}
                       </div>
-                    ))}
+                    </div>
+                    <div className="selector-row">
+                      <span className="selector-label">平台</span>
+                      <div className="platform-options">
+                        {supportedPlatforms.map(p => (
+                          <button
+                            key={p.id}
+                            className={`platform-option ${activePlatform === p.id ? "active" : ""}`}
+                            style={{background:p.color, color:p.fg || "#fff"}}
+                            title={p.name}
+                            aria-label={p.name}
+                            onClick={() => setActivePlatform(p.id)}
+                          >
+                            {p.short}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="section-title">
-                    平台 payload
-                    <span className="hint">同一输入</span>
-                  </div>
-                  <div className="chips">
-                    {PLATFORMS.map(p => (
-                      <button
-                        key={p.id}
-                        className={`chip icon-only ${activePlatform === p.id ? "selected" : ""}`}
-                        title={p.name}
-                        aria-label={p.name}
-                        onClick={() => setActivePlatform(p.id)}
-                      >
-                        <span className="glyph" style={{background:p.color}}>{p.short}</span>
-                      </button>
-                    ))}
-                  </div>
+                  <details
+                    className="findings-panel"
+                    open={findings.some(f => f.level === "error")}
+                  >
+                    <summary>转换检查</summary>
+                    <div className="findings">
+                      {findings.map((f, i) => (
+                        <div key={i} className={`finding ${f.level}`}>
+                          <span className="icon">{f.level === "ok" ? "✓" : f.level === "warn" ? "!" : "×"}</span>
+                          <span>{f.text}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
 
                   <div className="preview-frame">
-                    <PayloadAttachments />
-                    {activePlatform === "wechat" || activePlatform === "zhihu" ? (
-                      <div className="rich">
-                        <h4>用 Obsidian 右侧面板完成多平台发布</h4>
-                        <p>{body}</p>
-                        <p>图片混排位置不会保留；所有附件统一在正文顶部上传。</p>
-                      </div>
-                    ) : (
-                      <div className="plain">
-                        {activePlatform === "weibo" ? weiboPayloadText : `用 Obsidian 右侧面板完成多平台发布\n\n${body}`}
-                      </div>
-                    )}
+                    <div className="preview-content">
+                      <PayloadAttachments compact />
+                      {activePlatform === "wechat" || activePlatform === "zhihu" ? (
+                        <div className="rich">
+                          <h4>用 Obsidian 右侧面板完成多平台发布</h4>
+                          <p>{body}</p>
+                          <p>图片混排位置不会保留；所有附件统一在正文顶部上传。</p>
+                        </div>
+                      ) : activePlatform === "jike" ? (
+                        <div className="rich">
+                          <h4>用 Obsidian 右侧面板完成多平台发布</h4>
+                          <p>{body}</p>
+                          <p>有标题的想法平台使用 Markdown 首行 H1 作为平台标题。</p>
+                        </div>
+                      ) : (
+                        <div className="plain">
+                          {activePlatform === "weibo" ? weiboPayloadText : `用 Obsidian 右侧面板完成多平台发布\n\n${body}`}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </React.Fragment>
-              ) : (
+              ) : mode === "publish" ? (
                 <React.Fragment>
+                  <div className="source-type">
+                    {TYPE_ORDER.map(type => {
+                      const meta = TYPE_META[type];
+                      return (
+                        <button
+                          key={type}
+                          className={sourceType === type ? "active" : ""}
+                          onClick={() => selectSourceType(type)}
+                        >
+                          <span className="dot" style={{background:meta.color}}></span>
+                          {meta.zh}
+                        </button>
+                      );
+                    })}
+                  </div>
                   <div className="section-title">
-                    发布目标
-                    <span className="hint">{selectedCount} / {PLATFORMS.length}</span>
+                    发布平台
+                    <span className="hint">{selectedCount} / {supportedCount}</span>
                     <button className="ledger-link" onClick={() => window.open("publishments-base.html", "_blank")}>发布库</button>
                   </div>
-                  <div className="targets">
-                    {PLATFORMS.map(p => {
-                      const task = tasks[p.id];
+                  <div className="platform-wall">
+                    {supportedPlatforms.map(p => {
+                      const failed = p.state !== "ok";
                       const isSelected = selected[p.id];
-                      const statusClass = task.status === "running" ? "running" : task.status === "waiting" ? "waiting" : task.status === "success" ? "success" : task.status === "failed" ? "failed" : "";
+                      const skin = failed
+                        ? { background:"var(--hover)", color:"var(--ink3)" }
+                        : isSelected
+                          ? { background:p.color, color:p.fg || "#fff" }
+                          : { background:`color-mix(in srgb, ${p.color} 20%, transparent)`, color:p.fg || p.color };
                       return (
-                        <div key={p.id} className={`target ${isSelected ? "selected" : "disabled"}`}>
-                          <button className="check" onClick={() => setSelected(prev => ({...prev, [p.id]:!prev[p.id]}))} aria-label={`选择 ${p.name}`}>✓</button>
-                          <div className="target-main">
-                            <div className="target-top">
-                              <span className="glyph" style={{background:p.color}}>{p.short}</span>
-                              <span className="name">{p.name}</span>
-                              <span className={`status ${statusClass}`}>{statusText[task.status]}</span>
-                            </div>
-                            <div className="target-desc">
-                              {task.status === "idle" && p.kind}
-                              {task.status === "queued" && "等待工作线程。"}
-                              {task.status === "running" && (task.progress < 45 ? "渲染 payload / 上传素材…" : "填充平台编辑器…")}
-                              {task.status === "waiting" && "内容已填好，请在平台页面检查后手动发布。完成后可回填发布链接。"}
-                              {task.status === "success" && "任务完成，可保存回执链接。"}
-                            </div>
-                            {(task.status === "running" || task.status === "queued") && (
-                              <div className="progress"><i style={{width:`${task.progress}%`}}></i></div>
-                            )}
-                            {task.status === "waiting" && (
-                              <div className="target-actions">
-                                <button className="mini" onClick={() => window.open("https://example.com/draft", "_blank")}>打开草稿</button>
-                                <button className="mini primary" onClick={() => confirmTask(p.id)}>标记完成</button>
-                              </div>
-                            )}
-                            {task.status === "success" && task.url && (
-                              <div className="target-actions">
-                                <button className="mini" onClick={() => window.open(task.url, "_blank")}>查看回执</button>
-                              </div>
-                            )}
-                          </div>
-                        </div>
+                        <button
+                          key={p.id}
+                          className={`platform-icon ${isSelected ? "selected" : ""} ${failed ? "fail" : ""}`}
+                          style={skin}
+                          onClick={() => setSelected(prev => ({...prev, [p.id]:!prev[p.id]}))}
+                          title={p.name}
+                          aria-pressed={isSelected}
+                          aria-label={`选择 ${p.name}`}
+                        >
+                          {p.short}
+                          {isSelected && !failed && <span className="check">✓</span>}
+                          {failed && <span className="retry">↻</span>}
+                        </button>
                       );
                     })}
                   </div>
 
-                  {browser !== "connected" ? (
+                  {browser !== "connected" && (
                     <div className="notice approval">
                       <b>Chrome 授权：</b>
                       <span>插件会读取本机 <code>DevToolsActivePort</code> 并直连浏览器级 WebSocket；授权在 Chrome 内完成，不复制默认 Profile。</span>
                     </div>
-                  ) : (
-                    <div className="notice">
-                      <b>安全边界：</b>
-                      <span>仅连接 127.0.0.1，不开启局域网端口，也不自动代点最终发布。</span>
-                    </div>
                   )}
                 </React.Fragment>
-              )}
+              ) : mode === "defaults" ? (
+                <React.Fragment>
+                    <div className="source-type">
+                      {TYPE_ORDER.map(type => {
+                        const meta = TYPE_META[type];
+                        return (
+                          <button
+                            key={type}
+                            className={sourceType === type ? "active" : ""}
+                            onClick={() => selectSourceType(type)}
+                          >
+                            <span className="dot" style={{background:meta.color}}></span>
+                            {meta.zh}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div className="section-title">
+                      默认平台配置
+                      <span className="hint">{defaultTargets[sourceType]?.length ?? 0} / {supportedCount} 已保存</span>
+                    </div>
+                    <div className="platform-wall">
+                      {supportedPlatforms.map(p => {
+                        const on = (defaultTargets[sourceType] ?? []).includes(p.id);
+                        const off = p.state !== "ok";
+                        const skin = off
+                          ? { background:"var(--hover)", color:"var(--ink3)" }
+                          : on
+                            ? { background:p.color, color:p.fg || "#fff" }
+                            : { background:`color-mix(in srgb, ${p.color} 20%, transparent)`, color:p.fg || p.color };
+                        return (
+                          <button
+                            key={p.id}
+                            className={`platform-icon ${on ? "selected" : ""} ${off ? "muted" : ""}`}
+                            style={skin}
+                            disabled={off}
+                            onClick={() => toggleDefault(sourceType, p.id)}
+                            title={p.name}
+                            aria-pressed={on}
+                            aria-label={`${on ? "移除" : "保存"} ${p.name} 为默认平台`}
+                          >
+                            {p.short}
+                            {on && !off && <span className="check">✓</span>}
+                            {off && <span className="retry">↻</span>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div className="notice">
+                      这里只保存各稿件类型的默认勾选，不创建发布任务。
+                    </div>
+                </React.Fragment>
+              ) : null}
             </div>
 
+            {mode !== "defaults" && (
             <div className="panel-foot">
               <button className="primary-cta" disabled={mode === "publish" && (blocked || running || selectedCount === 0)} onClick={startPublish}>
                 {mode === "preview" ? "把当前预览发送到 Publish" : blocked ? "先连接默认 Chrome" : running ? "发布任务执行中…" : `发布到 ${selectedCount} 个平台`}
               </button>
               <div className="foot-note">{mode === "preview" ? "切换后保留当前平台选择" : "CDP 平台停在人工确认"}</div>
             </div>
+            )}
           </aside>
         </section>
       </main>
@@ -682,3 +910,5 @@ function App(){
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+
+</script>

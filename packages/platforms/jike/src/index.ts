@@ -100,7 +100,7 @@ export async function fetchSession(token: string): Promise<JikeSession | null> {
  */
 /** Obsidian 无账号体系：直接从当前浏览器 localStorage 读取即刻登录 token。 */
 async function readTokenFromBrowser(ctx: AdapterCtx): Promise<string | null> {
-  return await ctx.runPage("jike", { url: JIKE_HOME_URL, keepOpen: false, activate: false, mode: "visible" }, async (cdp, sid) => {
+  return await ctx.runPage("jike", { url: JIKE_HOME_URL, keepOpen: false, activate: false }, async (cdp, sid) => {
     const start = Date.now();
     for (;;) {
       try {
@@ -122,7 +122,7 @@ async function importTokenFromBrowser(ctx: AdapterCtx, acctId: string): Promise<
   if (!ctx.secrets) throw new Error("即刻绑定需要 SecretBox");
   const r = await ctx.runPage(
     "jike",
-    { url: JIKE_HOME_URL, keepOpen: false, activate: false, mode: "visible" },
+    { url: JIKE_HOME_URL, keepOpen: false, activate: false },
     async (cdp, sid) => {
       // 页面早期读 localStorage 会偶发 SecurityError（NOTES.md 踩坑⑤），轮询重试
       const start = Date.now();
@@ -218,6 +218,14 @@ export const jikeAdapter: PlatformAdapter<JikeProfile> = {
   },
 
   async publish(post: PostDraft, acct, ctx: AdapterCtx, onStage: StageReporter): Promise<PublishResult> {
+    if (post.type === "image") {
+      // 即刻贴图没有可恢复草稿；不调用 create，打开 visible composer 交给用户发送。
+      ctx.log("jike.publish.image.manual", {});
+      onStage({ stage: 0, progress: 100, message: "打开即刻动态编辑器；请填写并点发送" });
+      await ctx.runPage("jike", { url: "https://web.okjike.com/", keepOpen: true, activate: true }, async () => null);
+      return { url: "https://web.okjike.com/", needsManualConfirm: true, receipt: { kind: "composer" } };
+    }
+
     let token: string | null = null;
     if (acct && ctx.secrets) {
       token = await ctx.secrets.get(secretRef(acct.id));
@@ -238,12 +246,24 @@ export const jikeAdapter: PlatformAdapter<JikeProfile> = {
       ctx.log("jike.publish.videoSkipped", { note: "视频上传链路未实现，视频素材被忽略（见 NOTES.md 遗留问题）" });
     }
 
-    // 图片：md5 → 上传凭证 → 七牛直传 → pictureKeys
+    // 图片：平台素材指纹 → 七牛直传 → pictureKeys；相同账号 + 相同字节直接复用 key。
     const pictureKeys: string[] = [];
+    const cachedPictureKeys: string[] = [];
     const images = post.assets.filter((a) => a.kind === "image" && a.path);
     if (images.length) {
-      onStage({ stage: 1, progress: 20, message: `上传 ${images.length} 张图片` });
+      onStage({ stage: 1, progress: 20, message: `准备 ${images.length} 张图片` });
+      const accountId = acct?.id || "shared";
+      const query = (img: typeof images[number]) => ({ accountId, assetPath: img.path, kind: "image", scope: "picture" });
       for (const img of images) {
+        const cached = ctx.assets ? await ctx.assets.find(query(img)) : null;
+        const cachedKey = typeof cached?.payload?.key === "string" ? cached.payload.key : null;
+        if (cached && cachedKey) {
+          pictureKeys.push(cachedKey);
+          cachedPictureKeys.push(cachedKey);
+          ctx.log("jike.image.cache-hit", { assetId: img.id, key: cachedKey });
+          continue;
+        }
+
         const buf = await readFile(img.path);
         const md5 = createHash("md5").update(buf).digest("hex");
         const tr = await fetch(`${JIKE_API_BASE}/1.0/upload/token?md5=${md5}`, { headers: jikeHeaders(token) });
@@ -256,9 +276,13 @@ export const jikeAdapter: PlatformAdapter<JikeProfile> = {
         const qj = (await q.json().catch(() => ({}))) as { key?: string; success?: boolean };
         if (!q.ok || !qj.key) throw new Error(`即刻图片上传失败（HTTP ${q.status}）`);
         pictureKeys.push(qj.key);
+        await ctx.assets?.save(query(img), { id: qj.key, payload: { key: qj.key } });
+        ctx.log("jike.image.uploaded", { assetId: img.id, key: qj.key });
       }
-      // 七牛回调落库有秒级延迟，太早 create 会因 pictureKey 未生效失败
-      await new Promise((r) => setTimeout(r, 3_000));
+      // 只要有新上传就等七牛回调落库；全量缓存复用可直接 create。
+      if (pictureKeys.length > cachedPictureKeys.length) {
+        await new Promise((r) => setTimeout(r, 3_000));
+      }
     }
 
     onStage({ stage: 2, progress: 60, message: "发送即刻动态" });
@@ -271,6 +295,9 @@ export const jikeAdapter: PlatformAdapter<JikeProfile> = {
     if (!r.status || r.status >= 400 || !id) {
       const err = ((r.data as ApiFail).error || `HTTP ${r.status}`) as string;
       ctx.log("jike.publish.fail", { status: r.status, err });
+      await Promise.all(images.map((img) => ctx.assets?.forget({
+        accountId: acct?.id || "shared", assetPath: img.path, kind: "image", scope: "picture",
+      }).catch(() => {})));
       throw new Error(`即刻动态发送失败：${err}`);
     }
     const url = JIKE_POST_URL + id;

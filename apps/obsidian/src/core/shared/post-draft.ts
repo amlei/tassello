@@ -1,5 +1,5 @@
 import type { AdapterPublishOptions, PostDraft } from "@tassello/platform-core";
-import { getPlatformMeta } from "@tassello/platform-core";
+import { autoSubmitFor, getPlatformMeta } from "@tassello/platform-core";
 import { effectiveContentType, type SourceDraft } from "../types";
 
 /** Obsidian Markdown 是共享 adapter 的唯一上游差异：这里收敛成 PostDraft。 */
@@ -22,7 +22,7 @@ export function toPostDraft(source: SourceDraft, platformId: string): PostDraft 
     type: effectiveContentType(platformId as Parameters<typeof effectiveContentType>[0], source.type),
     title: source.title,
     body,
-    bodyHtml: stripInlineImagesFromHtml(source.html),
+    bodyHtml: platformId === "zhihu" ? source.html : stripInlineImagesFromHtml(source.html),
     durationSec: null,
     assets: source.assets.map((asset) => ({
       id: asset.id,
@@ -48,9 +48,14 @@ function readOption<T>(source: SourceDraft, ...keys: string[]): T | undefined {
 }
 
 /** Frontmatter 可覆盖；默认意图来自共享平台能力矩阵（autoSubmit）。 */
-export function toPublishOptions(source: SourceDraft, platformId: string): AdapterPublishOptions {
+export function toPublishOptions(
+  source: SourceDraft,
+  platformId: string,
+  contentType: PostDraft["type"],
+): AdapterPublishOptions {
+  const meta = getPlatformMeta(platformId);
   const intent = readOption<"auto" | "draft">(source, "intent", "publishIntent")
-    ?? (getPlatformMeta(platformId)?.autoSubmit ? "auto" : "draft");
+    ?? (meta && autoSubmitFor(meta, contentType as Parameters<typeof autoSubmitFor>[1]) ? "auto" : "draft");
   const channel = readOption<string>(source, "channel", "zhihuChannel");
   return { intent, channel };
 }

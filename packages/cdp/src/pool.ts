@@ -10,6 +10,7 @@ import {
   getFreePort,
   launchChrome,
   openPageSession,
+  sleep,
   waitForChromeDebugPort,
 } from "./cdp";
 
@@ -43,39 +44,93 @@ function findChrome(): string {
 
 let conn: CdpConnection | null = null;
 let connecting: Promise<CdpConnection> | null = null;
-let connectingMode: BrowserMode = "visible";
+let connectingMode: BrowserMode = "headless";
 let chromeProc: ChildProcess | null = null;
-let connMode: BrowserMode = "visible";
+let activeMode: BrowserMode | null = null;
+
+/** 模式租约：正在执行的 page 和等待人工确认的 visible 批次都会计数。
+ *  计数未归零前，相反模式的 acquire 必须等待，绝不能 shutdown 浏览器。 */
+const modeLeases: Record<BrowserMode, number> = { headless: 0, visible: 0 };
+let acquireQueue: Promise<unknown> = Promise.resolve();
 
 export type BrowserMode = "headless" | "visible";
 
 /** 取共享浏览器连接：已有调试端口就复用，否则拉起。
- *  headless = 校验/获取用（无窗口）；visible = 发布用（需真实窗口人工确认）。
- *  同一 profile 只能跑一个 Chrome 实例，模式切换时先关停再重启 */
-export async function getConnection(mode: BrowserMode = "visible"): Promise<CdpConnection> {
-  if (conn && connMode === mode) return conn;
-  if (connecting && connectingMode === mode) return connecting;
-  shutdownBrowser();
-  connectingMode = mode;
-  connecting = (async () => {
-    const profileDir = resolveChromeProfileDir();
-    fs.mkdirSync(profileDir, { recursive: true });
-    let port = await findExistingChromeDebugPort({ profileDir });
-    if (!port) {
-      port = await getFreePort();
-      chromeProc = await launchChrome({ chromePath: findChrome(), profileDir, port, headless: mode === "headless" });
+ *  acquire 会占用一个模式租约；调用方完成后必须 releaseBrowser。 */
+export async function acquireConnection(mode: BrowserMode): Promise<CdpConnection> {
+  const acquire = acquireQueue.catch(() => {}).then(async () => {
+    for (;;) {
+      if (activeMode && activeMode !== mode && modeLeases[activeMode] > 0) {
+        await sleep(100);
+        continue;
+      }
+
+      if (conn && activeMode === mode) {
+        modeLeases[mode] += 1;
+        return conn;
+      }
+
+      if (connecting && connectingMode === mode) {
+        const c = await connecting;
+        modeLeases[mode] += 1;
+        return c;
+      }
+
+      shutdownBrowser();
+      connectingMode = mode;
+      activeMode = mode;
+      connecting = (async () => {
+        const profileDir = resolveChromeProfileDir();
+        fs.mkdirSync(profileDir, { recursive: true });
+        let port = await findExistingChromeDebugPort({ profileDir });
+        if (!port) {
+          port = await getFreePort();
+          chromeProc = await launchChrome({ chromePath: findChrome(), profileDir, port, headless: mode === "headless" });
+        }
+        const wsUrl = await waitForChromeDebugPort(port, 15_000);
+        const c = await CdpConnection.connect(wsUrl, 15_000);
+        conn = c;
+        return c;
+      })();
+      try {
+        const c = await connecting;
+        modeLeases[mode] += 1;
+        return c;
+      } catch (e) {
+        connecting = null;
+        activeMode = null;
+        throw e;
+      }
     }
-    const wsUrl = await waitForChromeDebugPort(port, 15_000);
-    const c = await CdpConnection.connect(wsUrl, 15_000);
-    conn = c;
-    connMode = mode;
-    return c;
-  })();
+  });
+  acquireQueue = acquire.catch(() => {});
+  return acquire;
+}
+
+/** visible 人工确认批次在 adapter 返回后仍要继续持有浏览器。 */
+export function retainBrowser(mode: BrowserMode): void {
+  if (activeMode === mode) modeLeases[mode] += 1;
+}
+
+export function releaseBrowser(mode: BrowserMode): void {
+  modeLeases[mode] = Math.max(0, modeLeases[mode] - 1);
+}
+
+/** 导入 profile 前必须阻断：visible 人工批次 / 登录页租约存在时不能杀应用 Chrome。 */
+export function hasBrowserLease(): boolean {
+  return modeLeases.headless > 0 || modeLeases.visible > 0;
+}
+
+/** 包住一个领域动作：外层租约跨过多次 page 调用；可见人工批次可在 fn 内再 retain。 */
+export async function withBrowserLease<T>(
+  mode: BrowserMode,
+  fn: (cdp: CdpConnection) => Promise<T>,
+): Promise<T> {
+  const cdp = await acquireConnection(mode);
   try {
-    return await connecting;
-  } catch (e) {
-    connecting = null;
-    throw e;
+    return await fn(cdp);
+  } finally {
+    releaseBrowser(mode);
   }
 }
 
@@ -86,6 +141,7 @@ export function shutdownBrowser(): void {
   } catch {}
   conn = null;
   connecting = null;
+  activeMode = null;
   if (chromeProc) {
     try {
       chromeProc.kill("SIGTERM");
@@ -120,9 +176,10 @@ export async function withPage<T>(
   opts: PageRunOptions,
   fn: (cdp: CdpConnection, sessionId: string) => Promise<T>,
 ): Promise<T> {
+  const mode = opts.mode ?? "headless";
   const prev = locks.get(platformId) ?? Promise.resolve();
   const run = prev.then(async () => {
-    const cdp = await getConnection(opts.mode ?? "visible");
+    const cdp = await acquireConnection(mode);
     const session = await openPageSession({
       cdp,
       reusing: true,
@@ -140,6 +197,7 @@ export async function withPage<T>(
           .send("Target.closeTarget", { targetId: session.targetId })
           .catch(() => resetConnection());
       }
+      releaseBrowser(mode);
     }
   });
   locks.set(

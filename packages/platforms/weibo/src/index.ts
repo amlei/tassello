@@ -92,7 +92,7 @@ export const weiboAdapter: PlatformAdapter<WeiboProfile> = {
     async verify(_acct, ctx) {
       ctx.log("weibo.verify.start");
       try {
-        const r = await ctx.runPage("weibo", { url: WEIBO_HOME, keepOpen: false, activate: false, mode: "headless" }, async (cdp, sid) => {
+        const r = await ctx.runPage("weibo", { url: WEIBO_HOME, keepOpen: false, activate: false }, async (cdp, sid) => {
           await waitForWeiboReady(cdp, sid);
           return evaluateScalar<VerifyJsResult>(cdp, sid, VERIFY_JS, { timeoutMs: 20_000 });
         });
@@ -144,8 +144,9 @@ export const weiboAdapter: PlatformAdapter<WeiboProfile> = {
 
     const mediaPaths = videoAsset ? [videoAsset.path] : imageAssets.map((a) => a.path);
 
-    /* 上传素材 + 填充编辑器 + 停在人工确认，都在同一个（不关闭的）标签页里完成 */
-    return ctx.runPage("weibo", { url: WEIBO_HOME, keepOpen: false, activate: true }, async (cdp, sid) => {
+    const keepComposerOpen = post.type === "image";
+    /* 贴图是 composer state：上传 + 填充后必须停下，最终发送由用户完成。 */
+    return ctx.runPage("weibo", { url: WEIBO_HOME, keepOpen: keepComposerOpen, activate: true }, async (cdp, sid) => {
       // 等页面就绪（编辑器出现才动）
       await waitForWeiboReady(cdp, sid);
       await new Promise((r) => setTimeout(r, 1500));
@@ -164,6 +165,12 @@ export const weiboAdapter: PlatformAdapter<WeiboProfile> = {
       onStage({ stage: 2, progress: 30, message: "填充正文" });
       await fillText(cdp, sid, text);
       onStage({ stage: 2, progress: 100, message: "正文已填充" });
+
+      if (keepComposerOpen) {
+        ctx.log("weibo.publish.image.awaiting-user", {});
+        onStage({ stage: 3, progress: 100, message: "贴图已填好；请检查后点「发送」" });
+        return { url: WEIBO_HOME, needsManualConfirm: true, receipt: { kind: "composer" } };
+      }
 
       /* 自动发送：点「发送」→ 编辑器清空 → 抓回执链接，任务直达 success */
       onStage({ stage: 3, progress: 40, message: "点击发送" });

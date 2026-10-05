@@ -315,7 +315,7 @@ export const qingtingAdapter: PlatformAdapter<QingtingProfile> = {
       try {
         const r = await ctx.runPage(
           "qingting",
-          { url: QINGTING_ADMIN_URL, keepOpen: false, activate: false, mode: "headless" },
+          { url: QINGTING_ADMIN_URL, keepOpen: false, activate: false },
           async (cdp, sid) => waitForAuthedApi(cdp, sid),
         );
 

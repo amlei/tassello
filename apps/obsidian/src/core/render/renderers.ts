@@ -80,18 +80,8 @@ function renderWeibo(source: SourceDraft): RenderedPlatform {
 function renderZhihu(source: SourceDraft): RenderedPlatform {
   const findings: Finding[] = [];
 
-  if (source.type === "image" && source.assets.length === 0) {
-    // 知乎“想法”通道仅支持纯文字；这里通过空 assets 自然表达。
-  }
-
   if (source.type === "article") {
-    let html = source.html;
-    const localImageCount = (html.match(/<img\b/g) ?? []).length;
-    // MVP 的知乎文章草稿先支持文字排版；本地图片上传协议另行接入，避免把 file:// 或 app:// 引用发到平台。
-    html = html.replace(/<figure[\s\S]*?<\/figure>/gi, "").replace(/<img\b[^>]*>/gi, "");
-    if (localImageCount > 0) {
-      findings.push({ level: "warning", message: `知乎文章草稿暂不上传 ${localImageCount} 张本地图片；请保存草稿后到知乎编辑器补图` });
-    }
+    const html = source.html;
     const textLength = html.replace(/<[^>]+>/g, "").trim().length;
     if (!textLength) findings.push({ level: "error", message: "知乎文章正文为空" });
     if (source.title.length > 100) findings.push({ level: "warning", message: "知乎标题较长，可能被平台截断" });
@@ -104,7 +94,9 @@ function renderZhihu(source: SourceDraft): RenderedPlatform {
   const body = compactPlainText(source.plain || source.body);
   if (!body) findings.push({ level: "error", message: "知乎想法正文为空" });
   if (body.length > 3000) findings.push({ level: "error", message: `知乎想法长度 ${body.length} 字，超过 3000 字上限` });
-  if (source.assets.length) findings.push({ level: "warning", message: "知乎想法 MVP 只发送文字，附件不会上传" });
+  if (source.type === "image" && !source.assets.length) {
+    findings.push({ level: "warning", message: "知乎贴图想法没有检测到本地图片" });
+  }
   return { payload: { kind: "zhihu-pin", body }, findings };
 }
 
@@ -184,7 +176,7 @@ function attachmentsToPreviewHtml(assets: ResolvedAsset[]): string {
   const images = assets.filter((asset) => asset.kind === "image");
   if (!images.length) return "";
   const items = images.map((asset) =>
-    `<figure class="attachment"><img src="${escapeHtml(asset.resourcePath)}" alt="${escapeHtml(asset.alt)}"><figcaption>${escapeHtml(asset.alt)}</figcaption></figure>`,
+    `<figure class="attachment" data-fit="full"><img src="${escapeHtml(asset.resourcePath)}" alt="${escapeHtml(asset.alt)}" draggable="false"></figure>`,
   ).join("");
   return `<div class="attachments" data-role="preview-attachments">${items}</div>`;
 }

@@ -148,7 +148,7 @@ export const lizhiAdapter: PlatformAdapter<LizhiProfile> = {
       try {
         const r = await ctx.runPage(
           "lizhi",
-          { url: LIZHI_MANAGE_URL, keepOpen: false, activate: false, mode: "headless" },
+          { url: LIZHI_MANAGE_URL, keepOpen: false, activate: false },
           async (cdp, sid) => {
             const ready = await waitForManageReady(cdp, sid);
             if (!ready.loggedIn) return { loggedIn: false as const, api: null };

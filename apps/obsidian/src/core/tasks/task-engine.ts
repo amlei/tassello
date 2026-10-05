@@ -194,11 +194,12 @@ export class TaskEngine {
         throw new Error(errors.map((finding) => finding.message).join("；"));
       }
 
+      const post = toPostDraft(source, task.platformId);
       const adapter = sharedAdapter(task.platformId);
       if (!adapter) throw new Error(`平台 ${task.platformId} 的共享适配器未注册`);
       await this.patch(taskId, { pageUrl: null });
       const result = await adapter.publish(
-        toPostDraft(source, task.platformId),
+        post,
         undefined,
         {
           secrets: this.secrets,
@@ -206,7 +207,7 @@ export class TaskEngine {
           runPage: this.runPage,
         },
         (event) => progress(event.stage, event.progress, event.message ?? undefined),
-        toPublishOptions(source, task.platformId),
+        toPublishOptions(source, task.platformId, post.type),
       );
 
       if (result.needsManualConfirm) {

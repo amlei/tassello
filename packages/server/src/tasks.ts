@@ -3,8 +3,16 @@ import { randomUUID } from "node:crypto";
 import { getPrisma } from "@tassello/db";
 import { getAdapter } from "@tassello/platform-core";
 import type { PostDraft } from "@tassello/platform-core";
+import type { BrowserMode } from "@tassello/cdp";
+import { releaseBrowser, retainBrowser, withBrowserLease } from "@tassello/cdp";
 import { STAGE_LABELS, TYPE_META, type TaskDTO, type TaskStatus } from "@tassello/shared";
 import { serverAdapterContext } from "./platform-runtime";
+import {
+  forgetTaskBrowserMode,
+  resolvePublishBatchMode,
+  setTaskBrowserMode,
+  taskBrowserMode,
+} from "./browser-runtime";
 import { getPost } from "./posts";
 
 function toTaskDTO(t: {
@@ -42,15 +50,18 @@ export async function runningCount(): Promise<number> {
   return getPrisma().publishTask.count({ where: { status: { in: ["queued", "running"] } } });
 }
 
-/** 发布：每个选中平台一个任务；无适配器/凭据缺失当场落失败（可归因） */
+/** 发布：每个选中平台一个任务；无适配器/凭据缺失当场落失败（可归因）。
+ *  批次可见性在创建时一次性决策：state-only 平台会把整批抬到 visible。 */
 export async function createTasks(postId: string, platformIds: string[]): Promise<TaskDTO[]> {
   const prisma = getPrisma();
   const post = await getPost(postId);
   if (!post) throw new Error("稿子不存在");
   const dtos: TaskDTO[] = [];
   const postTitle = post.title || "未命名";
+  const queuedIds: string[] = [];
+
   for (const platformId of platformIds) {
-    const meta = getAdapter(platformId) ? getAdapter(platformId)!.meta : undefined;
+    const meta = getAdapter(platformId)?.meta;
     let status: TaskStatus = "queued";
     let failReason: string | null = null;
     if (!meta || meta.status !== "active") {
@@ -64,9 +75,13 @@ export async function createTasks(postId: string, platformIds: string[]): Promis
       data: { postId, platformId, status, failReason, accountUid: null },
     });
     dtos.push({ ...toTaskDTO(task), postTitle });
-    if (status === "queued") {
-      void runTask(task.id).catch(() => {});
-    }
+    if (status === "queued") queuedIds.push(task.id);
+  }
+
+  const browserMode = resolvePublishBatchMode(post.type, queuedIds);
+  for (const taskId of queuedIds) {
+    setTaskBrowserMode(taskId, browserMode);
+    void runTask(taskId).catch(() => {});
   }
   return dtos;
 }
@@ -89,6 +104,7 @@ async function runTask(taskId: string): Promise<void> {
   const prisma = getPrisma();
   const task = await prisma.publishTask.findUnique({ where: { id: taskId } });
   if (!task) return;
+  const browserMode = taskBrowserMode(taskId, task.platformId, task.postId ? (await getPost(task.postId))?.type ?? "article" : "article");
   const adapter = getAdapter(task.platformId);
   if (!adapter) {
     await prisma.publishTask.update({
@@ -124,7 +140,7 @@ async function runTask(taskId: string): Promise<void> {
     where: { id: taskId },
     data: { status: "running", stage: 0, progress: 0, failReason: null, finishedAt: null, accountUid: account.uid },
   });
-  await log("task.start");
+  await log("task.start", { browserMode });
 
   const onStage = async (e: { stage: number; progress: number; message?: string | null }) => {
     await prisma.publishTask
@@ -134,19 +150,25 @@ async function runTask(taskId: string): Promise<void> {
   };
 
   try {
-    const result = await adapter.publish(
-      await buildDraft(task.postId),
-      { id: account.id, uid: account.uid, profile: parsed.success ? parsed.data : profile },
-      serverAdapterContext((event, payload) => void log(event, payload)),
-      (e) => void onStage(e),
-    );
+    /* 外层租约跨过 adapter 的所有 page 调用；visible 且需要人工收尾时再补一个租约，
+     * 让浏览器从任务开始一直保留到用户在队列里确认完成。 */
+    const result = await withBrowserLease(browserMode, async () => {
+      const publishResult = await adapter.publish(
+        await buildDraft(task.postId),
+        { id: account.id, uid: account.uid, profile: parsed.success ? parsed.data : profile },
+        serverAdapterContext(task.platformId, (event, payload) => void log(event, payload), browserMode),
+        (e) => void onStage(e),
+      );
+      if (publishResult.needsManualConfirm && browserMode === "visible") retainBrowser(browserMode);
+      return publishResult;
+    });
     if (result.needsManualConfirm) {
       // 人工确认：任务保持 running + stage 3，等用户「标记完成」
       await prisma.publishTask.update({
         where: { id: taskId },
         data: { stage: 3, progress: 100 },
       });
-      await log("task.awaiting-confirm", result.receipt ?? {});
+      await log("task.awaiting-confirm", { browserMode, ...(result.receipt ?? {}) });
       return;
     }
     // 回执链接：适配器能抓到真链接就用，抓不到就置空（不伪造）
@@ -169,6 +191,13 @@ async function runTask(taskId: string): Promise<void> {
 /** 人工确认完成：用户在浏览器里点过发布后回工作台标记（可附回执链接） */
 export async function confirmTask(taskId: string, url?: string): Promise<TaskDTO> {
   const prisma = getPrisma();
+  const current = await prisma.publishTask.findUniqueOrThrow({ where: { id: taskId } });
+  const currentPostType = (await getPost(current.postId))?.type ?? "article";
+  if (current.status === "running" && current.stage === 3 && current.progress >= 100) {
+    const mode = taskBrowserMode(taskId, current.platformId, currentPostType);
+    if (mode === "visible") releaseBrowser(mode);
+    forgetTaskBrowserMode(taskId);
+  }
   const task = await prisma.publishTask.update({
     where: { id: taskId },
     data: {
@@ -184,6 +213,14 @@ export async function confirmTask(taskId: string, url?: string): Promise<TaskDTO
 }
 
 export async function retryTask(taskId: string): Promise<TaskDTO> {
+  const current = await getPrisma().publishTask.findUniqueOrThrow({ where: { id: taskId } });
+  const postType = (await getPost(current.postId))?.type ?? "article";
+  if (current.status === "running" && current.stage === 3 && current.progress >= 100) {
+    const mode = taskBrowserMode(taskId, current.platformId, postType);
+    if (mode === "visible") releaseBrowser(mode);
+    forgetTaskBrowserMode(taskId);
+  }
+  setTaskBrowserMode(taskId, taskBrowserMode(taskId, current.platformId, postType));
   await getPrisma().publishTask.update({
     where: { id: taskId },
     data: { status: "queued", stage: 0, progress: 0, failReason: null, url: null, finishedAt: null },
@@ -205,6 +242,10 @@ export async function deleteTask(taskId: string): Promise<void> {
   if (task.status === "queued" || (task.status === "running" && !awaiting)) {
     throw new Error("发布进行中的记录不能删除（可等它结束，或先重试）");
   }
+  const postType = (await getPost(task.postId))?.type ?? "article";
+  const mode = taskBrowserMode(taskId, task.platformId, postType);
+  if (awaiting && mode === "visible") releaseBrowser(mode);
+  forgetTaskBrowserMode(taskId);
   await prisma.publishLog.deleteMany({ where: { taskId } });
   await prisma.publishTask.delete({ where: { id: taskId } });
 }

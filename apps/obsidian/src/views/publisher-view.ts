@@ -30,6 +30,7 @@ export class PublisherView extends ItemView {
   private previewGeneration = 0;
   private previewDebounce: number | null = null;
   private latestTasks: PublishTask[] = [];
+  private previewGalleryDrag: { pointerId: number; x: number; left: number } | null = null;
   private completionTask: PublishTask | null = null;
   private completionUrl = "";
 
@@ -215,6 +216,33 @@ export class PublisherView extends ItemView {
     }
     const frame = card.createDiv({ cls: "rich" });
     frame.innerHTML = previewHtmlForPlatform(this.preview, platform.id);
+    this.bindPreviewGalleryDrag(frame);
+  }
+
+  /** 图片条按手机预览的方式横滑；图片本身完整显示，不裁切。 */
+  private bindPreviewGalleryDrag(root: HTMLElement): void {
+    const gallery = root.querySelector<HTMLElement>('[data-role="preview-attachments"]');
+    if (!gallery) return;
+
+    gallery.addEventListener("pointerdown", (event) => {
+      if (event.pointerType === "mouse" && event.button !== 0) return;
+      this.previewGalleryDrag = { pointerId: event.pointerId, x: event.clientX, left: gallery.scrollLeft };
+      gallery.addClass("dragging");
+      try { gallery.setPointerCapture(event.pointerId); } catch {}
+    });
+    gallery.addEventListener("pointermove", (event) => {
+      const drag = this.previewGalleryDrag;
+      if (!drag || drag.pointerId !== event.pointerId) return;
+      gallery.scrollLeft = drag.left - (event.clientX - drag.x);
+    });
+    const endDrag = (event: PointerEvent) => {
+      if (this.previewGalleryDrag?.pointerId !== event.pointerId) return;
+      this.previewGalleryDrag = null;
+      gallery.removeClass("dragging");
+    };
+    gallery.addEventListener("pointerup", endDrag);
+    gallery.addEventListener("pointercancel", endDrag);
+    gallery.addEventListener("pointerleave", endDrag);
   }
 
   private renderFindings(root: HTMLElement): void {

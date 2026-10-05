@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { renderForPlatform } from "./renderers";
+import { previewHtmlForPlatform, renderForPlatform } from "./renderers";
 import type { SourceDraft } from "../types";
 
 function source(overrides: Partial<SourceDraft> = {}): SourceDraft {
@@ -32,7 +32,7 @@ describe("platform renderers", () => {
   test("renders a Zhihu article draft and strips local images", () => {
     const rendered = renderForPlatform(source({ type: "article", html: '<p>文</p><img src="app://x">' }), "zhihu");
     expect(rendered.payload.kind).toBe("zhihu-article");
-    if (rendered.payload.kind === "zhihu-article") expect(rendered.payload.html).toBe("<p>文</p>");
+    if (rendered.payload.kind === "zhihu-article") expect(rendered.payload.html).toBe('<p>文</p><img src="app://x">');
   });
 
   test("weibo always renders as composer post, with blank-line paragraphs", () => {
@@ -70,6 +70,18 @@ describe("Markdown-aware platform payloads", () => {
 
     if (rendered.payload.kind !== "weibo-post") throw new Error("unexpected kind");
     expect(rendered.payload.body).toBe("测试文章\n\n正文。\n\n第二段。");
+  });
+
+  test("titled thoughts use the source title and X keeps title in text", () => {
+    const jike = renderForPlatform(source(), "jike");
+    expect(jike.payload).toMatchObject({ kind: "thought", platformId: "jike", title: "标题" });
+
+    const x = renderForPlatform(source(), "x");
+    expect(x.payload).toMatchObject({ kind: "thought", platformId: "x", title: "" });
+
+    const preview = previewHtmlForPlatform(source(), "jike");
+    expect(preview).toContain("<h1>标题</h1>");
+    expect(preview).not.toContain("figcaption");
   });
 
   test("XHS payloads keep hard line breaks and do not leak Markdown markup", () => {

@@ -198,7 +198,7 @@ export const ximalayaAdapter: PlatformAdapter<XimalayaProfile> = {
       try {
         const r = await ctx.runPage(
           "ximalaya",
-          { url: XIMALAYA_STUDIO_URL, keepOpen: false, activate: false, mode: "headless" },
+          { url: XIMALAYA_STUDIO_URL, keepOpen: false, activate: false },
           async (cdp, sid) => {
             const user = await waitForLogin(cdp, sid);
             if (!user?.uid) return { user: null, channels: [] };
@@ -245,7 +245,7 @@ export const ximalayaAdapter: PlatformAdapter<XimalayaProfile> = {
     const r = await ctx.runPage(
       "ximalaya",
       // visible + keepOpen：停在编辑表单，浏览器窗口留给用户检查点「确认发布」
-      { url: XIMALAYA_UPLOAD_URL, keepOpen: true, activate: true, mode: "visible" },
+      { url: XIMALAYA_UPLOAD_URL, keepOpen: true, activate: true },
       async (cdp, sid) => {
         const user = await waitForLogin(cdp, sid);
         if (!user?.uid) throw new Error("喜马拉雅登录态已失效，请重新登录后同步 profile");

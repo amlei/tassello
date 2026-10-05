@@ -23,7 +23,7 @@ describe("shared adapter bridge", () => {
   test("maps Obsidian source to PostDraft and explicit publish options", () => {
     const post = toPostDraft(source, "zhihu");
     expect(post).toMatchObject({ id: "note.md", type: "article", title: "标题", body: "正文", bodyHtml: "<p>正文</p>" });
-    expect(toPublishOptions(source, "zhihu")).toEqual({ intent: "draft", channel: "article" });
+    expect(toPublishOptions(source, "zhihu", "article")).toEqual({ intent: "draft", channel: "article" });
   });
 
   test("uses capability defaults and preserves local asset paths", () => {
@@ -33,7 +33,7 @@ describe("shared adapter bridge", () => {
       options: {},
       assets: [{ id: "a1", kind: "image", vaultPath: "a.png", absolutePath: "/tmp/a.png", resourcePath: "app://a.png", alt: "A" }],
     };
-    expect(toPublishOptions(imageSource, "weibo")).toEqual({ intent: "auto", channel: undefined });
+    expect(toPublishOptions(imageSource, "weibo", "image")).toEqual({ intent: "draft", channel: undefined });
     expect(toPostDraft(imageSource, "weibo")).toMatchObject({
       body: "标题\n\n正文",
       assets: [{ id: "a1", path: "/tmp/a.png" }],

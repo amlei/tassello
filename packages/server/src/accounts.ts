@@ -1,9 +1,10 @@
 /* accounts —— 平台列表（meta + 账号合并）、导入登录态、verify 编排 */
 import { getPrisma } from "@tassello/db";
 import { PLATFORM_METAS, getAdapter } from "@tassello/platform-core";
-import { withPage } from "@tassello/cdp";
+import { withBrowserLease, withPage } from "@tassello/cdp";
 import type { AccountDTO, PlatformDTO } from "@tassello/shared";
 import { serverAdapterContext } from "./platform-runtime";
+import { releaseLoginBrowser, retainLoginBrowser } from "./browser-runtime";
 import { syncBrowserProfile } from "./profile";
 import { getSettings } from "./settings";
 
@@ -69,6 +70,7 @@ async function upsertAccount(
  *  覆盖后仍失效且平台有登录页：打开登录页人工兜底（登录发生在应用浏览器里，
  *  完成后回工作台点「重新校验」；登录态源头过期时走设置里的「导入」） */
 export async function acquireAccount(platformId: string): Promise<AccountDTO> {
+  releaseLoginBrowser(platformId);
   const adapter = getAdapter(platformId);
   if (!adapter) throw new Error(`平台 ${platformId} 的适配器尚未接入`);
   const prisma = getPrisma();
@@ -76,7 +78,10 @@ export async function acquireAccount(platformId: string): Promise<AccountDTO> {
   if (verified.state === "ok") return verified;
   const loginUrl = adapter.meta.loginUrl;
   if (loginUrl) {
-    await withPage(platformId, { url: loginUrl, keepOpen: true, activate: true }, async () => {});
+    await withBrowserLease("visible", async () => {
+      await withPage(platformId, { url: loginUrl, keepOpen: true, activate: true, mode: "visible" }, async () => {});
+      retainLoginBrowser(platformId);
+    });
     await upsertAccount(platformId, {
       state: "fail",
       failReason: `登录态已失效。已打开${adapter.meta.name}登录页：登录后回工作台点「重新校验」；若日常浏览器里的登录态也已过期，请重新登录后在设置里点「导入」`,
@@ -109,6 +114,7 @@ export async function importProfile(): Promise<{ ok: boolean; message?: string; 
 }
 
 export async function verifyAccount(platformId: string): Promise<AccountDTO> {
+  releaseLoginBrowser(platformId);
   const adapter = getAdapter(platformId);
   if (!adapter) throw new Error(`平台 ${platformId} 的适配器尚未接入`);
   const prisma = getPrisma();
@@ -122,11 +128,11 @@ export async function verifyAccount(platformId: string): Promise<AccountDTO> {
   const parsed = adapter.account.profileSchema.safeParse(profile);
   const result = await adapter.account.verify(
     { id: row?.id ?? "", uid: row?.uid ?? null, profile: parsed.success ? parsed.data : profile },
-    serverAdapterContext((event, payload) => {
+    serverAdapterContext(platformId, (event, payload) => {
       prisma.publishLog.create({
         data: { taskId: `verify:${platformId}`, event, payloadJson: JSON.stringify(payload ?? {}) },
       }).catch(() => {});
-    }),
+    }, "headless"),
   );
   const saved = await upsertAccount(platformId, {
     state: result.state,
