@@ -5,7 +5,7 @@ import React from "react";
 import { useRouter } from "next/navigation";
 import type { PlatformDTO, TaskDTO } from "@tassello/shared";
 import { api } from "./api";
-import { Rail } from "./rail";
+import { WorkspaceShell } from "./workspace-shell";
 import { TasksView } from "./tasks";
 import { FloatingPill } from "./bits";
 
@@ -44,16 +44,16 @@ export function QueueScreen({
     : 0;
 
   return (
-    <div className="flex h-screen min-h-0 overflow-hidden" data-screen-label="发布队列">
-      <Rail active="queue" counts={counts} runningCount={runningCount} queueCount={tasks.length} platforms={platforms} />
+    <WorkspaceShell
+      active="queue"
+      counts={counts}
+      runningCount={runningCount}
+      queueCount={tasks.length}
+      platforms={platforms}
+      screenLabel="发布队列"
+      context={{ title: "发布队列", meta: `${tasks.length} 条发布` }}
+    >
       <div className="mx-auto flex min-h-0 w-full max-w-[1560px] flex-1 flex-col">
-        <header className="app-drag focuspad flex flex-none flex-wrap items-end gap-4 px-[34px] pb-4 pt-[26px]">
-          <div className="flex min-w-0 items-baseline gap-3">
-            <h1 className="text-[28px] font-bold leading-[1.35] tracking-[-0.4px]">发布队列</h1>
-            <span className="whitespace-nowrap font-mono text-[11.5px] tracking-[0.5px] text-ink2">{tasks.length} 个发布动作 · 发布事实只此一处</span>
-          </div>
-          <div className="drag-strip" aria-hidden="true" />
-        </header>
         <div className="scroll-thin min-h-0 flex-1 overflow-auto px-[34px] pb-[120px]">
           <TasksView
             tasks={tasks}
@@ -67,6 +67,6 @@ export function QueueScreen({
         </div>
       </div>
       <FloatingPill running={runningCount} avg={avgProgress} onClick={() => {}} />
-    </div>
+    </WorkspaceShell>
   );
 }

@@ -20,8 +20,11 @@ import type {
   StageReporter,
   PublishResult,
 } from "@tassello/platform-core";
+import type { CdpLike } from "@tassello/platform-core";
+
+type CdpConnection = CdpLike;
 import { getPlatformMeta } from "@tassello/platform-core";
-import { evaluateScalar, withPage, type CdpConnection } from "@tassello/cdp";
+import { evaluateScalar } from "@tassello/cdp";
 
 export const wechatProfileSchema = z.object({
   ghId: z.string().optional(),
@@ -319,7 +322,7 @@ export const wechatAdapter: PlatformAdapter<WechatProfile> = {
       ctx.log("wechat.verify.start");
       /* headless 打开 mp 后台等它就绪（登录态下有跳转），再读会话信息 */
       try {
-        const r = await withPage("wechat", { url: MP_HOME, keepOpen: false, activate: false, mode: "headless" }, (cdp, sid) =>
+        const r = await ctx.runPage("wechat", { url: MP_HOME, keepOpen: false, activate: false, mode: "headless" }, (cdp, sid) =>
           waitForMpReady(cdp, sid),
         );
         if (!r.loggedIn) return { state: "fail", failReason: "公众号后台未登录，请在浏览器里扫码登录" };
@@ -348,6 +351,7 @@ export const wechatAdapter: PlatformAdapter<WechatProfile> = {
   },
 
   async publish(post: PostDraft, acct, ctx: AdapterCtx, onStage: StageReporter) {
+    if (!acct) throw new Error("公众号需要账号上下文");
     const args = { post, acct, ctx, onStage };
     switch (post.type) {
       case "article":
@@ -364,7 +368,7 @@ export const wechatAdapter: PlatformAdapter<WechatProfile> = {
   },
 };
 
-type PublishArgs = { post: PostDraft; acct: { profile: unknown }; ctx: AdapterCtx; onStage: StageReporter };
+type PublishArgs = { post: PostDraft; acct: { profile?: unknown }; ctx: AdapterCtx; onStage: StageReporter };
 
 /* ---------- 文章（createType=0：标题 + 摘要 + 富文本正文，配图上传到素材库换 mp 地址） ---------- */
 async function publishArticle({ post, acct, ctx, onStage }: PublishArgs): Promise<PublishResult> {
@@ -384,7 +388,7 @@ async function publishArticle({ post, acct, ctx, onStage }: PublishArgs): Promis
   onStage({ stage: 0, progress: 100 });
   onStage({ stage: 1, progress: 10, message: figIds.length ? `上传 ${figIds.length} 张配图到素材库` : "无配图" });
 
-  return withPage("wechat", { url: EDITOR_URL(0, (acct.profile as WechatProfile).sessionToken), keepOpen: true, activate: true }, async (cdp, sid) => {
+  return ctx.runPage("wechat", { url: EDITOR_URL(0, (acct.profile as WechatProfile).sessionToken), keepOpen: true, activate: true }, async (cdp, sid) => {
     const token = await openEditor(cdp, sid, 0, (acct.profile as WechatProfile).sessionToken);
     ctx.log("wechat.article.editor-ready", { token });
 
@@ -465,7 +469,7 @@ async function publishImage({ post, acct, ctx, onStage }: PublishArgs): Promise<
   onStage({ stage: 0, progress: 100 });
   onStage({ stage: 1, progress: 10, message: `打开贴图编辑器，上传 ${images.length} 张图` });
 
-  return withPage("wechat", { url: EDITOR_URL(8, (acct.profile as WechatProfile).sessionToken), keepOpen: true, activate: true }, async (cdp, sid) => {
+  return ctx.runPage("wechat", { url: EDITOR_URL(8, (acct.profile as WechatProfile).sessionToken), keepOpen: true, activate: true }, async (cdp, sid) => {
     await openEditor(cdp, sid, 8, (acct.profile as WechatProfile).sessionToken);
 
     // mp 贴图口只吃「上传器初始化后的第一份文件」——喂过一次即失效，重新喂不再触发。
@@ -515,7 +519,7 @@ async function publishVideo({ post, acct, ctx, onStage }: PublishArgs): Promise<
   onStage({ stage: 0, progress: 100 });
   onStage({ stage: 1, progress: 20, message: "打开视频编辑器" });
 
-  return withPage("wechat", { url: EDITOR_URL(5, (acct.profile as WechatProfile).sessionToken), keepOpen: true, activate: true }, async (cdp, sid) => {
+  return ctx.runPage("wechat", { url: EDITOR_URL(5, (acct.profile as WechatProfile).sessionToken), keepOpen: true, activate: true }, async (cdp, sid) => {
     await openEditor(cdp, sid, 5, (acct.profile as WechatProfile).sessionToken);
 
     onStage({ stage: 1, progress: 60, message: "打开「选择视频」弹窗" });
@@ -583,7 +587,7 @@ async function publishAudio({ post, acct, ctx, onStage }: PublishArgs): Promise<
   onStage({ stage: 0, progress: 100 });
   onStage({ stage: 1, progress: 10, message: "打开播客编辑器" });
 
-  return withPage("wechat", { url: EDITOR_URL(7, (acct.profile as WechatProfile).sessionToken), keepOpen: true, activate: true }, async (cdp, sid) => {
+  return ctx.runPage("wechat", { url: EDITOR_URL(7, (acct.profile as WechatProfile).sessionToken), keepOpen: true, activate: true }, async (cdp, sid) => {
     await openEditor(cdp, sid, 7, (acct.profile as WechatProfile).sessionToken);
 
     onStage({ stage: 1, progress: 30, message: "上传音频到素材库" });

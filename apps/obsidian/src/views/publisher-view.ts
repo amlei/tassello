@@ -1,4 +1,5 @@
 import { ItemView, Notice, WorkspaceLeaf, type App } from "obsidian";
+import { parseImageEmbeds } from "../core/source/image-embeds";
 import { createSourceDraft, readActiveSource } from "../core/source/source-resolver";
 import { platformSupportsType, previewHtmlForPlatform, renderForPlatform } from "../core/render/renderers";
 import { PLATFORMS, PLATFORM_BY_ID, type BrowserStatus, type Finding, type PlatformId, type PublishTask, type SourceDraft } from "../core/types";
@@ -398,7 +399,23 @@ export class PublisherView extends ItemView {
       const source = await createSourceDraft(this.app, live, this.services.getDefaultPlatforms(inferredType));
       if (generation !== this.previewGeneration) return;
       this.preview = source;
-      this.findings = renderForPlatform(source, this.activePlatform).findings;
+      const images = source.assets.filter((asset) => asset.kind === "image");
+      const rawEmbeds = parseImageEmbeds(live.raw);
+      const bodyEmbeds = parseImageEmbeds(source.body);
+      const imageSummary = images.length
+        ? `已解析图片 ${images.length} 张`
+        : `Markdown 图片 ${rawEmbeds.length} 张，但未生成附件`;
+      this.findings = [
+        { level: images.length ? "ok" : "warning", message: imageSummary },
+        ...renderForPlatform(source, this.activePlatform).findings,
+      ];
+      this.findings = [
+        {
+          level: rawEmbeds.length && images.length === 0 ? "error" : images.length ? "ok" : "warning",
+          message: imageSummary,
+        },
+        ...renderForPlatform(source, this.activePlatform).findings,
+      ];
       if (this.mode !== "preview") this.renderShell();
       else {
         const root = this.contentEl.querySelector<HTMLElement>(".panel-body");

@@ -403,7 +403,7 @@ function insertFigureAt(view: PMEditorView, im: { id: string; color: string; pat
 }
 
 function RichBody({
-  postId, html, plain, color, assets, placeholder, onChangeBody, onUploadImage, onRemoveAsset, onReady,
+  postId, html, plain, color, assets, placeholder, insertPastedImages, onChangeBody, onUploadImage, onRemoveAsset, onReady,
 }: {
   postId: string;
   html: string;
@@ -411,6 +411,8 @@ function RichBody({
   color: string;
   assets: { id: string; color?: string | null; path?: string | null }[];
   placeholder: string;
+  /** 图片稿的粘贴目标是素材区；只有文章稿才把粘贴图插入正文 */
+  insertPastedImages: boolean;
   onChangeBody: (html: string, plain: string) => void;
   /** 上传图片并返回新素材（插入正文用真实文件） */
   onUploadImage: (file: File) => Promise<{ id: string; color: string; path?: string | null } | null>;
@@ -418,9 +420,9 @@ function RichBody({
   onReady: (editor: Editor | null) => void;
 }) {
   /* editorProps 在编辑器创建时就固化了（不随重渲染更新），回调一律走 ref 取最新 */
-  const cbRef = React.useRef({ onChangeBody, onUploadImage, onRemoveAsset });
+  const cbRef = React.useRef({ onChangeBody, onUploadImage, onRemoveAsset, insertPastedImages });
   React.useEffect(() => {
-    cbRef.current = { onChangeBody, onUploadImage, onRemoveAsset };
+    cbRef.current = { onChangeBody, onUploadImage, onRemoveAsset, insertPastedImages };
   });
   /* 首次回填：bodyHtml 为空时用纯文本现渲染一份（老数据/新稿）；只在切稿时重算，
      编辑过程中的 props 更新不回灌编辑器 */
@@ -455,7 +457,7 @@ function RichBody({
         const file = img.getAsFile();
         if (!file) return false;
         void cbRef.current.onUploadImage(file).then((im) => {
-          if (im) insertFigureAt(view, im);
+          if (im && cbRef.current.insertPastedImages) insertFigureAt(view, im);
         });
         return true;
       },
@@ -1073,7 +1075,7 @@ export function EditorView({
         if (files.length) void onDropFiles(files);
       }}
     >
-      <div className="app-drag focuspad flex h-[60px] flex-none items-center gap-3.5 bg-card px-7">
+      <div className="flex h-[60px] flex-none items-center gap-3.5 bg-card px-7">
         <Button variant="ghost" className="flex items-center gap-[7px] rounded-full border border-ink3 bg-card px-4 py-2 text-sm font-bold text-ink data-[hovered=true]:bg-hover" onPress={onBack}><ArrowLeft size={14} strokeWidth={3.3} /> 返回</Button>
         {/* 一枚按钮表达保存状态：未保存时点亮成主色，其余时候灰着 */}
         <Button
@@ -1093,8 +1095,6 @@ export function EditorView({
           {saveState === "saving" && "保存中…"}
         </Button>
         <span className="font-mono text-xs text-ink2">{wordCount} 字</span>
-        {/* 空白处拖动窗口：拖拽区只放真正的空隙，按钮才不会被吞掉点击 */}
-        <div className="drag-strip h-full" aria-hidden="true" />
         <Button className="ml-auto flex items-center gap-2 rounded-full bg-green px-[26px] py-[11px] text-[15px] font-black tracking-[1px] text-white transition-[translate,background-color] duration-150 data-[hovered=true]:-translate-y-0.5 data-[hovered=true]:bg-[#069e62]" onPress={onPublish}><Send size={15} strokeWidth={2.9} /> 发布</Button>
       </div>
       <div className="grid min-h-0 flex-1 grid-cols-[1fr_460px]">
@@ -1148,6 +1148,7 @@ export function EditorView({
               plain={post.body}
               color={t.color}
               assets={post.assets}
+              insertPastedImages={post.type === "article"}
               onChangeBody={(html, plain) => { onChangeField("bodyHtml", html); onChangeField("body", plain); }}
               onUploadImage={onUploadImage}
               onRemoveAsset={onRemoveAsset}

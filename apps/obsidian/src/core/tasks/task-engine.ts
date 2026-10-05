@@ -1,8 +1,11 @@
 import { Notice, normalizePath, type App } from "obsidian";
 import { createSourceDraft, resolveLiveFile } from "../source/source-resolver";
 import { renderForPlatform } from "../render/renderers";
-import { publishPayload } from "../platform/publishers";
 import { digestText } from "../source/assets";
+import type { AdapterCtx, PlatformPageRunner } from "@tassello/platform-core";
+import { createObsidianPageRunner } from "../browser/platform-page-runner";
+import { toPostDraft, toPublishOptions } from "../shared/post-draft";
+import { sharedAdapter } from "../platform/shared-registry";
 import { DefaultChromeManager } from "../browser/default-chrome";
 import type { PlatformId, PublishTask, SourceDraft } from "../types";
 import { PLATFORM_BY_ID } from "../types";
@@ -16,6 +19,11 @@ export class TaskEngine {
   private running = false;
   private platformQueues = new Map<PlatformId, Promise<void>>();
   private changeListeners = new Set<TaskEvent>();
+  private readonly runPage: PlatformPageRunner;
+  private readonly secrets: AdapterCtx["secrets"] = {
+    get: async () => null,
+    set: async () => {},
+  };
 
   constructor(
     private readonly app: App,
@@ -29,7 +37,9 @@ export class TaskEngine {
       renamePath(oldPath: string, newPath: string): Promise<boolean>;
     },
     private readonly ledger?: PublicationLedger,
-  ) {}
+  ) {
+    this.runPage = createObsidianPageRunner(browser);
+  }
 
   subscribe(listener: TaskEvent): () => void {
     this.changeListeners.add(listener);
@@ -172,40 +182,53 @@ export class TaskEngine {
     };
 
     try {
-      const connection = await this.browser.connect();
       const live = await resolveLiveFile(this.app, normalizePath(task.filePath));
       const source = await createSourceDraft(this.app, live);
       const startDigest = digestText(JSON.stringify({ raw: live.raw, assets: source.assets.map((asset) => asset.vaultPath) }));
       await this.patch(taskId, { sourceDigestAtStart: startDigest, sourceChangedAfterStart: false });
 
+      // 只用本地 renderer 做发布前快速校验；真正平台流程统一由 packages/platforms/* 执行。
       const rendered = renderForPlatform(source, task.platformId);
       const errors = rendered.findings.filter((finding) => finding.level === "error");
       if (errors.length) {
         throw new Error(errors.map((finding) => finding.message).join("；"));
       }
 
+      const adapter = sharedAdapter(task.platformId);
+      if (!adapter) throw new Error(`平台 ${task.platformId} 的共享适配器未注册`);
       await this.patch(taskId, { pageUrl: null });
-      const published = await publishPayload(connection, source, rendered, progress);
-      if (published.autoSent) {
-        // 平台已代为发送：任务直接完成
-        await this.patch(taskId, {
-          status: "success",
-          stage: 3,
-          progress: 100,
-          message: "已自动发送",
-          failReason: null,
-          pageUrl: published.pageUrl,
-          url: published.pageUrl,
-          finishedAt: now(),
-        });
-      } else {
+      const result = await adapter.publish(
+        toPostDraft(source, task.platformId),
+        undefined,
+        {
+          secrets: this.secrets,
+          log: (event, payload) => console.debug("[tassello]", event, payload ?? ""),
+          runPage: this.runPage,
+        },
+        (event) => progress(event.stage, event.progress, event.message ?? undefined),
+        toPublishOptions(source, task.platformId),
+      );
+
+      if (result.needsManualConfirm) {
         await this.patch(taskId, {
           status: "awaiting_confirm",
           stage: 3,
           progress: 100,
           message: "请在浏览器中检查并手动完成发布",
           failReason: null,
-          pageUrl: published.pageUrl,
+          pageUrl: result.url,
+          url: null,
+        });
+      } else {
+        await this.patch(taskId, {
+          status: "success",
+          stage: 3,
+          progress: 100,
+          message: "已自动发送",
+          failReason: null,
+          pageUrl: result.url,
+          url: result.url,
+          finishedAt: now(),
         });
       }
       await this.checkSourceChange(taskId, existing.filePath, startDigest);

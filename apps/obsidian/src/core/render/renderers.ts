@@ -1,4 +1,4 @@
-import { PLATFORM_BY_ID, type Finding, type PlatformId, type SourceDraft } from "../types";
+import { effectiveContentType, PLATFORM_BY_ID, type Finding, type PlatformId, type ResolvedAsset, type SourceDraft } from "../types";
 
 export type PlatformPayload =
   | { kind: "weibo-post"; body: string; imagePaths: string[] }
@@ -6,7 +6,8 @@ export type PlatformPayload =
   | { kind: "zhihu-article"; title: string; html: string }
   | { kind: "zhihu-pin"; body: string }
   | { kind: "xhs-note"; title: string; body: string; imagePaths: string[] }
-  | { kind: "xhs-article"; title: string; body: string };
+  | { kind: "xhs-article"; title: string; body: string }
+  | { kind: "thought"; platformId: "jike" | "douban" | "x"; title: string; body: string; imagePaths: string[] };
 
 export type RenderedPlatform = {
   payload: PlatformPayload;
@@ -16,7 +17,8 @@ export type RenderedPlatform = {
 export function renderForPlatform(source: SourceDraft, platformId: PlatformId): RenderedPlatform {
   if (platformId === "weibo") return renderWeibo(source);
   if (platformId === "zhihu") return renderZhihu(source);
-  return renderXhs(source);
+  if (platformId === "xhs") return renderXhs(source);
+  return renderThought(source, platformId);
 }
 
 function removeLocalImageSyntax(body: string): string {
@@ -69,8 +71,6 @@ function renderWeibo(source: SourceDraft): RenderedPlatform {
   const imagePaths = source.assets.map((asset) => asset.absolutePath);
 
   if (!postBody && imagePaths.length === 0) findings.push({ level: "error", message: "微博正文和图片都为空" });
-  if (postBody.length > 2000) findings.push({ level: "error", message: `正文 ${postBody.length} 字，超过微博 2000 字上限` });
-  else if (postBody.length > 500) findings.push({ level: "warning", message: `正文 ${postBody.length} 字，普通账号单条微博可能受限，发送可能失败` });
   if (imagePaths.length > 18) findings.push({ level: "error", message: `微博最多支持 18 张图片，当前 ${imagePaths.length} 张` });
 
   // 微博一律走首页 composer 直发（普通微博），不使用头条文章草稿链路。
@@ -130,26 +130,63 @@ function renderXhs(source: SourceDraft): RenderedPlatform {
   return { payload: { kind: "xhs-note", title: source.title, body: plain, imagePaths }, findings };
 }
 
+function renderThought(source: SourceDraft, platformId: PlatformId): RenderedPlatform {
+  const findings: Finding[] = [];
+  const body = compactPlainText(source.plain || source.body);
+  const imagePaths = source.assets.map((asset) => asset.absolutePath);
+  const name = platformId === "jike" ? "即刻" : platformId === "douban" ? "豆瓣" : "X";
+
+  if (!body && !imagePaths.length) findings.push({ level: "error", message: `${name}正文和图片都为空` });
+  if (platformId === "x" && imagePaths.length > 4) findings.push({ level: "error", message: `X 最多支持 4 张图片，当前 ${imagePaths.length} 张` });
+  if (platformId === "jike" && imagePaths.length > 9) findings.push({ level: "warning", message: `即刻图文通常最多 9 张图片，当前 ${imagePaths.length} 张` });
+
+  return {
+    payload: {
+      kind: "thought",
+      platformId: platformId as "jike" | "douban" | "x",
+      title: platformId === "x" ? "" : source.title,
+      body,
+      imagePaths,
+    },
+    findings,
+  };
+}
+
 export function previewHtmlForPlatform(source: SourceDraft, platformId: PlatformId): string {
   const rendered = renderForPlatform(source, platformId);
   const payload = rendered.payload;
-  if (payload.kind === "weibo-post") return plainToPreviewHtml(payload.body || "(无文字)");
+  const attachments = attachmentsToPreviewHtml(source.assets);
+  if (payload.kind === "weibo-post") return `${attachments}${plainToPreviewHtml(payload.body || "(无文字)")}`;
   if (payload.kind === "zhihu-article") {
     // 知乎标题是 API 的独立字段；预览必须同时呈现它，用户才不会误以为正文漏了 H1。
-    return `${titleToPreviewHtml(payload.title)}${payload.html || "<p>(无内容)</p>"}`;
+    return `${attachments}${titleToPreviewHtml(payload.title)}${payload.html || "<p>(无内容)</p>"}`;
   }
   if (payload.kind === "xhs-note") {
-    return `${titleToPreviewHtml(payload.title)}${plainToPreviewHtml(payload.body || "(无文字)")}`;
+    return `${attachments}${titleToPreviewHtml(payload.title)}${plainToPreviewHtml(payload.body || "(无文字)")}`;
   }
   if (payload.kind === "xhs-article") {
-    return `${titleToPreviewHtml(payload.title)}${plainToPreviewHtml(payload.body)}`;
+    return `${attachments}${titleToPreviewHtml(payload.title)}${plainToPreviewHtml(payload.body)}`;
   }
-  if (payload.kind === "zhihu-pin") return plainToPreviewHtml(payload.body);
-  return plainToPreviewHtml(payload.body);
+  if (payload.kind === "thought") {
+    const heading = payload.title ? titleToPreviewHtml(payload.title) : "";
+    return `${attachments}${heading}${plainToPreviewHtml(payload.body || "(无文字)")}`;
+  }
+  if (payload.kind === "zhihu-pin") return `${attachments}${plainToPreviewHtml(payload.body)}`;
+  return `${attachments}${plainToPreviewHtml(payload.body)}`;
 }
 
 export function platformSupportsType(platformId: PlatformId, type: SourceDraft["type"]): boolean {
-  return PLATFORM_BY_ID.get(platformId)?.supports.includes(type) ?? false;
+  const effectiveType = effectiveContentType(platformId, type);
+  return PLATFORM_BY_ID.get(platformId)?.supports.includes(effectiveType) ?? false;
+}
+
+function attachmentsToPreviewHtml(assets: ResolvedAsset[]): string {
+  const images = assets.filter((asset) => asset.kind === "image");
+  if (!images.length) return "";
+  const items = images.map((asset) =>
+    `<figure class="attachment"><img src="${escapeHtml(asset.resourcePath)}" alt="${escapeHtml(asset.alt)}"><figcaption>${escapeHtml(asset.alt)}</figcaption></figure>`,
+  ).join("");
+  return `<div class="attachments" data-role="preview-attachments">${items}</div>`;
 }
 
 function escapeHtml(value: string): string {

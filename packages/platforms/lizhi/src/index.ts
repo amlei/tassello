@@ -19,8 +19,10 @@
  */
 import { z } from "zod";
 import type { PlatformAdapter, AdapterCtx, VerifyResult } from "@tassello/platform-core";
+
+type CdpConnection = CdpLike;
 import { getPlatformMeta } from "@tassello/platform-core";
-import { evaluateScalar, withPage, type Scalar } from "@tassello/cdp";
+import { evaluateScalar, type Scalar } from "@tassello/cdp";
 
 /* 荔枝主播管理平台（hash 路由 SPA）与登录页（真机验证：未登录访问后台会被弹到这里） */
 export const LIZHI_MANAGE_URL = "https://nj.lizhi.fm/static/newsite/#/manage/sheet";
@@ -144,7 +146,7 @@ export const lizhiAdapter: PlatformAdapter<LizhiProfile> = {
     async verify(_acct, ctx): Promise<VerifyResult<LizhiProfile>> {
       ctx.log("lizhi.verify.start");
       try {
-        const r = await withPage(
+        const r = await ctx.runPage(
           "lizhi",
           { url: LIZHI_MANAGE_URL, keepOpen: false, activate: false, mode: "headless" },
           async (cdp, sid) => {

@@ -35,6 +35,12 @@
 - 领域规则：发布事实只记发布队列，Post 不挂发布状态字段；CDP 平台任务停在 `awaiting_confirm` 等人工确认是常态，不是故障。API 凭据走 SecretBox 加密存储，机密不进 `PlatformAccount.profile`。
 - UI 按 `designs/onda-explore/directions/mosaic` 方向实现（HeroUI v3 + Tailwind v4）。
 
+## Obsidian 插件
+
+- 修改 Obsidian 插件功能（含 `src`、`styles.css`、manifest 等）后，必须构建并部署：
+  - 在仓库根执行：`cd apps/obsidian && bun run build && bun run deploy`
+  - 部署后提醒用户重载 Obsidian 插件，或执行 **Reload app without saving**。
+
 ## Next.js 注意
 
 - `apps/web/AGENTS.md` 是 `next dev` 自动生成的规则块，勿删：此 Next 版本与常识差异大，写代码前先查 `apps/web/node_modules/next/dist/docs/`。

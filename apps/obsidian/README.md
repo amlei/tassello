@@ -52,7 +52,23 @@ tassello:
     - xhs
     - weibo
   title: 自定义标题
+  options:
+    intent: draft        # auto = 平台能力允许时自动发送；draft = 停在草稿/人工确认
+    zhihu:
+      channel: article   # 知乎可显式选择 article 或 pin
+    x:
+      channel: post      # X 当前只有普通帖子；article 会显式报错
 ---
+```
+
+### 当前文章 / 想法平台
+
+| 平台 | 方式 | 说明 |
+|---|---|---|
+| 知乎 | `article` / `pin` | 文章和想法；`intent` 支持 auto/draft |
+| X | `post` | 普通帖子/想法，最多 4 图；X Articles 暂不接入 |
+| 即刻 | 动态 | 读取当前 Chrome 登录态；默认自动发送 |
+| 豆瓣 | 发言草稿 | 文字/图片草稿；投递和发布由你完成 |
 ```
 
 插件不保存正文快照；Preview 和 Publish 都读取 Obsidian 当前最新内容。

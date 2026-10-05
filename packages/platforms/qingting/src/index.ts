@@ -29,8 +29,10 @@ import type {
   StageReporter,
   PublishResult,
 } from "@tassello/platform-core";
+
+type CdpConnection = CdpLike;
 import { getPlatformMeta } from "@tassello/platform-core";
-import { evaluateScalar, withPage, type CdpConnection, type Scalar } from "@tassello/cdp";
+import { evaluateScalar, type Scalar } from "@tassello/cdp";
 
 /** 蜻蜓主播公众平台「专辑管理」页（账号 → 专辑两级模型里的频道层） */
 export const QINGTING_ADMIN_URL = "https://admin.qingting.fm/content/channels";
@@ -311,7 +313,7 @@ export const qingtingAdapter: PlatformAdapter<QingtingProfile> = {
     async verify(_acct, ctx): Promise<VerifyResult<QingtingProfile>> {
       ctx.log("qingting.verify.start");
       try {
-        const r = await withPage(
+        const r = await ctx.runPage(
           "qingting",
           { url: QINGTING_ADMIN_URL, keepOpen: false, activate: false, mode: "headless" },
           async (cdp, sid) => waitForAuthedApi(cdp, sid),
@@ -387,7 +389,7 @@ export const qingtingAdapter: PlatformAdapter<QingtingProfile> = {
     onStage({ stage: 1, progress: 10, message: `打开蜻蜓上传节目页（专辑：${target.name}）` });
 
     // keepOpen: 页面保持打开——未点发布前内容只在页面本地态，用户在页面上点「发 布」完成提交
-    return withPage("qingting", { url: qingtingUploadUrl(target.id), keepOpen: true, activate: true }, async (cdp, sid) => {
+    return ctx.runPage("qingting", { url: qingtingUploadUrl(target.id), keepOpen: true, activate: true }, async (cdp, sid) => {
       // 等页面就绪：专辑已预选（select 文案 = 专辑名）
       let selected = false;
       for (let i = 0; i < 20; i++) {

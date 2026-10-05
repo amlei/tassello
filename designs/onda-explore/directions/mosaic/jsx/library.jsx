@@ -15,25 +15,18 @@ const SORTS = [
 ];
 
 /* ---------- 左侧栏 ---------- */
-function Sidebar({ view, scope, counts, runningCount, queueCount, platforms, onScope, onQueue, onNew, onSettings, collapsed, onToggleRail }) {
+function Sidebar({ id, view, scope, counts, runningCount, queueCount, platforms, onScope, onQueue, onNew, onSettings, collapsed }) {
   const active = view === "queue" ? "queue" : scope;
   /* 凭据缺了才提醒：全拿到的时候设置这一行不带任何噪音 */
   const missing = platforms.filter((p) => p.state !== "ok").length;
   return (
-    <aside className={"w-rail" + (collapsed ? " fr-collapsed" : "")} aria-label="工作台导航" aria-hidden={collapsed || undefined}>
-      {/* 红绿灯在真机上是系统控件，原型不再模拟 */}
-      {/* 折叠按钮：红绿灯右侧空位；收起后由左上角悬浮按钮接管 */}
-      <button className="fr-toggle" onClick={onToggleRail} aria-label={collapsed ? "展开侧栏" : "收起侧栏"} title={collapsed ? "展开侧栏" : "收起侧栏"}>
-        <IcPanel size={15} />
-        <span className="fr-kbd">⌘\</span>
-      </button>
+    <aside id={id} className={"w-rail" + (collapsed ? " fr-collapsed" : "")} aria-label="工作台导航" aria-hidden={collapsed || undefined}>
+      {/* 导航层不拥有窗口控制；但品牌是导航身份，回到新建内容上方 */}
       <div className="w-railclip" style={{ display: "flex", flexDirection: "column", gap: 14, minHeight: 0, flex: 1 }}>
-      <div className="m-brand">
-        <MosaicLogo size={10} />
-        <div>
+        <div className="m-brand">
+          <MosaicLogo size={7} />
           <div className="m-brand-name">九漾 Onda</div>
         </div>
-      </div>
 
       {/* 新建内容：弹出四类型菜单，建好直达编辑器 */}
       <NewContentMenu onNew={onNew} />
@@ -113,7 +106,7 @@ function NewContentMenu({ onNew }) {
 }
 
 /* ---------- 主区头部：标题 + 搜索 + 排序 + 新建（scope 恒为某一类型，新建直达） ---------- */
-function ViewHead({ title, meta, query, onQuery, sort, onSort, scope, onNew }) {
+function ViewHead({ query, onQuery, sort, onSort, scope, onNew }) {
   const [sortOpen, setSortOpen] = React.useState(false);
   const searchRef = React.useRef(null);
   const cur = SORTS.find((s) => s.id === sort) || SORTS[0];
@@ -133,11 +126,7 @@ function ViewHead({ title, meta, query, onQuery, sort, onSort, scope, onNew }) {
   }, []);
 
   return (
-    <header className="w-head">
-      <div className="w-headline">
-        <h1 className="w-h1">{title}</h1>
-        <span className="w-hmeta">{meta}</span>
-      </div>
+    <header className="w-head tools-only">
       <div className="w-tools">
         <label className="w-search">
           <IcSearch size={14} />
@@ -390,8 +379,6 @@ function LibraryView({ scope, posts, query, sort, runningIds, publishedIds, onOp
     <div className="w-view" data-screen-label={"内容库 · " + t.zh}>
       <div className="w-canvas">
         <ViewHead
-          title={t.zh}
-          meta={meta}
           query={query}
           onQuery={onQuery}
           sort={sort}

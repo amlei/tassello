@@ -19,7 +19,7 @@ if (!token) throw new Error("probe Chrome 未登录即刻");
 
 // 模拟 SecretBox：token 已入库
 const box = new Map<string, string>([["jike:t:accessToken", token], ["jike:t:refreshToken", ""]]);
-const sctx = { secrets: { get: async (k: string) => box.get(k) ?? null, set: async (k: string, v: string) => { box.set(k, v); } }, log: ctx.log };
+const sctx = { runPage: async () => { throw new Error("此脚本已预置 token，不应注入浏览器"); }, secrets: { get: async (k: string) => box.get(k) ?? null, set: async (k: string, v: string) => { box.set(k, v); } }, log: ctx.log };
 const r = await jikeAdapter.account.verify({ id: "t", uid: null, profile: undefined as never }, sctx);
 console.log(JSON.stringify(r, null, 2));
 process.exit(0);

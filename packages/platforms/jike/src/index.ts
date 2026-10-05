@@ -26,8 +26,11 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { z } from "zod";
 import type { PlatformAdapter, PostDraft, AdapterCtx, StageReporter, PublishResult } from "@tassello/platform-core";
+import type { CdpLike } from "@tassello/platform-core";
+
+type CdpConnection = CdpLike;
 import { getPlatformMeta } from "@tassello/platform-core";
-import { evaluateScalar, withPage } from "@tassello/cdp";
+import { evaluateScalar } from "@tassello/cdp";
 
 export const JIKE_API_BASE = "https://api.ruguoapp.com";
 export const JIKE_HOME_URL = "https://web.okjike.com/";
@@ -95,8 +98,29 @@ export async function fetchSession(token: string): Promise<JikeSession | null> {
  * 而 verify/publish 走的是 SecretBox 里的 token——所以无 token / token 失效时必须来这里导一次，
  * 这是即刻唯一需要浏览器的地方（配合 profile 整目录导入，登录态随 Local Storage 迁移存活）。
  */
+/** Obsidian 无账号体系：直接从当前浏览器 localStorage 读取即刻登录 token。 */
+async function readTokenFromBrowser(ctx: AdapterCtx): Promise<string | null> {
+  return await ctx.runPage("jike", { url: JIKE_HOME_URL, keepOpen: false, activate: false, mode: "visible" }, async (cdp, sid) => {
+    const start = Date.now();
+    for (;;) {
+      try {
+        const value = await evaluateScalar<string | null>(
+          cdp,
+          sid,
+          `localStorage.getItem("JK_ACCESS_TOKEN")`,
+          { timeoutMs: 10_000 },
+        );
+        if (value) return value;
+      } catch {}
+      if (Date.now() - start > 20_000) return null;
+      await new Promise((resolve) => setTimeout(resolve, 1_200));
+    }
+  });
+}
+
 async function importTokenFromBrowser(ctx: AdapterCtx, acctId: string): Promise<string | null> {
-  const r = await withPage(
+  if (!ctx.secrets) throw new Error("即刻绑定需要 SecretBox");
+  const r = await ctx.runPage(
     "jike",
     { url: JIKE_HOME_URL, keepOpen: false, activate: false, mode: "visible" },
     async (cdp, sid) => {
@@ -124,6 +148,7 @@ async function importTokenFromBrowser(ctx: AdapterCtx, acctId: string): Promise<
       }
     },
   );
+  if (!r.at) r.at = await readTokenFromBrowser(ctx);
   if (r.at) await ctx.secrets.set(secretRef(acctId), r.at);
   if (r.rt) await ctx.secrets.set(`jike:${acctId}:refreshToken`, r.rt);
   ctx.log("jike.verify.tokenImported", { hasAccess: !!r.at, hasRefresh: !!r.rt });
@@ -139,6 +164,7 @@ export const jikeAdapter: PlatformAdapter<JikeProfile> = {
     profileSchema: jikeProfileSchema,
 
     async verify(acct, ctx) {
+      if (!acct || !ctx.secrets) throw new Error("即刻需要绑定账号上下文");
       ctx.log("jike.verify.start", { uid: acct.uid });
       try {
         // 登录态 = access token（SecretBox）；没有就先从共享 profile 的页面导入（首绑自举）
@@ -192,8 +218,14 @@ export const jikeAdapter: PlatformAdapter<JikeProfile> = {
   },
 
   async publish(post: PostDraft, acct, ctx: AdapterCtx, onStage: StageReporter): Promise<PublishResult> {
-    const token = await ctx.secrets.get(secretRef(acct.id));
-    if (!token) throw new Error("即刻 access token 缺失，请重新绑定账号");
+    let token: string | null = null;
+    if (acct && ctx.secrets) {
+      token = await ctx.secrets.get(secretRef(acct.id));
+      if (!token) token = await importTokenFromBrowser(ctx, acct.id);
+    } else {
+      token = await readTokenFromBrowser(ctx);
+    }
+    if (!token) throw new Error("未找到即刻登录态；请先在当前 Chrome 登录 web.okjike.com");
 
     // 即刻原帖没有独立标题位：标题有值时并入正文首行
     const title = (post.title || "").trim();

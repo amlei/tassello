@@ -16,8 +16,10 @@
  */
 import { z } from "zod";
 import type { PlatformAdapter, PostDraft, AdapterCtx, StageReporter, PublishResult } from "@tassello/platform-core";
+
+type CdpConnection = CdpLike;
 import { getPlatformMeta } from "@tassello/platform-core";
-import { evaluateScalar, withPage, type CdpConnection } from "@tassello/cdp";
+import { evaluateScalar } from "@tassello/cdp";
 
 /** 节目（频道）信息：来自 /v1/podcast/list 与 /v1/profile/get 的 ownedPodcasts，字段都有真机证据 */
 export const xiaoyuzhouChannelSchema = z.object({
@@ -236,7 +238,7 @@ export const xiaoyuzhouAdapter: PlatformAdapter<XiaoyuzhouProfile> = {
     async verify(_acct, ctx) {
       ctx.log("xiaoyuzhou.verify.start");
       try {
-        const r = await withPage("xiaoyuzhou", { url: `${XYZ_BASE}/podcast`, keepOpen: false, activate: false }, async (cdp, sid) => {
+        const r = await ctx.runPage("xiaoyuzhou", { url: `${XYZ_BASE}/podcast`, keepOpen: false, activate: false }, async (cdp, sid) => {
           const ready = await waitForReady(cdp, sid);
           return ready ?? (await evaluateScalar<VerifyJsResult>(cdp, sid, XYZ_FETCH_JS, { timeoutMs: 20_000 }));
         });
@@ -265,7 +267,7 @@ export const xiaoyuzhouAdapter: PlatformAdapter<XiaoyuzhouProfile> = {
     const imageAsset = post.assets.find((a) => a.kind === "image" && a.path);
 
     // 目标节目：env 指定 > 唯一节目默认 > 多节目时报错列出可选
-    const channels = acct.profile?.channels ?? [];
+    const channels = acct?.profile?.channels ?? [];
     const pidEnv = process.env.TASSELLO_XIAOYUZHOU_PID?.trim();
     const channel = pidEnv
       ? channels.find((c) => c.pid === pidEnv)
@@ -285,7 +287,7 @@ export const xiaoyuzhouAdapter: PlatformAdapter<XiaoyuzhouProfile> = {
     onStage({ stage: 1, progress: 5, message: `打开小宇宙创建单集页（${channel.title}）` });
 
     // keepOpen: 停在填好的创建页，等用户人工点「创建」——本适配器绝不点它
-    return withPage("xiaoyuzhou", { url: xyzCreateEpisodeUrl(channel.pid), keepOpen: true, activate: true }, async (cdp, sid) => {
+    return ctx.runPage("xiaoyuzhou", { url: xyzCreateEpisodeUrl(channel.pid), keepOpen: true, activate: true }, async (cdp, sid) => {
       const ready = await waitForReady(cdp, sid);
       if (!ready) throw new Error("小宇宙创作者后台未就绪（可能未登录）");
       await enlargeViewport(cdp, sid);

@@ -3,8 +3,8 @@ import { randomUUID } from "node:crypto";
 import { getPrisma } from "@tassello/db";
 import { getAdapter } from "@tassello/platform-core";
 import type { PostDraft } from "@tassello/platform-core";
-import { STAGE_LABELS, type TaskDTO, type TaskStatus } from "@tassello/shared";
-import { fileSecretBox } from "./secrets";
+import { STAGE_LABELS, TYPE_META, type TaskDTO, type TaskStatus } from "@tassello/shared";
+import { serverAdapterContext } from "./platform-runtime";
 import { getPost } from "./posts";
 
 function toTaskDTO(t: {
@@ -56,6 +56,9 @@ export async function createTasks(postId: string, platformIds: string[]): Promis
     if (!meta || meta.status !== "active") {
       status = "failed";
       failReason = `平台 ${platformId} 的适配器尚未接入（planned）`;
+    } else if (!meta.supports.includes(post.type)) {
+      status = "failed";
+      failReason = `平台 ${meta.name} 不支持${TYPE_META[post.type].zh}类型`;
     }
     const task = await prisma.publishTask.create({
       data: { postId, platformId, status, failReason, accountUid: null },
@@ -134,7 +137,7 @@ async function runTask(taskId: string): Promise<void> {
     const result = await adapter.publish(
       await buildDraft(task.postId),
       { id: account.id, uid: account.uid, profile: parsed.success ? parsed.data : profile },
-      { secrets: fileSecretBox, log: (event, payload) => void log(event, payload) },
+      serverAdapterContext((event, payload) => void log(event, payload)),
       (e) => void onStage(e),
     );
     if (result.needsManualConfirm) {

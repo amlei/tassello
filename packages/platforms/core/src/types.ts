@@ -17,7 +17,7 @@ export type PostDraft = {
 export type AdapterAccount<TProfile = unknown> = {
   id: string;
   uid: string | null;
-  profile: TProfile;
+  profile?: TProfile;
 };
 
 /* ---------- 适配器上下文（服务层注入，适配器不直接碰数据库） ---------- */
@@ -26,10 +26,45 @@ export type SecretBox = {
   set(ref: string, plain: string): Promise<void>;
 };
 
+/** 宿主无关的 CDP 连接：web 和 Obsidian 分别注入自己的具体连接实现。 */
+export type CdpLike = {
+  send<T = unknown>(
+    method: string,
+    params?: Record<string, unknown>,
+    options?: { sessionId?: string; timeoutMs?: number },
+  ): Promise<T>;
+};
+
+export type BrowserRunMode = "headless" | "visible";
+
+export type PageRunOptions = {
+  url: string;
+  keepOpen?: boolean;
+  activate?: boolean;
+  /** web shared pool 支持；Obsidian 默认 Chrome runner 永远保持 visible。 */
+  mode?: BrowserRunMode;
+};
+
+/** 宿主注入一次页面任务；adapter 不得自己选择浏览器。 */
+export type PlatformPageRunner = <T>(
+  platformId: string,
+  options: PageRunOptions,
+  handler: (cdp: CdpLike, sessionId: string) => Promise<T>,
+) => Promise<T>;
+
+export type PublishIntent = "auto" | "draft";
+
+export type AdapterPublishOptions = {
+  intent?: PublishIntent;
+  /** 平台主通道；当前知乎支持 article / pin。 */
+  channel?: string;
+};
+
 export type AdapterCtx = {
-  secrets: SecretBox;
-  /** 结构化事件/日志（写 PublishLog） */
+  secrets?: SecretBox;
+  /** 结构化事件/日志（web 写 PublishLog；Obsidian 可写本地日志）。 */
   log: (event: string, payload?: unknown) => void;
+  runPage: PlatformPageRunner;
 };
 
 export type StageReporter = (e: { stage: number; progress: number; message?: string | null }) => void;
@@ -65,8 +100,9 @@ export interface PlatformAdapter<TProfile = unknown> {
   };
   publish(
     post: PostDraft,
-    acct: AdapterAccount<TProfile>,
+    acct: AdapterAccount<TProfile> | undefined,
     ctx: AdapterCtx,
     onStage: StageReporter,
+    options?: AdapterPublishOptions,
   ): Promise<PublishResult>;
 }

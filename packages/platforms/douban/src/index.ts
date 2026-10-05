@@ -27,8 +27,10 @@
  */
 import { z } from "zod";
 import type { PlatformAdapter, PostDraft, AdapterCtx, StageReporter, PublishResult } from "@tassello/platform-core";
+
+type CdpConnection = CdpLike;
 import { getPlatformMeta } from "@tassello/platform-core";
-import { evaluateScalar, withPage } from "@tassello/cdp";
+import { evaluateScalar } from "@tassello/cdp";
 
 export const doubanProfileSchema = z.object({
   uid: z.string(),
@@ -85,7 +87,7 @@ export const doubanAdapter: PlatformAdapter<DoubanProfile> = {
       ctx.log("douban.verify.start");
       try {
         // 豆瓣 CDN 对 headless 返回空响应体，必须 visible
-        const r = await withPage(
+        const r = await ctx.runPage(
           "douban",
           { url: DOUBAN_HOME_URL, keepOpen: false, activate: false, mode: "visible" },
           async (cdp, sid) => {
@@ -170,7 +172,7 @@ export const doubanAdapter: PlatformAdapter<DoubanProfile> = {
     }
 
     // 接口通道：www 页面上下文 fetch（带共享 cookie），不碰编辑器 DOM
-    const r = await withPage(
+    const r = await ctx.runPage(
       "douban",
       { url: DOUBAN_HOME_URL, keepOpen: false, activate: false, mode: "visible" },
       async (cdp, sid) => {
@@ -220,8 +222,8 @@ export const doubanAdapter: PlatformAdapter<DoubanProfile> = {
         }
 
         /* 组 draft_props：
-         * - 混排占位行 `[图N]` → 该位置的 atomic IMAGE block；未标记的图追加文末
-         * - 画廊：全部图各自一个 atomic block，无文字段 */
+         * - 产品语义：图片固定在正文顶部，Markdown 图文混排位置不保留
+         * - 画廊：只有图片；图文：全部图片 block 在文字 block 前 */
         let keySeq = 0;
         const nextKey = () => "ts" + Date.now().toString(36) + keySeq++;
         type DraftBlock = {
@@ -236,27 +238,11 @@ export const doubanAdapter: PlatformAdapter<DoubanProfile> = {
         });
         const blocks: DraftBlock[] = [];
         const entityMap: Record<string, unknown> = {};
-        const usedImages = new Set<number>();
         if (isGallery) {
           imageAssets.forEach((_, i) => blocks.push(imageBlock(i)));
         } else {
-          const imgMarker = /^\[图(\d+)\]$/;
-          for (const line of paras) {
-            const mImg = line.match(imgMarker);
-            if (mImg) {
-              const n = Number(mImg[1]);
-              if (n >= 1 && n <= imageAssets.length) {
-                blocks.push(imageBlock(n - 1));
-                usedImages.add(n - 1);
-                continue;
-              }
-              throw new Error(`正文占位 [图${n}] 超出图片数量（共 ${imageAssets.length} 张）`);
-            }
-            blocks.push(textBlock(line));
-          }
-          imageAssets.forEach((_, i) => {
-            if (!usedImages.has(i)) blocks.push(imageBlock(i));
-          });
+          imageAssets.forEach((_, i) => blocks.push(imageBlock(i)));
+          paras.forEach((line) => blocks.push(textBlock(line)));
         }
         photos.forEach((p, i) => {
           entityMap["e" + i] = { type: "IMAGE", mutability: "IMMUTABLE", data: { src: p.url, width: p.width, height: p.height, id: p.id } };

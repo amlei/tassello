@@ -471,95 +471,105 @@ mark.m-mark {
   display: none;
 }
 
-/* ===== 桌面壳（Electron）适配：DesktopChrome 把环境标记到 <html> ===== */
-/* macOS：顶部条可拖动窗口；交互元素恢复可点击 */
-html[data-tassello-desktop="darwin"] .app-drag {
-  -webkit-app-region: drag;
+/* ===== WorkspaceShell：全局标题栏与唯一拖拽区 ===== */
+:root {
+  --workspace-titlebar-height: 46px;
+  --workspace-control-size: 30px;
+  --workspace-rail-width: 236px;
+  /* Web / Windows 无 macOS 红绿灯保留区。 */
+  --traffic-safe-extra: 0px;
 }
-html[data-tassello-desktop="darwin"] .app-drag :is(a, button, input, textarea, select, [role="button"], [data-no-drag]) {
-  -webkit-app-region: no-drag;
-}
-/* macOS：红绿灯悬浮区，品牌块下移让位 */
-html[data-tassello-desktop="darwin"] .rail-brand {
-  padding-top: 46px;
-  padding-bottom: 6px;
+html[data-tassello-desktop="darwin"] {
+  /* header 左 padding 10px + 66px = toggle 从 76px 起，刚好让开 hiddenInset 红绿灯。 */
+  --traffic-safe-extra: 66px;
 }
 
-/* ===== 专注模式：侧栏折叠（⌘\ / 红绿灯右侧按钮） ===== */
-/* 折叠按钮：一律放侧栏右上角（侧栏最右、与红绿灯同排） */
-.rail-toggle {
-  position: absolute;
-  top: 9px;
-  right: 12px;
-  z-index: 10;
+.workspace-titlebar {
+  flex: 0 0 var(--workspace-titlebar-height);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 0 12px 0 10px;
+  background: var(--color-rail);
+  border-bottom: 1px solid var(--color-line);
+}
+
+.workspace-safe {
+  flex: 0 0 auto;
+  width: var(--traffic-safe-extra);
+}
+html[data-tassello-desktop="darwin"] .workspace-safe {
+  /* 抵消标题栏 gap，让 toggle 左缘正好落在 76px 的红绿灯安全线后。 */
+  margin-right: -10px;
+}
+
+.workspace-toggle {
+  flex: 0 0 var(--workspace-control-size);
   display: grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
+  width: var(--workspace-control-size);
+  height: var(--workspace-control-size);
+  border: none;
   border-radius: 8px;
+  background: transparent;
   color: var(--color-ink2);
   transition: background 0.15s, color 0.15s;
 }
-.rail-toggle:hover {
+.workspace-toggle:hover {
   background: var(--color-hover);
   color: var(--color-ink);
 }
-/* 拖拽区是「并集」模型：凡交互元素一律显式 no-drag，否则会被重叠的拖拽盒吞掉点击 */
-html[data-tassello-desktop="darwin"] .rail-toggle,
-html[data-tassello-desktop="darwin"] .rail-float {
+.workspace-toggle:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+html[data-tassello-desktop="darwin"] .workspace-toggle {
   -webkit-app-region: no-drag;
 }
-/* 头部整体可拖，文字/控件减掉：既保留大面积拖动，又不影响选中与点击 */
-html[data-tassello-desktop="darwin"] .app-drag :is(h1, h2, h3, h4, p, span, label, a, button, input, textarea, select, [role="button"], [data-no-drag]) {
-  -webkit-app-region: no-drag;
+
+.workspace-rail-indent {
+  flex: 0 0 0px;
 }
-/* 侧栏顶部整条拖动覆盖层：红绿灯一行也能拖（系统红绿灯自身点击不受影响） */
-html[data-tassello-desktop="darwin"] .rail-topdrag {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 44px;
-  z-index: 1;
-  -webkit-app-region: drag;
+/* 展开态上下文文本 x=侧栏右边界；折叠态缩进归零。macOS safe 区已有 -10px 抵消，所以公式基数是 163。 */
+.workspace-titlebar:not(.workspace-titlebar-collapsed) .workspace-rail-indent {
+  flex-basis: calc(163px - var(--traffic-safe-extra));
 }
-/* 专用拖拽条：放在头部空白处（标题/按钮之外），整条可拖动窗口 */
-html[data-tassello-desktop="darwin"] .drag-strip {
-  -webkit-app-region: drag;
-  align-self: stretch;
+
+.workspace-context {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  margin-left: 2px;
+  padding-left: 10px;
+  border-left: 1px solid var(--color-line);
+}
+.workspace-context-title {
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.2px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.workspace-context-meta {
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--color-ink2);
+  letter-spacing: 0.4px;
+  white-space: nowrap;
+}
+
+.workspace-drag {
   flex: 1 1 0;
+  align-self: stretch;
   min-width: 24px;
 }
-/* 收起后：悬浮展开按钮（macOS 下避开系统红绿灯，放其右侧）+ 右下角轻提示；
-   主区头部（.focuspad：编辑器顶栏 / 列表标题行）整体让位，不压在按钮底下 */
-.rail-float {
-  position: fixed;
-  top: 9px;
-  left: 14px;
-  z-index: 50;
-  display: grid;
-  place-items: center;
-  width: 30px;
-  height: 30px;
-  border: 1px solid var(--color-line);
-  border-radius: 8px;
-  background: var(--color-card);
-  color: var(--color-ink2);
-  box-shadow: 0 1px 2px rgba(15, 15, 15, 0.08);
-  transition: background 0.15s, color 0.15s;
-}
-html[data-tassello-desktop="darwin"] .rail-float {
-  top: 9px;
-  left: 76px;
-}
-/* 浏览器/Windows：只需避开悬浮按钮 */
-body.rail-collapsed .focuspad {
-  padding-left: 64px;
-  transition: padding-left 0.2s ease;
-}
-/* macOS 桌面壳：红绿灯 + 悬浮按钮，让位更多 */
-html[data-tassello-desktop="darwin"] body.rail-collapsed .focuspad {
-  padding-left: 116px;
+html[data-tassello-desktop="darwin"] .workspace-drag {
+  -webkit-app-region: drag;
 }
 
 /* ===== 发布队列：失败方块的悬浮 tooltip（portal 到 body） ===== */
@@ -629,22 +639,4 @@ html[data-tassello-desktop="darwin"] body.rail-collapsed .focuspad {
 }
 .q-tipx:hover {
   opacity: 1;
-}
-.rail-float:hover {
-  background: var(--color-hover);
-  color: var(--color-ink);
-}
-.rail-hint {
-  position: fixed;
-  right: 18px;
-  bottom: 18px;
-  z-index: 40;
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  color: var(--color-ink3);
-  background: var(--color-card);
-  border: 1px solid var(--color-line);
-  border-radius: 999px;
-  padding: 6px 12px;
-  pointer-events: none;
 }

@@ -181,6 +181,8 @@
   .mode button.active .mode-count{background:var(--accent-tint);color:var(--accent)}
 
   .panel-body{flex:1;min-height:0;overflow:auto;padding:12px 14px 16px;display:flex;flex-direction:column;gap:11px}
+  /* 预览页下部固定在视口内：检查与平台选择保持可见，长正文只在 payload 卡片里滚动。 */
+  .panel-body:has(.preview-frame){overflow:hidden}
   .panel-foot{flex:0 0 auto;padding:10px 14px 12px;border-top:1px solid var(--line);background:var(--card)}
 
   .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r-md);box-shadow:var(--shadow-card)}
@@ -208,7 +210,8 @@
   .preview-head .title{font-size:13.5px;font-weight:700;line-height:1.35}
   .preview-head .sub{margin-top:3px;font-size:10.5px;color:var(--ink2);line-height:1.4}
   .preview-head .glyph{width:26px;height:26px;border-radius:8px;color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800}
-  .preview-frame{border:1px solid var(--line);border-radius:11px;background:var(--card);padding:10px;min-height:168px;box-shadow:var(--shadow-card)}
+  .preview-frame{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;overflow:hidden;border:1px solid var(--line);border-radius:11px;background:var(--card);padding:10px;box-shadow:var(--shadow-card)}
+  .preview-frame>.plain,.preview-frame>.rich{flex:1 1 auto;min-height:0;overflow:auto;padding-right:2px}
   .plain{font-size:12.5px;line-height:1.72;color:var(--ink);white-space:pre-wrap;text-wrap:pretty}
   .rich h4{font-size:15px;margin:0 0 7px;letter-spacing:-.2px}
   .rich p{font-size:12.3px;line-height:1.72;margin:0 0 8px;color:var(--ink)}
@@ -314,6 +317,7 @@ const {useState, useEffect, useMemo, useRef} = React;
 const PLATFORMS = [
   {id:"weibo", name:"微博", short:"微", color:"#FD8D11", kind:"CDP · 填编辑器", limit:2000},
   {id:"xhs", name:"小红书", short:"红", color:"#D52088", kind:"CDP · 存草稿", limit:1000},
+  {id:"jike", name:"即刻", short:"即", color:"#FFD400", kind:"HTTP · 图文", limit:1000},
   {id:"wechat", name:"公众号", short:"公", color:"#2C6FF0", kind:"CDP · 草稿箱", limit:20000},
   {id:"zhihu", name:"知乎", short:"知", color:"#2383E2", kind:"HTTP · 文章", limit:20000},
 ];
@@ -338,6 +342,14 @@ function icon(name){
     sun: <><circle cx="8" cy="8" r="3" /><path d="M8 1.5v1.6M8 12.9v1.6M1.5 8h1.6M12.9 8h1.6M3.4 3.4l1.1 1.1M11.5 11.5l1.1 1.1M12.6 3.4l-1.1 1.1M4.5 11.5l-1.1 1.1" /></>,
   };
   return <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
+}
+
+function PayloadAttachments(){
+  return (
+    <div className="gallery" aria-label="正文顶部附件">
+      {PHOTOS.map((p,i) => <div key={p.name} className="item" style={{background:p.color}}>{i+1}</div>)}
+    </div>
+  );
 }
 
 function initialTasks(){
@@ -373,7 +385,9 @@ function App(){
     const common = [
       {level:"warn", text:"Callout 会被转换为普通段落。"},
       {level:"ok", text:"3 张附件均位于当前 vault，可直接上传。"},
+      {level:"ok", text:"图文混排图片已提取；payload 固定为附件区在正文顶部。"},
     ];
+    if(activePlatform === "jike") return [...common, {level:"ok", text:"即刻不支持独立文章；本篇自动降级为图文动态。"}];
     if(activePlatform === "xhs") return [...common, {level:"warn", text:"小红书正文是纯文本，不携带 Markdown 格式。"}];
     if(activePlatform === "weibo") return [...common, {level:"ok", text:"话题会转为 #话题#，图片作为附件上传。"}];
     if(activePlatform === "wechat") return [...common, {level:"ok", text:"图片将先进入公众号素材库，再替换正文引用。"}];
@@ -556,30 +570,17 @@ function App(){
                   </div>
 
                   <div className="preview-frame">
-                    {activePlatform === "xhs" ? (
-                      <div>
-                        <div className="gallery">
-                          {PHOTOS.map((p,i) => <div key={p.name} className="item" style={{background:p.color}}>{i+1}</div>)}
-                        </div>
-                        <div className="plain">用 Obsidian 右侧面板完成多平台发布{'\n\n'}{body}</div>
-                      </div>
-                    ) : activePlatform === "weibo" ? (
-                      <div>
-                        <div className="gallery">
-                          {PHOTOS.map((p,i) => <div key={p.name} className="item" style={{background:p.color}}>{i+1}</div>)}
-                        </div>
-                        <div className="plain">{weiboPayloadText}</div>
-                      </div>
-                    ) : activePlatform === "wechat" ? (
+                    <PayloadAttachments />
+                    {activePlatform === "wechat" || activePlatform === "zhihu" ? (
                       <div className="rich">
                         <h4>用 Obsidian 右侧面板完成多平台发布</h4>
                         <p>{body}</p>
-                        <blockquote>预览应该展示适配器实际收到的 payload，而不是试图在 Obsidian 里还原一个平台客户端。</blockquote>
-                        <div className="figure" style={{background:"#7A6FF0"}}>素材库图片 · cover.png</div>
-                        <p>发布时由适配器打开平台编辑器并填充内容，最终确认留给用户。</p>
+                        <p>图片混排位置不会保留；所有附件统一在正文顶部上传。</p>
                       </div>
                     ) : (
-                      <div className="plain">{payloadText}</div>
+                      <div className="plain">
+                        {activePlatform === "weibo" ? weiboPayloadText : `用 Obsidian 右侧面板完成多平台发布\n\n${body}`}
+                      </div>
                     )}
                   </div>
                 </React.Fragment>

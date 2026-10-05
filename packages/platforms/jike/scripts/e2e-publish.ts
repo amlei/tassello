@@ -17,6 +17,7 @@ cdp.close();
 if (!token) throw new Error("probe Chrome 未登录即刻");
 const box = new Map<string, string>([["jike:e2e:accessToken", token]]);
 const ctx = {
+  runPage: async () => { throw new Error("此脚本已预置 token，不应注入浏览器"); },
   secrets: { get: async (k: string) => box.get(k) ?? null, set: async (k: string, v: string) => { box.set(k, v); } },
   log: (e: string, p?: unknown) => console.log("[log]", e, p ?? ""),
 };

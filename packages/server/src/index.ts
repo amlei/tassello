@@ -6,6 +6,7 @@ import { xhsAdapter } from "@tassello/platform-xhs";
 import { doubanAdapter } from "@tassello/platform-douban";
 import { jikeAdapter } from "@tassello/platform-jike";
 import { zhihuAdapter } from "@tassello/platform-zhihu";
+import { xAdapter } from "@tassello/platform-x";
 import { xiaoyuzhouAdapter } from "@tassello/platform-xiaoyuzhou";
 import { ximalayaAdapter } from "@tassello/platform-ximalaya";
 import { lizhiAdapter } from "@tassello/platform-lizhi";
@@ -22,6 +23,7 @@ export function bootstrap(): void {
   registerAdapter(doubanAdapter as never);
   registerAdapter(jikeAdapter as never);
   registerAdapter(zhihuAdapter as never);
+  registerAdapter(xAdapter as never);
   registerAdapter(xiaoyuzhouAdapter as never);
   registerAdapter(ximalayaAdapter as never);
   registerAdapter(lizhiAdapter as never);

@@ -21,8 +21,15 @@
     },
     "apps/obsidian": {
       "name": "@tassello/obsidian",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "dependencies": {
+        "@tassello/platform-core": "workspace:*",
+        "@tassello/platform-douban": "workspace:*",
+        "@tassello/platform-jike": "workspace:*",
+        "@tassello/platform-weibo": "workspace:*",
+        "@tassello/platform-x": "workspace:*",
+        "@tassello/platform-xhs": "workspace:*",
+        "@tassello/platform-zhihu": "workspace:*",
         "marked": "^16.0.0",
         "ws": "^8.18.0",
         "yaml": "^2.8.0",
@@ -147,6 +154,14 @@
         "zod": "^4.6.5",
       },
     },
+    "packages/platforms/x": {
+      "name": "@tassello/platform-x",
+      "dependencies": {
+        "@tassello/cdp": "workspace:*",
+        "@tassello/platform-core": "workspace:*",
+        "zod": "^4.6.5",
+      },
+    },
     "packages/platforms/xhs": {
       "name": "@tassello/platform-xhs",
       "dependencies": {
@@ -195,6 +210,7 @@
         "@tassello/platform-qingting": "workspace:*",
         "@tassello/platform-wechat": "workspace:*",
         "@tassello/platform-weibo": "workspace:*",
+        "@tassello/platform-x": "workspace:*",
         "@tassello/platform-xhs": "workspace:*",
         "@tassello/platform-xiaoyuzhou": "workspace:*",
         "@tassello/platform-ximalaya": "workspace:*",
@@ -633,6 +649,8 @@
     "@tassello/platform-wechat": ["@tassello/platform-wechat@workspace:packages/platforms/wechat"],
 
     "@tassello/platform-weibo": ["@tassello/platform-weibo@workspace:packages/platforms/weibo"],
+
+    "@tassello/platform-x": ["@tassello/platform-x@workspace:packages/platforms/x"],
 
     "@tassello/platform-xhs": ["@tassello/platform-xhs@workspace:packages/platforms/xhs"],
 

@@ -1,7 +1,7 @@
 /* e2e：豆瓣存草稿全链路 — 纯文字 / 画廊贴图 / 图文混排（创建 → 链接恢复校验 → 删除） */
 import { doubanAdapter } from "../src/index";
 import { evaluateScalar, withPage } from "@tassello/cdp";
-const ctx = { secrets: { get: async () => null, set: async () => {} }, log: (e: string, p?: unknown) => console.log("[log]", e, p ?? "") };
+const ctx = { runPage: async () => { throw new Error("e2e adapter 不应再自持浏览器"); }, secrets: { get: async () => null, set: async () => {} }, log: (e: string, p?: unknown) => console.log("[log]", e, p ?? "") };
 const onStage = (s: { stage: number; progress: number; message?: string | null }) => console.log("[stage]", s.stage, s.progress, s.message ?? "");
 const acct = { id: "t", uid: null, profile: { uid: "215871379", name: "啊莱", ck: null, avatarUrl: null } };
 

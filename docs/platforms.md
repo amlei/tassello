@@ -11,7 +11,7 @@
 | 微博 | **CDP** | ✅ CDP：`/ajax/profile/info`（页面上下文 fetch，无需签名） | MVP |
 | 小红书 | **CDP**（creator 平台） | ✅ CDP：`creator.xiaohongshu.com/api/galaxy/user/info` | 二期首批（接口已预研） |
 | 知乎 | **接口（想法/文章直发，cookie + xsrf，签名头非强制）** | ✅ `/api/v4/me`（干净 JSON，字段 snake_case——旧记录的驼峰写法有误） | ✅ 已上线（2026-10-02，见 §2.8） |
-| X | API（付费档）+ CDP 兜底 | baoyu `post-to-x` 成熟方案可移植 | 二期 |
+| X | **CDP（baoyu regular/video post 方案）** | DOM：`/home` 登录控件 + account switcher | 二期（2026-10-04 代码接入，待真机发布验证） |
 | 抖音 | CDP 起步 | Open Platform 有 video.create，需企业资质，后期可切 API | 二期 |
 | B站 | CDP 起步 | 投稿接口非官方（cookie-API 后期增强） | 二期 |
 | 即刻 | **接口（web 端 HTTP，`x-jike-access-token`）** | ✅ verify：`/1.0/users/profile`；token 在 web 端 localStorage（CDP 只在首绑导 token 时用一次） | ✅ 已上线（2026-10-02，见 §2.7） |
@@ -176,6 +176,8 @@ mp 后台首页「新的创作」四项与 tassello 内容类型一一对应，*
 - **限制/遗留**：视频上传链路未实现（publish 遇视频素材记日志跳过，视频走分片+转码回查另立任务）；
   原帖无标题位，article 标题并入正文首行；`app_auth_tokens.refresh` 按 jike-sdk 形态实现但未真机触发
   （会轮换 refresh token），失效恢复以重新登录+重绑为准。
+  **2026-10-04 产品调整**：即刻从「文章」平台列表移除；适配器保留动态/图文通道，任务创建层
+  会拒绝 article 类型，避免旧默认配置或 API 直调继续把文章发成动态。
 
 ### 2.8 知乎创作（2026-10-02 真机验证：想法 + 文章接口直发）
 
@@ -236,6 +238,23 @@ mp 后台首页「新的创作」四项与 tassello 内容类型一一对应，*
 ④ attachFiles / 真实鼠标点击 helper 在 xhs 与音频包各写了一遍，可下沉共享；
 ⑤ 「账号→频道 channels」结构四个包已对齐，可抽公共类型进 platform-core。
 
+### 2.10 X（2026-10-04 代码接入：普通帖 / 4 图 / 单视频，待真机发布验证）
+
+> 参考 baoyu `baoyu-post-to-x` 的 regular/video post：真实 Chrome 登录态 + CDP 打开
+> `x.com/compose/post`，正文用编辑器焦点 + `Input.insertText`，图片/视频交给页面
+> file input，最后由页面自身提交请求。X 官方 API 属付费档，当前不把用户
+> 挡在 API 开通上，先落地浏览器通道。
+
+- **verify**：headless 打开 `/home`，轮询登录控件；能看到 account switcher 时提取 `@handle`
+  与头像（提取不到不阻断登录判定）。落到 `/login` / `/i/flow/login` 立即失败，让
+  `acquireAccount` 打开登录页。
+- **publish**：visible composer 里先传图/视频再填正文；等媒体预览与 Post 按钮解禁后真实点击。composer
+  关闭视为提交信号，再从 timeline 最佳努力匹配当前 handle 的 `/status/<id>` 回执；拿不到不伪造。
+- **范围/红线**：`intent=auto` 自动发布；`intent=draft` 只填好 composer 停住。Articles、音频显式
+  报错；单视频与多图互斥，单帖图片超过 4 张在任务创建后可归因失败。
+- **已验证**：`bun run typecheck`、`bun test` 通过；当前专用 profile 无 X 登录态时 verify
+  稳定返回 fail。真实发送链路待用户登录 X 后做一次非破坏/真机验证。
+
 ## 3. 共性工程结论
 
 1. **登录态迁移可行**：`Cookies(+journal)` + `Local Storage` + `Session Storage` + `Local State` + `Preferences` 拷贝到专用 profile 后，微博/知乎/公众号会话全部存活（macOS 下 cookie 加密密钥在用户 Keychain，同机同 Chrome 有效）。生产流程即此：**「导入登录态」（`importProfile`，全局唯一入口）= 用日常 Chrome 的 Default profile 覆盖应用专用 profile（先停应用侧 Chrome 释放文件锁）→ 后台自动重校验全部账号**；单平台「重新校验」只跑 verify 不复制文件，失效落到打开浏览器人工登录的兜底。
@@ -253,6 +272,7 @@ mp 后台首页「新的创作」四项与 tassello 内容类型一一对应，*
 - [ ] 小红书「发播客」tab 与 `permissions` 的对应关系（已确认本账号可用）
 - [ ] 小红书视频大文件：file input vs permit 直传
 - [ ] 公众号 API 通道：IP 白名单漂移的预检与提示
-- [ ] X API 付费档成本与 X Article 的 CDP 流
+- [x] X 普通帖 CDP 代码接入（2026-10-04，待真机发布验证；见 §2.10）
+- [ ] X API 付费档成本、真机自动发布验证与 X Article 的 CDP 流
 - [ ] 抖音 Open Platform 企业资质可行性
 - [x] 播客四平台接入（2026-10-02：小宇宙/喜马拉雅/蜻蜓真机存草稿语义通过，荔枝待人工登录续探，见 §2.9）

@@ -7,18 +7,19 @@
     "@tassello/cdp": "workspace:*",
     "@tassello/db": "workspace:*",
     "@tassello/platform-core": "workspace:*",
-    "@tassello/platform-wechat": "workspace:*",
-    "@tassello/platform-weibo": "workspace:*",
-    "@tassello/platform-xhs": "workspace:*",
     "@tassello/platform-douban": "workspace:*",
     "@tassello/platform-jike": "workspace:*",
-    "@tassello/platform-zhihu": "workspace:*",
-    "@tassello/render": "workspace:*",
-    "@tassello/shared": "workspace:*",
+    "@tassello/platform-lizhi": "workspace:*",
+    "@tassello/platform-qingting": "workspace:*",
+    "@tassello/platform-wechat": "workspace:*",
+    "@tassello/platform-weibo": "workspace:*",
+    "@tassello/platform-x": "workspace:*",
+    "@tassello/platform-xhs": "workspace:*",
     "@tassello/platform-xiaoyuzhou": "workspace:*",
     "@tassello/platform-ximalaya": "workspace:*",
-    "@tassello/platform-lizhi": "workspace:*",
-    "@tassello/platform-qingting": "workspace:*"
+    "@tassello/platform-zhihu": "workspace:*",
+    "@tassello/render": "workspace:*",
+    "@tassello/shared": "workspace:*"
   },
   "exports": {
     ".": "./src/index.ts"

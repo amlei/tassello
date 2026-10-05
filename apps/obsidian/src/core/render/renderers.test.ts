@@ -50,9 +50,9 @@ describe("platform renderers", () => {
     expect(rendered.payload.body).not.toContain("#");
   });
 
-  test("weibo errors above 2000 chars", () => {
+  test("weibo does not impose an artificial text-length limit", () => {
     const rendered = renderForPlatform(source({ plain: "字".repeat(2001) }), "weibo");
-    expect(rendered.findings.some((finding) => finding.level === "error" && finding.message.includes("2000"))).toBe(true);
+    expect(rendered.findings.some((finding) => finding.message.includes("字"))).toBe(false);
   });
 });
 

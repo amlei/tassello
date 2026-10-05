@@ -1,6 +1,6 @@
 {
   "name": "@tassello/obsidian",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "main": "dist/main.js",
@@ -13,6 +13,13 @@
     "deploy": "bun run build && cp dist/main.js manifest.json styles.css '/Users/amlei/Data/files/.obsidian/plugins/tassello-publisher/'"
   },
   "dependencies": {
+    "@tassello/platform-core": "workspace:*",
+    "@tassello/platform-douban": "workspace:*",
+    "@tassello/platform-jike": "workspace:*",
+    "@tassello/platform-weibo": "workspace:*",
+    "@tassello/platform-x": "workspace:*",
+    "@tassello/platform-xhs": "workspace:*",
+    "@tassello/platform-zhihu": "workspace:*",
     "marked": "^16.0.0",
     "ws": "^8.18.0",
     "yaml": "^2.8.0",

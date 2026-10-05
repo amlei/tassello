@@ -3,7 +3,7 @@ import { getPrisma } from "@tassello/db";
 import { PLATFORM_METAS, getAdapter } from "@tassello/platform-core";
 import { withPage } from "@tassello/cdp";
 import type { AccountDTO, PlatformDTO } from "@tassello/shared";
-import { fileSecretBox } from "./secrets";
+import { serverAdapterContext } from "./platform-runtime";
 import { syncBrowserProfile } from "./profile";
 import { getSettings } from "./settings";
 
@@ -122,11 +122,11 @@ export async function verifyAccount(platformId: string): Promise<AccountDTO> {
   const parsed = adapter.account.profileSchema.safeParse(profile);
   const result = await adapter.account.verify(
     { id: row?.id ?? "", uid: row?.uid ?? null, profile: parsed.success ? parsed.data : profile },
-    { secrets: fileSecretBox, log: (event, payload) => {
-        prisma.publishLog.create({
-          data: { taskId: `verify:${platformId}`, event, payloadJson: JSON.stringify(payload ?? {}) },
-        }).catch(() => {});
-      } },
+    serverAdapterContext((event, payload) => {
+      prisma.publishLog.create({
+        data: { taskId: `verify:${platformId}`, event, payloadJson: JSON.stringify(payload ?? {}) },
+      }).catch(() => {});
+    }),
   );
   const saved = await upsertAccount(platformId, {
     state: result.state,

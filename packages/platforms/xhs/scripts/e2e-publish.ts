@@ -4,7 +4,7 @@
 process.env.TASSELLO_XHS_VISIBILITY = process.env.TASSELLO_XHS_VISIBILITY || "self";
 import { xhsAdapter } from "../src/index";
 const [, , img = "/tmp/xhs-test.png", title = "tassello 链路测试", body = "tassello 发布链路测试，测试完即删。"] = process.argv;
-const ctx = { secrets: { get: async () => null, set: async () => {} }, log: (e: string, p?: unknown) => console.log("[log]", e, p ?? "") };
+const ctx = { runPage: async () => { throw new Error("此脚本未注入 runPage"); }, secrets: { get: async () => null, set: async () => {} }, log: (e: string, p?: unknown) => console.log("[log]", e, p ?? "") };
 const onStage = (e: { stage: number; progress: number; message?: string | null }) => console.log(`[stage ${e.stage}] ${e.progress}% ${e.message ?? ""}`);
 const r = await xhsAdapter.publish(
   { id: "e2e", type: "image", title, body, bodyHtml: "", durationSec: null, assets: [{ id: "a1", kind: "image", path: img }] },

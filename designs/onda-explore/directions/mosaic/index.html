@@ -56,6 +56,12 @@
      两级共用字重与字距，只有字号不同 —— 层级靠字号差，不靠把字重往极端堆。 */
   --h1:28px;--h2:22px;
   --h-weight:700;--h-track:-0.4px;--h-leading:1.35;
+  /* 窗口壳契约：TitleBar 只负责窗口控制、品牌和拖拽；内容层不再模拟标题栏。
+     原型用假红绿灯表达 macOS 占位；真实桌面里这里是系统控件 + safe-area token。 */
+  --titlebar-h:46px;
+  --traffic-safe:76px;
+  --control-size:30px;
+  --rail-width:236px;
 }
 [data-theme="dark"]{
   --error:#E5484D;
@@ -96,6 +102,28 @@ input,textarea{font-family:inherit}
 
 /* ---------- app frame ---------- */
 .m-app{height:100vh;display:flex;flex-direction:column;overflow:hidden}
+
+/* ---------- WorkspaceShell / TitleBar ---------- */
+/* 全局唯一窗口栏：左段是系统控制安全区和侧栏开关，随后是当前视图上下文；右段留给未来全局状态。
+   页面头部只表达当前视图内容，不承担 app-region / 红绿灯让位职责。 */
+.w-titlebar{flex:0 0 var(--titlebar-h);display:flex;align-items:center;gap:10px;min-width:0;padding:0 12px 0 10px;background:var(--rail);border-bottom:1px solid var(--line)}
+.tb-lights{flex:0 0 auto;display:flex;align-items:center;gap:8px;width:52px;color:var(--ink3)}
+.tb-lights i{width:12px;height:12px;border-radius:50%;display:block}
+.tb-lights i:nth-child(1){background:#FF5F57}
+.tb-lights i:nth-child(2){background:#FEBC2E}
+.tb-lights i:nth-child(3){background:#28C840}
+.tb-toggle{flex:0 0 var(--control-size);width:var(--control-size);height:var(--control-size);border:none;border-radius:8px;background:transparent;color:var(--ink2);display:grid;place-items:center;transition:background .15s,color .15s}
+.tb-toggle:hover{background:var(--hover);color:var(--ink)}
+.tb-toggle:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.tb-toggle .fr-kbd{position:absolute;top:calc(var(--titlebar-h) - 4px);left:calc(var(--traffic-safe) + var(--control-size) / 2);transform:translateX(-50%);margin-top:4px;font-family:var(--mono);font-size:9.5px;color:var(--ink3);opacity:0;transition:opacity .15s;white-space:nowrap;pointer-events:none}
+.tb-toggle:hover .fr-kbd{opacity:1}
+.tb-context{display:flex;align-items:baseline;gap:8px;min-width:0;margin-left:2px;padding-left:10px;border-left:1px solid var(--line)}
+/* 展开态：标题从侧栏右边界起；折叠态仍紧跟窗口开关。 */
+body:not(.fr-collapsed) .tb-context{margin-left:calc(var(--rail-width) - 123px)}
+.tb-title{font-size:14px;font-weight:700;line-height:1.2;letter-spacing:-0.2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tb-meta{flex:0 0 auto;font-family:var(--mono);font-size:10.5px;color:var(--ink3);letter-spacing:.4px;white-space:nowrap}
+.tb-drag{flex:1;align-self:stretch;min-width:24px}
+.tb-note{flex:0 0 auto;font-family:var(--mono);font-size:10px;color:var(--ink3);letter-spacing:.4px;white-space:nowrap}
 .m-brand{display:flex;align-items:center;gap:14px}
 .m-brand-name{font-size:22px;font-weight:700;letter-spacing:-0.5px}
 .m-brand-sub{font-family:var(--mono);font-size:11px;color:var(--ink3);letter-spacing:1px;text-transform:uppercase}
@@ -440,9 +468,9 @@ input,textarea{font-family:inherit}
 .w-shell{flex:1;min-height:0;display:flex;overflow:hidden;background:var(--paper)}
 
 /* ---------- 左侧栏 ---------- */
-.w-rail{flex:0 0 236px;min-height:0;display:flex;flex-direction:column;gap:14px;padding:18px 14px 14px;background:var(--rail);border-right:1px solid var(--line)}
+.w-rail{flex:0 0 236px;min-width:0;min-height:0;display:flex;flex-direction:column;gap:14px;padding:18px 14px 14px;background:var(--rail);border-right:1px solid var(--line)}
 .w-rail .m-brand{gap:11px;padding:0 8px}
-.w-rail .m-brand-name{font-size:18px;letter-spacing:-0.3px}
+.w-rail .m-brand-name{font-size:16px;letter-spacing:-0.3px}
 .w-rail .m-brand-sub{font-size:9.5px;letter-spacing:0.8px}
 /* 新建内容：主按钮用交互蓝 */
 .w-newall{width:100%;display:flex;align-items:center;justify-content:center;gap:8px;border:none;border-radius:10px;padding:10px 0;font-size:15px;font-weight:700;color:#fff;background:var(--accent);transition:filter .15s,transform .15s}
@@ -471,11 +499,12 @@ input,textarea{font-family:inherit}
 /* 头部与网格共用同一条内容列：两边同时收窄、同时居中，右上角的工具才不会飘在网格之外 */
 .w-canvas{flex:1;min-height:0;display:flex;flex-direction:column;width:100%;max-width:1560px;margin:0 auto}
 .w-head{flex:0 0 auto;display:flex;align-items:flex-end;gap:16px;padding:26px 34px 16px;flex-wrap:wrap}
+.w-head.tools-only{justify-content:flex-end;padding:12px 34px 12px}
 .w-headline{display:flex;align-items:baseline;gap:12px;min-width:0}
 .w-h1{font-size:var(--h1);font-weight:var(--h-weight);letter-spacing:var(--h-track);line-height:var(--h-leading)}
 .w-hmeta{font-family:var(--mono);font-size:11.5px;color:var(--ink2);letter-spacing:.5px;white-space:nowrap}
-.w-tools{margin-left:auto;display:flex;align-items:center;gap:10px}
-.w-search{display:flex;align-items:center;gap:8px;width:210px;padding:8px 14px;background:var(--card);border:1px solid var(--line);border-radius:999px;color:var(--ink2);transition:width .22s cubic-bezier(.2,.7,.3,1),border-color .15s}
+.w-tools{margin-left:auto;display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:10px;row-gap:8px;max-width:100%;min-width:0}
+.w-search{display:flex;align-items:center;gap:8px;flex:0 1 210px;width:210px;min-width:120px;max-width:100%;padding:8px 14px;background:var(--card);border:1px solid var(--line);border-radius:999px;color:var(--ink2);transition:width .22s cubic-bezier(.2,.7,.3,1),border-color .15s}
 .w-search:focus-within{width:290px;border-color:var(--accent);color:var(--ink)}
 .w-search input{width:100%;border:none;outline:none;background:transparent;font-size:14px;color:var(--ink)}
 .w-search input::placeholder{color:var(--ink3)}
@@ -496,6 +525,7 @@ input,textarea{font-family:inherit}
 
 /* ---------- 卡片网格：四种类型全部以卡片呈现 ---------- */
 .w-scroll{flex:1;min-height:0;overflow:auto;padding:0 34px 120px}
+.w-queuescroll{padding-top:12px}
 .w-grid{position:relative;display:grid;grid-template-columns:repeat(auto-fill,minmax(212px,1fr));gap:14px}
 .w-tile{display:flex;flex-direction:column;gap:10px;padding:12px;background:var(--card);border:1px solid var(--line);border-radius:var(--r-md);cursor:pointer;transition:transform .2s cubic-bezier(.2,.7,.3,1),box-shadow .2s}
 .w-tile:hover{transform:translateY(-4px);box-shadow:var(--shadow-tile)}
@@ -630,25 +660,13 @@ body.w-dragging,body.w-dragging *{user-select:none;cursor:grabbing}
 .m-chlabel{font-size:13px;color:var(--ink2)}
 .m-chrow .w-selwrap{margin-left:auto}
 
-/* ===== 专注模式：macOS 红绿灯区 + 左侧栏折叠（⌘\） =====
-   桌面壳隐藏系统标题栏后，红绿灯悬浮在左栏上方；红绿灯右侧留一个折叠按钮，
-   收起后主区占满 —— 编辑器一屏只剩稿子（Obsidian/Typora 式心流）。 */
+/* ===== 专注模式：侧栏宽度只由全局开关控制 =====
+   侧栏折叠只收起导航层；TitleBar 和 toggle 永远保留。
+   不再有 fixed 悬浮按钮，也不允许页面头部与拖拽热区重叠。 */
 .w-rail{transition:flex-basis .22s ease,opacity .16s ease}
-.w-rail{position:relative;overflow:hidden}
+.w-rail{overflow:hidden}
 .w-rail.fr-collapsed{flex-basis:0;opacity:0;pointer-events:none;border-right-color:transparent}
 .w-rail.fr-collapsed .w-railclip{min-width:208px} /* 收起过程中内容不回绕，靠 aside 裁切 */
-.w-lights{display:none} /* 红绿灯是系统控件，原型不模拟 */
-.fr-toggle{position:absolute;top:9px;right:12px;z-index:3;width:28px;height:28px;border:none;border-radius:8px;background:transparent;color:var(--ink2);display:grid;place-items:center;transition:background .15s,color .15s}
-.fr-toggle:hover{background:var(--hover);color:var(--ink)}
-.fr-toggle .fr-kbd{position:absolute;top:100%;left:50%;transform:translateX(-50%);margin-top:4px;font-family:var(--mono);font-size:9.5px;color:var(--ink3);opacity:0;transition:opacity .15s;white-space:nowrap}
-.fr-toggle:hover .fr-kbd{opacity:1}
-/* 收起后：左上角悬浮展开按钮 */
-/* 收起后：悬浮展开按钮放在红绿灯右侧；主区头部整体让位 ——
-   否则标题/返回压在红绿灯和按钮底下，既难看又点不了 */
-.fr-float{position:fixed;z-index:60;top:9px;left:14px;width:30px;height:30px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink2);display:grid;place-items:center;box-shadow:var(--shadow-card);transition:background .15s,color .15s}
-.fr-float:hover{background:var(--hover);color:var(--ink)}
-body.fr-collapsed .w-head,body.fr-collapsed .m-edbar{padding-left:64px;transition:padding-left .2s ease}
-/* 专注中的轻提示：右下角一枚，Esc / ⌘\ 都能退出 */
 .fr-hint{position:fixed;right:18px;bottom:18px;z-index:55;font-family:var(--mono);font-size:10.5px;color:var(--ink3);background:var(--card);border:1px solid var(--line);border-radius:999px;padding:6px 12px;pointer-events:none;opacity:0;transition:opacity .2s}
 .fr-hint.on{opacity:1}
 
@@ -669,6 +687,6 @@ body.fr-collapsed .w-head,body.fr-collapsed .m-edbar{padding-left:64px;transitio
 <script type="text/babel" src="./jsx/publish.jsx?v=10"></script>
 <script type="text/babel" src="./jsx/settings.jsx?v=10"></script>
 <script type="text/babel" src="./jsx/editor.jsx?v=10"></script>
-<script type="text/babel" src="./jsx/app.jsx?v=10"></script>
+<script type="text/babel" src="./jsx/app.jsx?v=11"></script>
 </body>
 </html>

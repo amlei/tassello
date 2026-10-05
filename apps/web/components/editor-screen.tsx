@@ -5,7 +5,7 @@ import React from "react";
 import { useRouter } from "next/navigation";
 import type { AppSettings, AssetDTO, PlatformDTO, PostDTO, TaskDTO, ContentType } from "@tassello/shared";
 import { api } from "./api";
-import { Rail } from "./rail";
+import { WorkspaceShell } from "./workspace-shell";
 import { EditorView } from "./editor";
 import { PublishSheet } from "./publish";
 import { useImportProfile } from "./import-profile";
@@ -193,15 +193,16 @@ export function EditorScreen({
   };
 
   return (
-    <div className="flex h-screen min-h-0 overflow-hidden" data-screen-label="编辑器">
-      <Rail
-        active={post.type}
-        counts={counts}
-        runningCount={runningCount}
-        queueCount={tasks.length}
-        platforms={platforms}
-        guard={leaveGuard}
-      />
+    <WorkspaceShell
+      active={post.type}
+      counts={counts}
+      runningCount={runningCount}
+      queueCount={tasks.length}
+      platforms={platforms}
+      guard={leaveGuard}
+      screenLabel="编辑器"
+      context={{ title: post.title || "未命名稿子", meta: "编辑中" }}
+    >
       <div className="flex min-h-0 w-full flex-1 flex-col">
         <EditorView
           post={post}
@@ -268,6 +269,6 @@ export function EditorScreen({
           </Modal.Backdrop>
         </Modal>
       )}
-    </div>
+    </WorkspaceShell>
   );
 }

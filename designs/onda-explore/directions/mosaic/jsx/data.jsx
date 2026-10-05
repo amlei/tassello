@@ -46,7 +46,7 @@ const PLATFORMS = [
     account: { name: "九漾 Onda", kind: "个人号", uid: "小红书号 8823456712", until: "2026-11-30", checked: "09-16 09:12", lands: "直接发成一篇笔记，发完可以在小红书里继续改" } },
   { id: "weibo",     name: "微博",       char: "博", color: "#FF8200", state: "ok",   link: "weibo.com/detail/",          supports: ["article", "image", "video"],
     account: { name: "九漾Onda", kind: "个人认证", uid: "UID 5f2c91a4", until: "2027-01-15", checked: "09-15 20:41", lands: "直接发一条微博（这个号没开长文，正文限 500 字）" } },
-  { id: "jike",      name: "即刻",       char: "即", color: "#FFD400", fg: "#16130E", state: "ok", link: "web.okjike.com/originalPost/", supports: ["article", "image", "video"],
+  { id: "jike",      name: "即刻",       char: "即", color: "#FFD400", fg: "#16130E", state: "ok", link: "web.okjike.com/originalPost/", supports: ["image", "video"],
     account: { name: "九漾", kind: "个人号", uid: "即刻 ID 9A3F7C", until: "2026-10-20", checked: "09-14 11:03", lands: "直接发一条动态" } },
   { id: "bili",      name: "B站",        char: "B",  color: "#00A1D6", state: "fail", link: "www.bilibili.com/video/",    supports: ["article", "image", "video"], lands: "进投稿页，需要你确认封面与分区后提交",
     account: null, accountError: "账号已掉线（08-30），请重新登录 B站" },

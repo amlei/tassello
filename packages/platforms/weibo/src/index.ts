@@ -1,8 +1,11 @@
 /* @tassello/platform-weibo —— 微博适配器：CDP 通道（真实浏览器填充 + 人工确认） */
 import { z } from "zod";
 import type { PlatformAdapter, PostDraft, AdapterCtx, StageReporter, PublishResult } from "@tassello/platform-core";
+import type { CdpLike } from "@tassello/platform-core";
+
+type CdpConnection = CdpLike;
 import { getPlatformMeta } from "@tassello/platform-core";
-import { evaluateScalar, withPage, type CdpConnection } from "@tassello/cdp";
+import { evaluateScalar } from "@tassello/cdp";
 
 export const weiboProfileSchema = z.object({
   uid: z.string(),
@@ -13,9 +16,6 @@ export const weiboProfileSchema = z.object({
   profileUrl: z.string().nullable().optional(),
 });
 export type WeiboProfile = z.infer<typeof weiboProfileSchema>;
-
-/** 微博正文上限（未开通长文权限的账号） */
-export const WEIBO_TEXT_LIMIT = 500;
 
 /** 微博话题是双 # 包裹（#话题#）：编辑器里单 # 书写，发布时自动补全 */
 export function weiboWrapTopics(text: string): string {
@@ -92,7 +92,7 @@ export const weiboAdapter: PlatformAdapter<WeiboProfile> = {
     async verify(_acct, ctx) {
       ctx.log("weibo.verify.start");
       try {
-        const r = await withPage("weibo", { url: WEIBO_HOME, keepOpen: false, activate: false, mode: "headless" }, async (cdp, sid) => {
+        const r = await ctx.runPage("weibo", { url: WEIBO_HOME, keepOpen: false, activate: false, mode: "headless" }, async (cdp, sid) => {
           await waitForWeiboReady(cdp, sid);
           return evaluateScalar<VerifyJsResult>(cdp, sid, VERIFY_JS, { timeoutMs: 20_000 });
         });
@@ -121,8 +121,7 @@ export const weiboAdapter: PlatformAdapter<WeiboProfile> = {
   },
 
   async publish(post: PostDraft, acct, ctx: AdapterCtx, onStage: StageReporter) {
-    /* 渲染排版：微博没有标题字段，正文即全部；唯一差异是话题自动补 # 闭合，
-       其余与编辑区保持一致；超限直接可归因失败（原型同款语义） */
+    /* 渲染排版：微博没有标题字段，正文即全部；唯一差异是话题自动补 # 闭合。 */
 
     // 文章走头条文章编辑器（card.weibo.com），贴图/视频/短文走首页 composer
     if (post.type === "article") return publishArticle(post, ctx, onStage);
@@ -130,9 +129,6 @@ export const weiboAdapter: PlatformAdapter<WeiboProfile> = {
     onStage({ stage: 0, progress: 10, message: "整理微博文本" });
     const text = weiboWrapTopics((post.body || "").trim());
     if (!text) throw new Error("微博正文为空");
-    if (text.length > WEIBO_TEXT_LIMIT) {
-      throw new Error(`正文 ${text.length} 字，超出微博 ${WEIBO_TEXT_LIMIT} 字上限（未开通长文权限）`);
-    }
     // 微博单条：视频或图片二选一，视频优先
     const videoAsset = post.assets.find((a) => a.kind === "video" && a.path);
     const imageAssets = videoAsset ? [] : post.assets.filter((a) => a.kind === "image" && a.path);
@@ -149,7 +145,7 @@ export const weiboAdapter: PlatformAdapter<WeiboProfile> = {
     const mediaPaths = videoAsset ? [videoAsset.path] : imageAssets.map((a) => a.path);
 
     /* 上传素材 + 填充编辑器 + 停在人工确认，都在同一个（不关闭的）标签页里完成 */
-    return withPage("weibo", { url: WEIBO_HOME, keepOpen: false, activate: true }, async (cdp, sid) => {
+    return ctx.runPage("weibo", { url: WEIBO_HOME, keepOpen: false, activate: true }, async (cdp, sid) => {
       // 等页面就绪（编辑器出现才动）
       await waitForWeiboReady(cdp, sid);
       await new Promise((r) => setTimeout(r, 1500));
@@ -171,7 +167,7 @@ export const weiboAdapter: PlatformAdapter<WeiboProfile> = {
 
       /* 自动发送：点「发送」→ 编辑器清空 → 抓回执链接，任务直达 success */
       onStage({ stage: 3, progress: 40, message: "点击发送" });
-      const uid = (acct.profile as WeiboProfile | undefined)?.uid;
+      const uid = (acct?.profile as WeiboProfile | undefined)?.uid;
       let link: string | null = null;
       // 清空只是发送信号；回执链接等 feed 刷新后再多轮尝试
       for (let i = 0; i < 15; i++) {
@@ -339,7 +335,7 @@ async function publishArticle(
   onStage({ stage: 0, progress: 100 });
   onStage({ stage: 1, progress: 5, message: "打开头条文章编辑器" });
 
-  return withPage("weibo", { url: WEIBO_ARTICLE_EDITOR, keepOpen: true, activate: true }, async (cdp, sid) => {
+  return ctx.runPage("weibo", { url: WEIBO_ARTICLE_EDITOR, keepOpen: true, activate: true }, async (cdp, sid) => {
     if (!(await waitForArticleEditor(cdp, sid))) {
       throw new Error("文章编辑器未加载（可能未登录或页面结构变更）");
     }

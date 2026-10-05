@@ -21,12 +21,6 @@ export function PublishSheet({
   const t = TYPE_META[post.type];
   const supported = platforms.filter((p) => p.supports.includes(post.type));
   const selected = supported.filter((p) => selectedIds.includes(p.id));
-  const bodyLen = post.body.length;
-  /* 约束预检：发布前就算出哪个平台会拒稿（与队列页的失败归因同源） */
-  const problemOf = (p: PlatformDTO) => {
-    if (p.id === "weibo" && bodyLen > 500) return `正文 ${bodyLen} 字 · 超出 500 字上限`;
-    return null;
-  };
   const failed = (p: PlatformDTO) => p.status !== "active" || !p.account || p.account.state !== "ok";
   /* 三态皮肤：选中 = 平台色实底；未选中 = 平台色 20% 淡底；未获取 = 中性灰 */
   const skinOf = (p: PlatformDTO) => {
@@ -56,11 +50,10 @@ export function PublishSheet({
             {/* 原型 .m-platwall：gap 16，padding 14 6 8 */}
             <div className="flex flex-wrap gap-4 px-1.5 pb-2 pt-3.5">
               {supported.map((p) => {
-                const problem = problemOf(p);
                 const off = failed(p);
                 const on = selectedIds.includes(p.id);
                 return (
-                  <span key={p.id} title={p.name + (off ? " · 账号未连接，点一下可修复" : problem ? ` · ${problem}` : "")} className="inline-flex">
+                  <span key={p.id} title={p.name + (off ? " · 账号未连接，点一下可修复" : "")} className="inline-flex">
                     <Button
                       className={
                         "relative flex h-14 w-14 items-center justify-center rounded-[16px] p-0 shadow-[0_1px_2px_rgba(15,15,15,0.04)] transition-[translate,transform,box-shadow] duration-150 data-[off=true]:shadow-none" +
@@ -82,9 +75,6 @@ export function PublishSheet({
                         <span className="absolute -bottom-[7px] -right-[7px] z-[2] flex h-[21px] w-[21px] items-center justify-center rounded-[7px] border border-line bg-card text-ink2">
                           <Refresh className="m-0 h-2.5 w-2.5" />
                         </span>
-                      )}
-                      {problem && !off && (
-                        <span className="absolute -left-[3px] -top-[3px] h-[13px] w-[13px] rounded-full border-[2.5px] border-paper bg-error" />
                       )}
                     </Button>
                   </span>

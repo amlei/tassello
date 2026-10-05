@@ -25,8 +25,10 @@
  */
 import { z } from "zod";
 import type { PlatformAdapter, PostDraft, AdapterCtx, StageReporter, PublishResult } from "@tassello/platform-core";
+
+type CdpConnection = CdpLike;
 import { getPlatformMeta } from "@tassello/platform-core";
-import { evaluateScalar, withPage, type CdpConnection } from "@tassello/cdp";
+import { evaluateScalar } from "@tassello/cdp";
 
 export const xhsProfileSchema = z.object({
   userId: z.string(),
@@ -380,7 +382,7 @@ export const xhsAdapter: PlatformAdapter<XhsProfile> = {
     async verify(_acct, ctx) {
       ctx.log("xhs.verify.start");
       try {
-        const r = await withPage(
+        const r = await ctx.runPage(
           "xhs",
           { url: XHS_PUBLISH_URL, keepOpen: false, activate: false, mode: "headless" },
           async (cdp, sid) => {
@@ -445,7 +447,7 @@ export const xhsAdapter: PlatformAdapter<XhsProfile> = {
     onStage({ stage: 0, progress: 100 });
     onStage({ stage: 1, progress: 5, message: `打开小红书创作者中心（${tabText}）` });
 
-    return withPage("xhs", { url: XHS_PUBLISH_URL, keepOpen: true, activate: true }, async (cdp, sid) => {
+    return ctx.runPage("xhs", { url: XHS_PUBLISH_URL, keepOpen: true, activate: true }, async (cdp, sid) => {
       if (!(await waitForCreatorReady(cdp, sid))) {
         throw new Error("小红书创作者中心未就绪（可能未登录）");
       }

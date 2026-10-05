@@ -266,11 +266,50 @@ function App() {
   );
   const runningCount = tasks.filter((t) => t.status === "running").length;
   const editing = posts.find((p) => p.id === editingId);
+  /* TitleBar 的上下文槽：当前视图名 + 轻元信息。页面头部只保留工具，不重复占左上角。 */
+  const screenContext = (() => {
+    if (view === "library") {
+      const q = query.trim().toLowerCase();
+      const visible = posts.filter((p) => p.type === scope && (!q || (p.title + " " + p.body).toLowerCase().indexOf(q) >= 0));
+      const meta = [visible.length + " 篇", TYPES[scope].en, q ? "筛选「" + query.trim() + "」" : null].filter(Boolean).join(" · ");
+      return { title: TYPES[scope].zh, meta };
+    }
+    if (view === "queue") return { title: "发布队列", meta: tasks.length + " 条发布" };
+    if (editing) return { title: editing.title || "未命名稿子", meta: "编辑中" };
+    return null;
+  })();
 
   return (
     <div className="m-app">
+      {/* WorkspaceShell：全局 TitleBar 是唯一窗口控制 / 拖拽 / 侧栏开关的拥有者 */}
+      <header className="w-titlebar" aria-label="窗口栏">
+        {/* 原型占位：真实桌面里是 macOS 系统红绿灯；真实 Web 不渲染这段 */}
+        <div className="tb-lights" aria-hidden="true"><i></i><i></i><i></i></div>
+        <button
+          className="tb-toggle"
+          onClick={toggleRail}
+          aria-expanded={!railCollapsed}
+          aria-controls="workspace-rail"
+          aria-label={railCollapsed ? "展开侧栏" : "收起侧栏"}
+          title={railCollapsed ? "展开侧栏 (⌘\)" : "收起侧栏 (⌘\)"}
+        >
+          <IcPanel size={15} />
+          <span className="fr-kbd">⌘\</span>
+        </button>
+        {/* 品牌属于侧栏；TitleBar 的上下文槽在展开/折叠时保持同一左缘 */}
+        {screenContext && (
+          <div className="tb-context">
+            <h1 className="tb-title">{screenContext.title}</h1>
+            <span className="tb-meta">{screenContext.meta}</span>
+          </div>
+        )}
+        <div className="tb-drag" aria-hidden="true"></div>
+        <span className="tb-note">桌面态原型</span>
+      </header>
+
       <div className="w-shell">
         <Sidebar
+          id="workspace-rail"
           view={view}
           scope={scope}
           counts={counts}
@@ -278,7 +317,6 @@ function App() {
           queueCount={tasks.length}
           platforms={platforms}
           collapsed={railCollapsed}
-          onToggleRail={toggleRail}
           onScope={(k) => leaveGuard(() => openScope(k))}
           onQueue={() => leaveGuard(openQueue)}
           onNew={(type) => leaveGuard(() => newPost(type))}
@@ -305,12 +343,7 @@ function App() {
           {view === "queue" && (
             <div className="w-view" data-screen-label="发布队列">
               <div className="w-canvas">
-                <header className="w-head">
-                  <div className="w-headline">
-                    <h1 className="w-h1">发布队列</h1>
-                  </div>
-                </header>
-                <div className="w-scroll">
+                <div className="w-scroll w-queuescroll">
                   <TasksView tasks={tasks} posts={posts} onRetry={retryTask} onOpen={openPost} onDismiss={dismissTask} onDismissGroup={dismissGroup} />
                 </div>
               </div>
@@ -415,12 +448,7 @@ function App() {
         </div>
       )}
 
-      {/* 专注模式：左栏收起后，左上角悬浮展开按钮 + 右下角轻提示 */}
-      {railCollapsed && (
-        <button className="fr-float" onClick={toggleRail} aria-label="展开侧栏" title="展开侧栏 (⌘\)">
-          <IcPanel size={15} />
-        </button>
-      )}
+      {/* 专注提示仅保留快捷键提醒；展开入口永远在全局 TitleBar */}
       <div className={"fr-hint" + (railCollapsed ? " on" : "")}>专注模式 · ⌘\ 展开侧栏</div>
 
       <FloatingPill tasks={tasks} onClick={() => leaveGuard(openQueue)} />

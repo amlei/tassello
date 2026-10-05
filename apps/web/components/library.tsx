@@ -9,7 +9,7 @@ import { AlertDialog, Button, Dropdown, SearchField } from "@heroui/react";
 import { fmtDate, fmtTime } from "./bits";
 import { FloatingPill } from "./bits";
 import { api } from "./api";
-import { Rail } from "./rail";
+import { WorkspaceShell } from "./workspace-shell";
 import { useLongPressReorder } from "./dnd";
 import { Add, Check, Sort, X } from "reicon-react";
 
@@ -29,10 +29,8 @@ export function plainSummary(body: string): string {
 
 /* ---------- 主区头部：标题 + 搜索 + 排序 + 新建（scope 恒为某一类型，新建直达） ---------- */
 function ViewHead({
-  title, meta, query, onQuery, sort, onSort, scope, onNew,
+  query, onQuery, sort, onSort, scope, onNew,
 }: {
-  title: string;
-  meta: string;
   query: string;
   onQuery: (q: string) => void;
   sort: SortKey;
@@ -56,21 +54,15 @@ function ViewHead({
   }, []);
 
   return (
-    <header className="app-drag focuspad flex flex-none flex-wrap items-end gap-4 px-[34px] pb-4 pt-[26px]">
-      <div className="flex min-w-0 items-baseline gap-3">
-        <h1 className="text-[28px] font-bold leading-[1.35] tracking-[-0.4px]">{title}</h1>
-        <span className="whitespace-nowrap font-mono text-[11.5px] tracking-[0.5px] text-ink2">{meta}</span>
-      </div>
-      {/* 标题与搜索之间的空隙用来拖动窗口 */}
-      <div className="drag-strip" aria-hidden="true" />
-      <div className="ml-auto flex items-center gap-2.5">
+    <header className="flex flex-none flex-wrap items-center justify-end gap-2.5 px-[34px] py-3">
+      <div className="flex min-w-0 max-w-full flex-wrap items-center justify-end gap-2.5 gap-y-2">
         <SearchField
           aria-label="搜索稿子"
           value={query}
           onChange={onQuery}
           className="[&_.heroui-input]:bg-card"
         >
-          <SearchField.Group className="w-[210px] rounded-full border border-line bg-card px-3.5 py-2 transition-[width] focus-within:w-[290px] focus-within:border-accent">
+          <SearchField.Group className="w-[210px] min-w-[120px] max-w-full rounded-full border border-line bg-card px-3.5 py-2 transition-[width] focus-within:w-[290px] focus-within:border-accent">
             <SearchField.SearchIcon className="text-ink3" />
             <SearchField.Input
               ref={searchRef}
@@ -441,12 +433,17 @@ export function LibraryScreen({
   };
 
   return (
-    <div className="flex h-screen min-h-0 overflow-hidden" data-screen-label={`内容库 · ${t.zh}`}>
-      <Rail active={type} counts={counts} runningCount={runningCount} queueCount={tasks.length} platforms={platforms} />
+    <WorkspaceShell
+      active={type}
+      counts={counts}
+      runningCount={runningCount}
+      queueCount={tasks.length}
+      platforms={platforms}
+      screenLabel={`内容库 · ${t.zh}`}
+      context={{ title: t.zh, meta }}
+    >
       <div className="mx-auto flex w-full max-w-[1560px] min-h-0 flex-1 flex-col">
         <ViewHead
-          title={t.zh}
-          meta={meta}
           query={query}
           onQuery={setQuery}
           sort={sort}
@@ -494,6 +491,6 @@ export function LibraryScreen({
       </AlertDialog>
 
       <FloatingPill running={runningCount} avg={avgProgress} onClick={() => router.push("/queue")} />
-    </div>
+    </WorkspaceShell>
   );
 }

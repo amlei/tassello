@@ -14,13 +14,16 @@
  *   zhuanlan /api/posts/drafts（404，已迁到 /api/articles/drafts）
  * - 视频：创作平台视频为独立分片上传协议，本期未实现，publish 显式报错（能力缺口见 NOTES.md）
  *
- * 运行时走 @tassello/cdp 共享池（withPage("zhihu", ...)，应用专用 profile）；页面只用来提供
+ * 运行时走 @tassello/cdp 共享池（ctx.runPage("zhihu", ...)，应用专用 profile）；页面只用来提供
  * 带登录 cookie 的 fetch 上下文，不碰编辑器 DOM（接口失效回退 CDP UI 链路的探针见 scripts/）。
  */
 import { z } from "zod";
-import type { PlatformAdapter, PostDraft, AdapterCtx, StageReporter, PublishResult } from "@tassello/platform-core";
+import type { AdapterPublishOptions, PlatformAdapter, PostDraft, AdapterCtx, StageReporter, PublishResult, PublishIntent } from "@tassello/platform-core";
+import type { CdpLike } from "@tassello/platform-core";
+
+type CdpConnection = CdpLike;
 import { getPlatformMeta } from "@tassello/platform-core";
-import { evaluateScalar, withPage } from "@tassello/cdp";
+import { evaluateScalar } from "@tassello/cdp";
 
 export const zhihuProfileSchema = z.object({
   uid: z.string(),
@@ -105,6 +108,22 @@ function toText(text: string): string {
   return text.replace(/\n+/g, "").trim();
 }
 
+type ZhihuChannel = "article" | "pin";
+
+function resolveZhihuOptions(options?: AdapterPublishOptions): {
+  intent: PublishIntent;
+  channel?: ZhihuChannel;
+} {
+  const channel = options?.channel;
+  const normalizedChannel: ZhihuChannel | undefined = channel === "pin" || channel === "article"
+    ? channel
+    : undefined;
+  return {
+    intent: options?.intent ?? "auto",
+    channel: normalizedChannel,
+  };
+}
+
 export const zhihuAdapter: PlatformAdapter<ZhihuProfile> = {
   meta: getPlatformMeta("zhihu")!,
 
@@ -114,7 +133,7 @@ export const zhihuAdapter: PlatformAdapter<ZhihuProfile> = {
     async verify(_acct, ctx) {
       ctx.log("zhihu.verify.start");
       try {
-        const r = await withPage("zhihu", { url: ZHIHU_CREATOR_URL, keepOpen: false, activate: false }, async (cdp, sid) => {
+        const r = await ctx.runPage("zhihu", { url: ZHIHU_CREATOR_URL, keepOpen: false, activate: false }, async (cdp, sid) => {
           if (!(await waitForLogin(cdp, sid))) return { status: 0, data: null };
           return evaluateScalar<{ status: number; data: MeFields | null; err?: string }>(
             cdp,
@@ -157,18 +176,31 @@ export const zhihuAdapter: PlatformAdapter<ZhihuProfile> = {
     },
   },
 
-  async publish(post: PostDraft, _acct, ctx: AdapterCtx, onStage: StageReporter): Promise<PublishResult> {
+  async publish(
+    post: PostDraft,
+    _acct,
+    ctx: AdapterCtx,
+    onStage: StageReporter,
+    options?: AdapterPublishOptions,
+  ): Promise<PublishResult> {
     if (post.type === "video") {
       throw new Error("知乎视频发布本期未实现：创作平台视频为独立分片上传协议（能力缺口见平台包 NOTES.md），请到 https://www.zhihu.com/creator 手动上传");
     }
-    if (post.type === "image") return publishPin(post, ctx, onStage);
-    return publishArticle(post, ctx, onStage);
+    const config = resolveZhihuOptions(options);
+    const channel = config.channel ?? (post.type === "image" ? "pin" : "article");
+    if (channel === "pin") return publishPin(post, ctx, onStage, config.intent);
+    return publishArticle(post, ctx, onStage, config.intent);
   },
 };
 
 /* ---------- 想法（贴图）：POST /api/v4/content/publish（action=pin）接口直发 ---------- */
 
-async function publishPin(post: PostDraft, ctx: AdapterCtx, onStage: StageReporter): Promise<PublishResult> {
+async function publishPin(
+  post: PostDraft,
+  ctx: AdapterCtx,
+  onStage: StageReporter,
+  intent: PublishIntent,
+): Promise<PublishResult> {
   if (post.assets.some((a) => a.kind === "image" && a.path)) {
     // 图片想法要先走知乎 vupload 图片上传链路拿图片 token，本期未实现（见 NOTES.md 遗留问题）
     throw new Error("知乎想法通道本期只支持纯文字（图片想法需 vupload 上传链路，见平台包 NOTES.md 遗留问题）");
@@ -180,10 +212,56 @@ async function publishPin(post: PostDraft, ctx: AdapterCtx, onStage: StageReport
   if (plain.length > 3000) throw new Error(`知乎想法正文过长（${plain.length} > 3000 字）`);
   const html = toHtml(title ? `${title}\n${body}` : body);
 
-  ctx.log("zhihu.publish.pin.start", { len: plain.length });
+  ctx.log("zhihu.publish.pin.start", { len: plain.length, intent });
+  if (intent === "draft") {
+    onStage({ stage: 1, progress: 40, message: "创建知乎想法草稿" });
+    const draft = await ctx.runPage(
+      "zhihu",
+      { url: ZHIHU_CREATOR_URL, keepOpen: false, activate: false },
+      async (cdp, sid) => {
+        if (!(await waitForLogin(cdp, sid))) throw new Error("知乎登录态已失效，请重新登录");
+        return evaluateScalar<{ status: number; body: string; err?: string }>(
+          cdp,
+          sid,
+          `(async () => {
+            try {
+              const html = ${JSON.stringify(html)};
+              const payload = { action: "pin", data: {
+                publish: { traceId: String(Date.now()) + "," + crypto.randomUUID() },
+                commentsPermission: { comment_permission: "all" },
+                extra_info: { view_permission: "all", publisher: "pc" },
+                draft: { disabled: 0 },
+                hybrid: { html, textLength: html.replace(/<[^>]+>/g, "").length },
+                textLength: html.replace(/<[^>]+>/g, "").length,
+              } };
+              const r = await fetch("https://api.zhihu.com/content/drafts", {
+                method: "POST", credentials: "include",
+                headers: { "Content-Type": "application/json", "x-requested-with": "fetch", "x-xsrftoken": ${XSRF} },
+                body: JSON.stringify(payload),
+              });
+              return JSON.parse(JSON.stringify({ status: r.status, body: (await r.text()).slice(0, 3000) }));
+            } catch (e) {
+              return JSON.parse(JSON.stringify({ status: 0, body: "", err: String(e) }));
+            }
+          })()`,
+          { timeoutMs: 30_000 },
+        );
+      },
+    );
+    const draftId = draft.body.match(/"id"\s*:\s*"?(\d{10,25})"?/)?.[1];
+    if (draft.status < 200 || draft.status >= 300 || !draftId) {
+      const msg = draft.body.slice(0, 180) || draft.err || "";
+      ctx.log("zhihu.publish.pin.draft.fail", { status: draft.status, msg });
+      throw new Error(`知乎想法草稿创建失败（HTTP ${draft.status}）：${msg}`);
+    }
+    const draftUrl = "https://www.zhihu.com/creator/manage/creation/draft?type=pin";
+    ctx.log("zhihu.publish.pin.draft.ok", { draftId });
+    onStage({ stage: 3, progress: 100, message: "想法草稿已创建；请检查后手动发布" });
+    return { url: draftUrl, needsManualConfirm: true, receipt: { draftId } };
+  }
   onStage({ stage: 1, progress: 40, message: "调用知乎想法接口" });
 
-  const r = await withPage("zhihu", { url: ZHIHU_CREATOR_URL, keepOpen: false, activate: false }, async (cdp, sid) => {
+  const r = await ctx.runPage("zhihu", { url: ZHIHU_CREATOR_URL, keepOpen: false, activate: false }, async (cdp, sid) => {
     if (!(await waitForLogin(cdp, sid))) throw new Error("知乎登录态已失效，请重新登录");
     return evaluateScalar<{ status: number; data: PublishApiResp | null; err?: string }>(
       cdp,
@@ -229,16 +307,21 @@ async function publishPin(post: PostDraft, ctx: AdapterCtx, onStage: StageReport
 
 /* ---------- 文章：zhuanlan 草稿接口 + content/publish（action=article）直发 ---------- */
 
-async function publishArticle(post: PostDraft, ctx: AdapterCtx, onStage: StageReporter): Promise<PublishResult> {
+async function publishArticle(
+  post: PostDraft,
+  ctx: AdapterCtx,
+  onStage: StageReporter,
+  intent: PublishIntent,
+): Promise<PublishResult> {
   const title = (post.title || "").trim();
   if (!title) throw new Error("知乎文章需要标题");
   const html = (post.bodyHtml || "").trim() || toHtml(post.body || "");
   if (!html.replace(/<[^>]+>/g, "").trim()) throw new Error("知乎文章需要正文内容");
 
-  ctx.log("zhihu.publish.article.start", { titleLen: title.length });
+  ctx.log("zhihu.publish.article.start", { titleLen: title.length, intent });
   onStage({ stage: 0, progress: 30, message: "创建知乎专栏草稿" });
 
-  const r = await withPage("zhihu", { url: ZHIHU_WRITE_URL, keepOpen: false, activate: false }, async (cdp, sid) => {
+  const r = await ctx.runPage("zhihu", { url: ZHIHU_WRITE_URL, keepOpen: false, activate: false }, async (cdp, sid) => {
     if (!(await waitForLogin(cdp, sid))) throw new Error("知乎登录态已失效，请重新登录");
 
     // 1. 建草稿（zhuanlan 域，裸 fetch + xsrf）
@@ -261,7 +344,7 @@ async function publishArticle(post: PostDraft, ctx: AdapterCtx, onStage: StageRe
     );
     const draftId = String((created.body.match(/"id"\s*:\s*"(\d+)"/) || [])[1] || "");
     if (created.status !== 200 || !draftId) {
-      return { draftId: "", articleId: "", msg: `建草稿失败（HTTP ${created.status}）：${created.err || created.body.slice(0, 200)}` };
+      return { draftId: "", articleId: "", msg: `建草稿失败（HTTP ${created.status}）：${created.err || created.body.slice(0, 200)}`, stoppedDraft: false };
     }
     ctx.log("zhihu.publish.article.draft", { draftId });
 
@@ -280,7 +363,10 @@ async function publishArticle(post: PostDraft, ctx: AdapterCtx, onStage: StageRe
       { timeoutMs: 30_000 },
     );
     if (patched.status !== 200) {
-      return { draftId, articleId: "", msg: `草稿正文保存失败（HTTP ${patched.status}）` };
+      return { draftId, articleId: "", msg: `草稿正文保存失败（HTTP ${patched.status}）`, stoppedDraft: false };
+    }
+    if (intent === "draft") {
+      return { draftId, articleId: "", msg: "", stoppedDraft: true };
     }
     onStage({ stage: 1, progress: 70, message: "调用知乎发布接口" });
 
@@ -323,9 +409,15 @@ async function publishArticle(post: PostDraft, ctx: AdapterCtx, onStage: StageRe
       { timeoutMs: 30_000 },
     );
     const articleId = extractId(pub.data ?? {}) || draftId;
-    return { draftId, articleId, msg: pub.status === 200 && pub.data?.code === 0 ? "" : `发布失败（HTTP ${pub.status}）：${pub.data?.message || pub.err || ""}` };
+    return { draftId, articleId, msg: pub.status === 200 && pub.data?.code === 0 ? "" : `发布失败（HTTP ${pub.status}）：${pub.data?.message || pub.err || ""}`, stoppedDraft: false };
   });
 
+  if (r.draftId && intent === "draft") {
+    const url = `${ZHIHU_ARTICLE_URL}${r.draftId}/edit`;
+    ctx.log("zhihu.publish.article.draft-intent", { draftId: r.draftId });
+    onStage({ stage: 3, progress: 100, message: "文章草稿已创建；请检查后手动发布" });
+    return { url, needsManualConfirm: true, receipt: { draftId: r.draftId } };
+  }
   if (r.draftId && !r.msg) {
     const url = ZHIHU_ARTICLE_URL + r.articleId;
     ctx.log("zhihu.publish.article.ok", { articleId: r.articleId, draftId: r.draftId, url });

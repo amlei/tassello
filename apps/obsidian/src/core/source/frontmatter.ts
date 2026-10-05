@@ -5,7 +5,7 @@ export type NoteFrontmatter = {
   title?: string;
   type?: ContentType;
   platforms?: PlatformId[];
-  options?: Record<string, Record<string, unknown>>;
+  options?: Record<string, unknown>;
 };
 
 export type SplitNote = {
@@ -14,7 +14,7 @@ export type SplitNote = {
 };
 
 const CONTENT_TYPES = new Set<ContentType>(["article", "image", "video", "audio"]);
-const PLATFORM_IDS = new Set<PlatformId>(["weibo", "zhihu", "xhs"]);
+const PLATFORM_IDS = new Set<PlatformId>(["weibo", "zhihu", "xhs", "jike", "douban", "x"]);
 
 /** Obsidian properties may serialize a nested value as a JSON/YAML string; accept both forms. */
 function normalizeConfig(raw: unknown): Record<string, unknown> {
@@ -53,10 +53,10 @@ export function splitNote(raw: string): SplitNote {
           typeof item === "string" && PLATFORM_IDS.has(item as PlatformId),
         )
       : undefined;
-    const options: Record<string, Record<string, unknown>> = {};
+    const options: Record<string, unknown> = {};
     if (config.options && typeof config.options === "object" && !Array.isArray(config.options)) {
       for (const [key, value] of Object.entries(config.options)) {
-        if (value && typeof value === "object" && !Array.isArray(value)) options[key] = value as Record<string, unknown>;
+        if (value !== undefined && value !== null) options[key] = value;
       }
     }
     const title = typeof config.title === "string" ? config.title : undefined;

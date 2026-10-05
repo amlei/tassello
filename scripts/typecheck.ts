@@ -10,6 +10,7 @@ const targets = [
   "packages/platforms/wechat",
   "packages/platforms/weibo",
   "packages/platforms/xhs",
+  "packages/platforms/x",
   "packages/platforms/douban",
   "packages/platforms/xiaoyuzhou",
   "packages/platforms/ximalaya",

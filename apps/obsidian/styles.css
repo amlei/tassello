@@ -74,6 +74,8 @@
 .tassello-publisher .mode-count.hidden { display: none; }
 
 .tassello-publisher .panel-body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 12px 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+/* 预览页下部固定在视口内：检查与平台选择保持可见，长正文只在 payload 卡片里滚动。 */
+.tassello-publisher .panel-body:has(.preview-frame) { overflow: hidden; }
 .tassello-publisher .panel-foot { flex: 0 0 auto; padding: 10px 14px; border-top: 1px solid var(--tp-line); background: var(--tp-card); }
 
 .tassello-publisher .section-title {
@@ -102,11 +104,26 @@
 .tassello-publisher .chip.selected { opacity: 1; }
 
 .tassello-publisher .preview-frame {
-  min-height: 180px; padding: 12px; border: 1px solid var(--tp-line); border-radius: 11px;
+  flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden;
+  padding: 12px; border: 1px solid var(--tp-line); border-radius: 11px;
   background: var(--tp-card); box-shadow: 0 1px 2px rgba(0,0,0,.04); overflow-wrap: anywhere;
 }
+.tassello-publisher .preview-frame > .rich { flex: 1 1 auto; min-height: 0; overflow: auto; padding-right: 2px; }
 .tassello-publisher .preview-frame.empty { display: flex; align-items: center; justify-content: center; color: var(--tp-ink3); text-align: center; }
 .tassello-publisher .preview-frame img { max-width: 100%; }
+.tassello-publisher .attachments {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px;
+  margin: 0 0 .8em;
+}
+.tassello-publisher .attachments .attachment { margin: 0; }
+.tassello-publisher .attachments img {
+  width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 7px;
+  border: 1px solid var(--tp-line); display: block;
+}
+.tassello-publisher .attachments figcaption {
+  margin-top: 3px; color: var(--tp-ink3); font-size: 10px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .tassello-publisher .rich p { line-height: 1.65; margin: 0 0 .7em; }
 .tassello-publisher .rich h1, .tassello-publisher .rich h2, .tassello-publisher .rich h3 { margin: .7em 0 .4em; }
 .tassello-publisher .rich img { border-radius: 4px; }

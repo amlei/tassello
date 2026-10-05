@@ -25,8 +25,11 @@
  */
 import { z } from "zod";
 import type { PlatformAdapter, PostDraft, AdapterCtx, StageReporter, PublishResult } from "@tassello/platform-core";
+import type { CdpLike } from "@tassello/platform-core";
+
+type CdpConnection = CdpLike;
 import { getPlatformMeta } from "@tassello/platform-core";
-import { evaluateScalar, withPage, type CdpConnection } from "@tassello/cdp";
+import { evaluateScalar } from "@tassello/cdp";
 
 /* ---------- profile：账号 + 专辑列表（账号→频道两级，本期核心新增） ---------- */
 
@@ -193,7 +196,7 @@ export const ximalayaAdapter: PlatformAdapter<XimalayaProfile> = {
     async verify(_acct, ctx) {
       ctx.log("ximalaya.verify.start");
       try {
-        const r = await withPage(
+        const r = await ctx.runPage(
           "ximalaya",
           { url: XIMALAYA_STUDIO_URL, keepOpen: false, activate: false, mode: "headless" },
           async (cdp, sid) => {
@@ -239,7 +242,7 @@ export const ximalayaAdapter: PlatformAdapter<XimalayaProfile> = {
     ctx.log("ximalaya.publish.start", { title, audio: audio.path, albumTarget });
     onStage({ stage: 0, progress: 10, message: "打开喜马拉雅上传页" });
 
-    const r = await withPage(
+    const r = await ctx.runPage(
       "ximalaya",
       // visible + keepOpen：停在编辑表单，浏览器窗口留给用户检查点「确认发布」
       { url: XIMALAYA_UPLOAD_URL, keepOpen: true, activate: true, mode: "visible" },
