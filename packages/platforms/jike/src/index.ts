@@ -155,6 +155,81 @@ async function importTokenFromBrowser(ctx: AdapterCtx, acctId: string): Promise<
   return r.at;
 }
 
+/** 等首页 composer 就绪：内容编辑器和视频 file input 同时可见才可继续 */
+async function waitForJikeComposer(
+  cdp: CdpLike,
+  sessionId: string,
+  timeoutMs = 30_000,
+): Promise<void> {
+  const start = Date.now();
+  for (;;) {
+    const ready = await evaluateScalar<boolean>(
+      cdp,
+      sessionId,
+      `(() => {
+        const visible = (e) => !!e && e.offsetWidth > 0 && e.offsetHeight > 0;
+        return !![...document.querySelectorAll('[contenteditable="true"]')].find(visible)
+          && !![...document.querySelectorAll('input[type=file][accept*="video"]')].find(visible);
+      })()`,
+      { timeoutMs: 3_000 },
+    ).catch(() => false);
+    if (ready) return;
+    if (Date.now() - start > timeoutMs) throw new Error("即刻发布器加载失败");
+    await new Promise((resolve) => setTimeout(resolve, 800));
+  }
+}
+
+/** 即刻视频入口是首页常驻 file input；DOM.setFileInputFiles 会交给 React onChange。 */
+async function setJikeVideoInput(
+  cdp: CdpLike,
+  sessionId: string,
+  filePath: string,
+): Promise<void> {
+  await cdp.send("DOM.enable", {}, { sessionId });
+  const doc = await cdp.send("DOM.getDocument", {}, { sessionId }) as { root?: { nodeId?: number } };
+  const q = await cdp.send("DOM.querySelectorAll", {
+    nodeId: doc.root?.nodeId,
+    selector: 'input[type=file][accept*="video"]',
+  }, { sessionId }) as { nodeIds?: number[] };
+  const nodeId = q.nodeIds?.[0];
+  if (!nodeId) throw new Error("未找到即刻视频上传入口（页面结构可能变更）");
+  await cdp.send("DOM.setFileInputFiles", { files: [filePath], nodeId }, { sessionId });
+}
+
+/** Lexical contenteditable 必须走真实输入管线；直接改 innerText 不会同步 React 状态。 */
+async function fillJikeContent(
+  cdp: CdpLike,
+  sessionId: string,
+  content: string,
+): Promise<void> {
+  if (!content) return;
+  const focused = await evaluateScalar<boolean>(
+    cdp,
+    sessionId,
+    `(() => {
+      const e = [...document.querySelectorAll('[contenteditable="true"]')].find((x) => x.offsetWidth > 0 && x.offsetHeight > 0);
+      if (!e) return false;
+      e.focus();
+      return document.activeElement === e;
+    })()`,
+    { timeoutMs: 5_000 },
+  ).catch(() => false);
+  if (!focused) throw new Error("无法聚焦即刻正文编辑器");
+  await cdp.send("Input.insertText", { text: content }, { sessionId });
+  // Lexical 的受控更新是异步落地的；等到稳定后再校验，防止“看起来填了、页面又清空”的假等待。
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+  const filled = await evaluateScalar<string | null>(
+    cdp,
+    sessionId,
+    `(() => document.querySelector('[contenteditable="true"]')?.innerText?.replace(/\\r\\n/g, "\\n")?.trim() || null)()`,
+    { timeoutMs: 5_000 },
+  ).catch(() => null);
+  if (!filled) throw new Error("即刻编辑器拒绝了正文填充");
+  if (filled !== content.trim()) {
+    throw new Error(`即刻正文未稳定保留（期望 ${content.trim().length} 字，实际 ${filled.length} 字）`);
+  }
+}
+
 /* ---------- 适配器 ---------- */
 
 export const jikeAdapter: PlatformAdapter<JikeProfile> = {
@@ -218,6 +293,33 @@ export const jikeAdapter: PlatformAdapter<JikeProfile> = {
   },
 
   async publish(post: PostDraft, acct, ctx: AdapterCtx, onStage: StageReporter): Promise<PublishResult> {
+    if (post.type === "video" || post.assets.some((a) => a.kind === "video" && a.path)) {
+      /* 即刻视频没有稳定可恢复草稿；state 通道必须保留浏览器，绝不能丢掉视频后走文本 API。
+         这里先完成真实准备动作：打开首页 composer、注入视频、填充正文；最终发送留给人。 */
+      const video = post.assets.find((a) => a.kind === "video" && a.path);
+      if (!video) throw new Error("即刻视频稿缺少视频素材");
+      const title = (post.title || "").trim();
+      const body = (post.body || "").trim();
+      const content = title && body ? `${title}\n${body}` : title || body;
+
+      ctx.log("jike.publish.video.manual", { video: video.path, chars: content.length });
+      onStage({ stage: 0, progress: 100, message: "打开即刻发布器" });
+      await ctx.runPage("jike", { url: JIKE_HOME_URL, keepOpen: true, activate: true }, async (cdp, sessionId) => {
+        await waitForJikeComposer(cdp, sessionId);
+        onStage({ stage: 1, progress: 40, message: "注入视频文件" });
+        await setJikeVideoInput(cdp, sessionId, video.path);
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        ctx.log("jike.video.attached", { asset: video.id, filePath: video.path });
+
+        onStage({ stage: 2, progress: 70, message: "填充即刻正文" });
+        await fillJikeContent(cdp, sessionId, content);
+        ctx.log("jike.video.composer-filled", { asset: video.id, chars: content.length });
+        return null;
+      });
+      onStage({ stage: 3, progress: 100, message: "视频与正文已准备；请在即刻检查后点发送，回工作台回填结果" });
+      return { url: JIKE_HOME_URL, needsManualConfirm: true, receipt: { kind: "composer" } };
+    }
+
     if (post.type === "image") {
       // 即刻贴图没有可恢复草稿；不调用 create，打开 visible composer 交给用户发送。
       ctx.log("jike.publish.image.manual", {});
@@ -242,9 +344,7 @@ export const jikeAdapter: PlatformAdapter<JikeProfile> = {
     if (!content && !post.assets.some((a) => a.kind === "image" && a.path)) {
       throw new Error("即刻动态需要正文或图片至少一项");
     }
-    if (post.durationSec != null || post.assets.some((a) => a.kind === "video")) {
-      ctx.log("jike.publish.videoSkipped", { note: "视频上传链路未实现，视频素材被忽略（见 NOTES.md 遗留问题）" });
-    }
+
 
     // 图片：平台素材指纹 → 七牛直传 → pictureKeys；相同账号 + 相同字节直接复用 key。
     const pictureKeys: string[] = [];

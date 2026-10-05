@@ -58,6 +58,45 @@ type VerifyJsResult = {
   fetchError?: string;
 };
 
+/** 等媒体上传结束：微博视频没有稳定进度 DOM，只能用明确的平台文案 + 发送键状态判断 */
+async function waitForWeiboMediaReady(
+  cdp: CdpLike,
+  sessionId: string,
+  video: boolean,
+  onStage: StageReporter,
+): Promise<void> {
+  if (!video) return;
+  const start = Date.now();
+  for (;;) {
+    const state = await evaluateScalar<{ busy: boolean; failed: boolean; sendDisabled: boolean; sample: string }>(
+      cdp,
+      sessionId,
+      `(() => {
+        const text = (document.body && document.body.innerText) || "";
+        const btns = Array.from(document.querySelectorAll("button, [role=button]"));
+        const send = btns.find((b) => ["发送", "发微博"].includes((b.textContent || "").trim()));
+        const failed = /上传失败|处理失败|转码失败/.test(text);
+        const busy = /上传中|正在上传|转码中|处理中|剩余时间/.test(text);
+        return JSON.parse(JSON.stringify({
+          busy,
+          failed,
+          sendDisabled: !!send && (send.disabled || send.getAttribute("aria-disabled") === "true"),
+          sample: text.slice(0, 300),
+        }));
+      })()`,
+      { timeoutMs: 8_000 },
+    ).catch(() => ({ busy: true, failed: false, sendDisabled: true, sample: "" }));
+
+    if (state.failed) throw new Error(`微博媒体处理失败：${state.sample || "页面未给出原因"}`);
+    if (!state.busy && !state.sendDisabled) {
+      return;
+    }
+    if (Date.now() - start > 600_000) throw new Error("微博视频上传/转码超时（10 分钟）");
+    onStage({ stage: 1, progress: 80, message: "等待微博视频上传完成" });
+    await new Promise((r) => setTimeout(r, 2_000));
+  }
+}
+
 /** 等首页就绪：$CONFIG 出现 = 已登录；被踢到 passport = 未登录 */
 async function waitForWeiboReady(
   cdp: { send: <R = unknown>(method: string, params?: Record<string, unknown>, opts?: { sessionId?: string }) => Promise<R> },
@@ -144,7 +183,7 @@ export const weiboAdapter: PlatformAdapter<WeiboProfile> = {
 
     const mediaPaths = videoAsset ? [videoAsset.path] : imageAssets.map((a) => a.path);
 
-    const keepComposerOpen = post.type === "image";
+    const keepComposerOpen = post.type !== "article";
     /* 贴图是 composer state：上传 + 填充后必须停下，最终发送由用户完成。 */
     return ctx.runPage("weibo", { url: WEIBO_HOME, keepOpen: keepComposerOpen, activate: true }, async (cdp, sid) => {
       // 等页面就绪（编辑器出现才动）
@@ -156,8 +195,10 @@ export const weiboAdapter: PlatformAdapter<WeiboProfile> = {
         onStage({ stage: 1, progress: 30, message: `上传${label}` });
         await attachFiles(cdp, sid, mediaPaths);
         onStage({ stage: 1, progress: 100, message: "已交给编辑器上传" });
-        // 视频转码/多图上传需要时间
-        await new Promise((r) => setTimeout(r, videoAsset ? 15_000 : 3000 + mediaPaths.length * 1500));
+        // 视频必须等到平台明确结束处理；固定等待会让 disabled 的发送键造成假失败。
+        if (videoAsset) await new Promise((r) => setTimeout(r, 5_000));
+        await waitForWeiboMediaReady(cdp, sid, !!videoAsset, onStage);
+        if (!videoAsset) await new Promise((r) => setTimeout(r, 3000 + mediaPaths.length * 1500));
       } else {
         onStage({ stage: 1, progress: 100, message: "无附件" });
       }
@@ -167,64 +208,14 @@ export const weiboAdapter: PlatformAdapter<WeiboProfile> = {
       onStage({ stage: 2, progress: 100, message: "正文已填充" });
 
       if (keepComposerOpen) {
-        ctx.log("weibo.publish.image.awaiting-user", {});
-        onStage({ stage: 3, progress: 100, message: "贴图已填好；请检查后点「发送」" });
+        ctx.log("weibo.publish.state.awaiting-user", { video: !!videoAsset });
+        onStage({ stage: 3, progress: 100, message: `${videoAsset ? "视频" : "贴图"}已填好；请检查后点「发送」` });
         return { url: WEIBO_HOME, needsManualConfirm: true, receipt: { kind: "composer" } };
       }
 
-      /* 自动发送：点「发送」→ 编辑器清空 → 抓回执链接，任务直达 success */
-      onStage({ stage: 3, progress: 40, message: "点击发送" });
-      const uid = (acct?.profile as WeiboProfile | undefined)?.uid;
-      let link: string | null = null;
-      // 清空只是发送信号；回执链接等 feed 刷新后再多轮尝试
-      for (let i = 0; i < 15; i++) {
-        const r = await evaluateScalar<{ clicked: string; cleared: boolean; href: string | null }>(
-          cdp,
-          sid,
-          `(() => {
-            const ta = document.querySelector("textarea");
-            const cleared = !ta || ta.value.length === 0;
-            const btns = Array.from(document.querySelectorAll("button, [role=button]"));
-            const send = btns.find((b) => ["发送", "发微博"].includes((b.textContent || "").trim()));
-            let clicked = "no-btn";
-            if (send) clicked = (send.disabled || send.getAttribute("aria-disabled") === "true") ? "disabled" : "ok";
-            if (clicked === "ok" && !cleared) send.click();
-            let href = null;
-            const uid = ${JSON.stringify(uid ?? "")};
-            if (uid) {
-              const re = new RegExp("/" + uid + "/[A-Za-z0-9]+$");
-              const a = Array.from(document.querySelectorAll('a[href*="/' + uid + '/"]')).find((x) => re.test(x.getAttribute("href") || ""));
-              if (a) href = a.href;
-            }
-            return JSON.parse(JSON.stringify({ clicked, cleared, href }));
-          })()`,
-          { timeoutMs: 10_000 },
-        );
-        if (r.href) { link = r.href; break; }
-        if (r.clicked === "no-btn") throw new Error("未找到「发送」按钮（页面结构可能变更）");
-        await new Promise((r2) => setTimeout(r2, 1500));
-      }
-      if (!link) {
-        // 发送后兜底抓一次首条帖子链接
-        try {
-          link = await evaluateScalar<string | null>(
-            cdp,
-            sid,
-            `(() => {
-              const uid = ${JSON.stringify(uid ?? "")};
-              if (!uid) return null;
-              const re = new RegExp("/" + uid + "/[A-Za-z0-9]+$");
-              const a = Array.from(document.querySelectorAll('a[href*="/' + uid + '/"]')).find((x) => re.test(x.getAttribute("href") || ""));
-              return a ? a.href : null;
-            })()`,
-            { timeoutMs: 8_000 },
-          );
-        } catch { link = null; }
-      }
-      ctx.log("weibo.publish.sent", { link });
-      onStage({ stage: 3, progress: 100, message: "已发送" });
-      return { url: link, needsManualConfirm: false };
-    });
+      /* 仅文章会走自动发布；首页 composer 的贴图/视频都是 state 通道。 */
+      throw new Error("微博贴图/视频必须人工发送（state 通道不代点发布）");
+        });
   },
 };
 

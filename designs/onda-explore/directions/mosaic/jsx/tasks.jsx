@@ -16,9 +16,19 @@ function failKind(t) {
 }
 const FAIL_TAG = { dead: "无法重试", fix: "需改稿" };
 
-function TasksView({ tasks, posts, onRetry, onOpen, onDismiss, onDismissGroup }) {  const running = tasks.filter((t) => t.status === "running");
+/* 等待人工确认是第四种事实：不是进行中，也不能直接等同成功。
+   兼容两种建模：显式 awaiting_confirm；旧任务 running + stage3 + 100%。 */
+function isAwaiting(t) {
+  return t.status === "awaiting_confirm"
+    || (t.status === "running" && t.stage === 3 && t.progress >= 100);
+}
+
+function TasksView({ tasks, posts, onRetry, onOpen, onDismiss, onDismissGroup, onConfirmTask }) {
+  const running = tasks.filter((t) => t.status === "running" && !isAwaiting(t));
+  const awaiting = tasks.filter(isAwaiting);
   const failed = tasks.filter((t) => t.status === "failed");
   const ok = tasks.filter((t) => t.status === "success");
+  const [confirmTask, setConfirmTask] = React.useState(null);
 
   /* 按稿子归拢（O(n)）：一篇稿子一行，平台挂在它下面。
      tasks 本身按新→旧排列，所以首次出现的顺序就是最近活动的顺序 */
@@ -31,7 +41,8 @@ function TasksView({ tasks, posts, onRetry, onOpen, onDismiss, onDismissGroup })
   });
   order.forEach((g) => {
     g.post = posts.find((p) => p.id === g.postId) || null;
-    g.running = g.tasks.filter((t) => t.status === "running").length;
+    g.running = g.tasks.filter((t) => t.status === "running" && !isAwaiting(t)).length;
+    g.awaiting = g.tasks.filter(isAwaiting).length;
     g.bad = g.tasks.filter((t) => t.status === "failed").length;
     /* 最近一次活动：同一年的 "MM-DD HH:MM(:SS)" 直接按字符串比就够 */
     g.latest = g.tasks.reduce((acc, t) => {
@@ -46,19 +57,31 @@ function TasksView({ tasks, posts, onRetry, onOpen, onDismiss, onDismissGroup })
     <div className="m-tasks">
       <div className="m-tsummary">
         <span><span className="m-dot" style={{ background: "var(--blue)", marginRight: 6 }}></span>进行中<b>{running.length}</b></span>
+        <span><span className="m-dot" style={{ background: "var(--accent)", marginRight: 6 }}></span>待确认<b>{awaiting.length}</b></span>
         <span><span className="m-dot" style={{ background: "var(--green)", marginRight: 6 }}></span>成功<b>{ok.length}</b></span>
         <span><span className="m-dot" style={{ background: "var(--error)", marginRight: 6 }}></span>失败<b>{failed.length}</b></span>
       </div>
       <div className="m-tlist">
         {tasks.length === 0 && <div className="m-emptybox">队列为空</div>}
-        {order.map((g) => (<PostGroup key={g.postId} group={g} onRetry={onRetry} onOpen={onOpen} onDismiss={onDismiss} onDismissGroup={onDismissGroup} />))}
+        {order.map((g) => (<PostGroup key={g.postId} group={g} onRetry={onRetry} onOpen={onOpen} onDismiss={onDismiss} onDismissGroup={onDismissGroup} onAskConfirm={setConfirmTask} />))}
       </div>
+
+      {confirmTask && (
+        <ConfirmPublishDialog
+          task={confirmTask}
+          onClose={() => setConfirmTask(null)}
+          onConfirm={(taskId, url) => {
+            onConfirmTask(taskId, url);
+            setConfirmTask(null);
+          }}
+        />
+      )}
     </div>
   );
 }
 
 /* 一篇稿子 = 一行。左边是稿子，右边是它这一轮发布到的平台方块 */
-function PostGroup({ group, onRetry, onOpen, onDismiss, onDismissGroup }) {
+function PostGroup({ group, onRetry, onOpen, onDismiss, onDismissGroup, onAskConfirm }) {
   const t = group.post ? TYPES[group.post.type] : TYPES.article;
   return (
     <article className="q-item">
@@ -73,7 +96,7 @@ function PostGroup({ group, onRetry, onOpen, onDismiss, onDismissGroup }) {
           {group.tasks[0].postTitle || "未命名"}
         </button>
         <div className="q-icons">
-          {group.tasks.map((task) => (<PlatformTile key={task.id} task={task} onRetry={onRetry} onDismiss={onDismiss} />))}
+          {group.tasks.map((task) => (<PlatformTile key={task.id} task={task} onRetry={onRetry} onDismiss={onDismiss} onAskConfirm={onAskConfirm} />))}
         </div>
         <div className="q-meta">
           <span>{group.latest}</span>
@@ -95,9 +118,10 @@ function PostGroup({ group, onRetry, onOpen, onDismiss, onDismissGroup }) {
 
 /* 平台方块：一枚方块承担原来一整行的信息量。
    水位用两层同色椭圆做出水面，字随水位漂白（白色那层被裁在 fill 里）。 */
-function PlatformTile({ task, onRetry, onDismiss }) {
+function PlatformTile({ task, onRetry, onDismiss, onAskConfirm }) {
   const p = PLATFORMS.find((x) => x.id === task.platformId) || { name: task.platformId, char: "?", color: "#2C6FF0" };
-  const running = task.status === "running";
+  const running = task.status === "running" && !isAwaiting(task);
+  const awaiting = isAwaiting(task);
   const ok = task.status === "success";
   const pct = Math.max(0, Math.min(100, Math.floor(task.progress)));
   const fg = p.fg || "#fff";
@@ -116,6 +140,21 @@ function PlatformTile({ task, onRetry, onDismiss }) {
     </span>
   );
 
+  if (awaiting) {
+    return (
+      <button
+        type="button"
+        className="q-tile waiting"
+        style={style}
+        onClick={() => onAskConfirm(task)}
+        title={label + " · 已到人工确认，点击回填结果"}
+        aria-label={label + " 已到人工确认，点击回填结果"}
+      >
+        {body}
+        <span className="badge wait">等</span>
+      </button>
+    );
+  }
   if (ok) {
     return (
       <a
@@ -201,6 +240,84 @@ function FailedTile({ task, onRetry, onDismiss }) {
         document.body
       )}
     </span>
+  );
+}
+
+/* 人工确认必须经过显式弹层：这里不提供背景误点/回车直通的“默认成功”。
+   有链接就必须是合法 URL；没有公开链接时，也要用户主动勾选免责项。 */
+function ConfirmPublishDialog({ task, onClose, onConfirm }) {
+  const p = PLATFORMS.find((x) => x.id === task.platformId)
+    || { id: task.platformId, name: task.platformId, char: "?", color: "#2C6FF0", fg: "#fff" };
+  const [url, setUrl] = React.useState(task.url || "");
+  const [noPublicUrl, setNoPublicUrl] = React.useState(false);
+  const normalizedUrl = url.trim();
+  const urlInvalid = !!normalizedUrl && !/^https?:\/\/\S+$/i.test(normalizedUrl);
+  const canConfirm = !urlInvalid && ( !!normalizedUrl || noPublicUrl);
+
+  const submit = (e) => {
+    e.preventDefault();
+    if (!canConfirm) return;
+    onConfirm(task.id, noPublicUrl ? null : normalizedUrl);
+  };
+
+  return (
+    <div className="m-overlay" onClick={onClose}>
+      <form
+        className="m-mini q-confirm"
+        role="dialog"
+        aria-modal="true"
+        aria-label={"确认" + p.name + "发布结果"}
+        onClick={(e) => e.stopPropagation()}
+        onSubmit={submit}
+      >
+        <h3>确认 {p.name} 发布结果</h3>
+
+        <div className="q-confirm-meta">
+          <span className="q-confirm-label">任务</span>
+          <b>{task.postTitle || "未命名"}</b>
+        </div>
+        {task.channelName && (
+          <div className="q-confirm-meta">
+            <span className="q-confirm-label">目标</span>
+            <b>{task.channelName}</b>
+          </div>
+        )}
+        {task.manualHint && <p className="q-confirm-hint">{task.manualHint}</p>}
+
+        {task.pageUrl && (
+          <a className="q-confirm-open" href={task.pageUrl} target="_blank" rel="noreferrer">
+            打开 {p.name} 页面检查
+          </a>
+        )}
+
+        <label className="q-field">
+          <span className="q-field-label">回填发布链接</span>
+          <input
+            className={"q-input" + (urlInvalid ? " bad" : "")}
+            type="url"
+            inputMode="url"
+            placeholder="https://..."
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+          />
+          {urlInvalid && <span className="q-field-error">请输入 http(s) 开头的完整链接。</span>}
+        </label>
+
+        <label className="q-check">
+          <input
+            type="checkbox"
+            checked={noPublicUrl}
+            onChange={(e) => setNoPublicUrl(e.target.checked)}
+          />
+          <span>该结果没有公开链接，我已在平台确认完成</span>
+        </label>
+
+        <div className="m-mini-foot">
+          <button type="button" className="m-btn-plain" onClick={onClose}>取消</button>
+          <button type="submit" className="m-btn-acc" disabled={!canConfirm}>确认发布完成</button>
+        </div>
+      </form>
+    </div>
   );
 }
 

@@ -40,6 +40,9 @@ const MP_HOME = "https://mp.weixin.qq.com";
 /** 统一编辑器：type=77 + createType 区分形态 */
 const EDITOR_URL = (createType: number, token?: string | null) =>
   `${MP_HOME}/cgi-bin/appmsg?t=media/appmsg_edit_v2&action=edit&isNew=1&type=77&createType=${createType}${token ? `&token=${token}` : ""}&lang=zh_CN`;
+/** 独立视频素材上传页；公众号“本地上传”实际会跳到这个页面。 */
+const VIDEO_UPLOAD_URL = (token?: string | null) =>
+  `${MP_HOME}/cgi-bin/appmsg?t=media/videomsg_edit&action=video_edit&type=15${token ? `&token=${token}` : ""}&lang=zh_CN`;
 
 /** 头像 url 尾段 /64 → /0（wx.qlogo.cn 的尺寸后缀，0 = 原图） */
 function normalizeAvatar(url: string): string {
@@ -494,68 +497,61 @@ async function publishImage({ post, acct, ctx, onStage }: PublishArgs): Promise<
   });
 }
 
-/* ---------- 视频（createType=5）：标题/摘要/正文自动填充。
-   视频文件本身的自动上传通道（filetransfer scene=29 / chooser 拦截）在真机上都不可靠：
-   filetransfer 传出的视频素材服务端探测不到时长，进不了「选择视频」素材库。
-   v1 折中：编辑器 + 弹窗替人开好，本地上传选文件这一步留给人（任务停在人工确认） */
+/* ---------- 视频（createType=5）：标题/摘要/正文与本地视频自动填入。
+   最终保存/发表仍留在人工确认；封面和平台侧检查必须由用户负责。 */
 async function publishVideo({ post, acct, ctx, onStage }: PublishArgs): Promise<PublishResult> {
   onStage({ stage: 0, progress: 30, message: "整理视频" });
   const video = post.assets.find((a) => a.kind === "video" && a.path);
   if (!video) throw new Error("视频稿没有视频素材");
-  const desc = (post.body || "").trim();
+  const title = (post.title || "未命名").slice(0, 64);
   onStage({ stage: 0, progress: 100 });
-  onStage({ stage: 1, progress: 20, message: "打开视频编辑器" });
+  onStage({ stage: 1, progress: 20, message: "打开公众号视频上传页" });
 
-  return ctx.runPage("wechat", { url: EDITOR_URL(5, (acct.profile as WechatProfile).sessionToken), keepOpen: true, activate: true }, async (cdp, sid) => {
-    await openEditor(cdp, sid, 5, (acct.profile as WechatProfile).sessionToken);
-
-    onStage({ stage: 1, progress: 60, message: "打开「选择视频」弹窗" });
-    await evaluateScalar(
+  /* 公众号的“本地上传”会另开独立视频素材页；编辑器弹窗里没有可复用的 video input。
+     直接进入该页注入文件，避免在旧弹窗里找不存在的输入。 */
+  return ctx.runPage("wechat", { url: VIDEO_UPLOAD_URL((acct.profile as WechatProfile).sessionToken), keepOpen: true, activate: true }, async (cdp, sid) => {
+    await waitForJs(
       cdp,
       sid,
-      `(async () => {
-        const dlg = document.querySelector(".video-select-dialog, .more-video__wrp");
-        if (dlg && dlg.offsetHeight > 0) return true;
-        const btn = document.querySelector("li.tpl_item.jsInsertIcon.video, [class*=jsInsertIcon][class*=video]");
-        if (btn) { btn.click(); await new Promise((r) => setTimeout(r, 1500)); }
-        return true;
+      `(() => {
+        const input = document.querySelector('input.weui-desktop-upload-input[name="vid"][accept*="video"]');
+        const titleInput = document.querySelector('input.weui-desktop-form__input[name="title"]');
+        return !!input && input.offsetHeight > 0 && !!titleInput && titleInput.offsetHeight > 0;
       })()`,
-      { timeoutMs: 15_000 },
+      { timeoutMs: 60_000, intervalMs: 1500, label: "公众号视频上传页" },
     );
-    await evaluateScalar(
+    onStage({ stage: 1, progress: 50, message: "注入视频文件" });
+    await setFileInput(cdp, sid, `(f.accept || "").includes("video")`, [video.path]);
+    await waitForJs(
       cdp,
       sid,
-      `(async () => {
-        const tabs = Array.from(document.querySelectorAll("a, li, div, span"))
-          .filter((e) => e.offsetHeight > 0 && (e.textContent || "").trim() === "本地上传");
-        if (tabs.length) { tabs[0].click(); await new Promise((r) => setTimeout(r, 1200)); }
-        return true;
-      })()`,
-      { timeoutMs: 15_000 },
+      `document.querySelector('input.weui-desktop-upload-input[name="vid"]')?.files?.length === 1`,
+      { timeoutMs: 30_000, intervalMs: 1000, label: "视频文件进入上传控件" },
     );
-    onStage({ stage: 1, progress: 100, message: "弹窗已停在「本地上传」页签" });
+    ctx.log("wechat.video.attached", { asset: video.id, filePath: video.path });
 
-    onStage({ stage: 2, progress: 40, message: "填充标题与正文" });
-    if (!(await fillTextarea(cdp, sid, "textarea#title", (post.title || "未命名").slice(0, 64)))) {
-      throw new Error("未找到公众号标题输入框（页面结构可能变更）");
-    }
-    if (desc) {
-      await pasteIntoProseMirror(
-        cdp,
-        sid,
-        `(roots) => roots.filter((e) => e.offsetHeight > 80).sort((a, b) => b.offsetHeight - a.offsetHeight)[0] || null`,
-        `<p>${desc.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/\n{2,}/g, "</p><p>")}</p>`,
-        desc,
-      );
-    }
-    ctx.log("wechat.video.filled", { asset: video.id, filePath: video.path });
-    onStage({ stage: 3, progress: 100, message: "请在弹窗「本地上传」选择视频文件并点「确定」，检查后自行「保存为草稿」或「发表」" });
+    onStage({ stage: 2, progress: 70, message: "填充素材标题" });
+    const titleOk = await evaluateScalar<boolean>(
+      cdp,
+      sid,
+      `(() => {
+        const input = document.querySelector('input.weui-desktop-form__input[name="title"]');
+        if (!input) return false;
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+        setter?.call(input, ${JSON.stringify(title)});
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        return input.value === ${JSON.stringify(title)};
+      })()`,
+      { timeoutMs: 10_000 },
+    );
+    if (!titleOk) throw new Error("未找到公众号视频素材标题输入框（页面结构可能变更）");
+    ctx.log("wechat.video.material-filled", { asset: video.id, title });
+
+    onStage({ stage: 3, progress: 100, message: "视频与标题已准备；请设置封面、勾选协议并保存/发表，回工作台回填结果" });
     return { url: null, needsManualConfirm: true };
   });
 }
 
-/* ---------- 播客/音频（createType=7）：filetransfer 直传素材库（scene=4，实测可入「插入音频」列表），
-   弹窗里按文件名勾选 → 插入；封面选择留给人工（人工确认本来就是常态） ---------- */
 async function publishAudio({ post, acct, ctx, onStage }: PublishArgs): Promise<PublishResult> {
   onStage({ stage: 0, progress: 30, message: "整理音频" });
   const audio = post.assets.find((a) => a.kind === "audio" && a.path);

@@ -80,6 +80,14 @@ function App() {
       url: platformLink("xhs", "Q9L4V7GB"), createdAt: "09-12 14:20", finishedAt: "09-12 14:20:52",
     },
     {
+      /* 人工确认是独立事实：系统停在平台页后，必须由用户检查并回填结果。 */
+      id: "seed-w", postId: "v1", postTitle: "三分钟讲清「公摊面积」", platformId: "wechat",
+      progress: 100, stage: 3, status: "awaiting_confirm", willFail: false, failReason: null,
+      pageUrl: "https://mp.weixin.qq.com/",
+      manualHint: "请在公众号后台选择视频文件，检查封面与正文，然后保存草稿或发表。",
+      url: null, token: newToken(), createdAt: "09-12 14:31", finishedAt: null,
+    },
+    {
       id: "seed-4", postId: "v1", postTitle: "三分钟讲清「公摊面积」", platformId: "douyin",
       progress: 34, stage: 1, status: "running", willFail: false, failReason: null,
       url: null, token: newToken(), createdAt: "09-12 14:31", finishedAt: null,
@@ -123,6 +131,12 @@ function App() {
               finishedAt: "09-12 " + nowTime() };
           }
           if (progress >= 100) {
+            if (t.platformId === "wechat" || t.platformId === "xhs") {
+              return { ...t, progress: 100, stage: 3, status: "awaiting_confirm",
+                pageUrl: "https://" + t.platformId + ".com",
+                manualHint: "请在平台页面检查内容并完成最后一步，然后回填发布结果。",
+                finishedAt: null };
+            }
             return { ...t, progress: 100, stage: 3, status: "success",
               url: platformLink(t.platformId, t.token), finishedAt: "09-12 " + nowTime() };
           }
@@ -246,6 +260,17 @@ function App() {
     } : t)));
   };
   /* 移除失败记录：不可重试的失败（稿子已删等）不该一直挂在队列里 */
+  /* 人工确认不能直接由 tile click 隐式触发；这里只接收弹层里的最终确认结果。 */
+  const confirmTask = (id, url) => {
+    setTasks((ts) => ts.map((t) => (t.id === id ? {
+      ...t,
+      status: "success",
+      progress: 100,
+      stage: 3,
+      url: url || null,
+      finishedAt: "09-12 " + nowTime(),
+    } : t)));
+  };
   const dismissTask = (id) => setTasks((ts) => ts.filter((t) => t.id !== id));
   /* 删除整条队列记录（一篇稿子的发布记录组）：只删记录，不动稿子与平台账号；进行中不可删 */
   const dismissGroup = (postId) => setTasks((ts) => ts.filter((t) => t.postId !== postId));
@@ -264,7 +289,7 @@ function App() {
     () => Array.from(new Set(tasks.filter((t) => t.status === "success").map((t) => t.postId))),
     [tasks]
   );
-  const runningCount = tasks.filter((t) => t.status === "running").length;
+  const runningCount = tasks.filter((t) => t.status === "running" && !(t.stage === 3 && t.progress >= 100)).length;
   const editing = posts.find((p) => p.id === editingId);
   /* TitleBar 的上下文槽：当前视图名 + 轻元信息。页面头部只保留工具，不重复占左上角。 */
   const screenContext = (() => {
@@ -344,7 +369,7 @@ function App() {
             <div className="w-view" data-screen-label="发布队列">
               <div className="w-canvas">
                 <div className="w-scroll w-queuescroll">
-                  <TasksView tasks={tasks} posts={posts} onRetry={retryTask} onOpen={openPost} onDismiss={dismissTask} onDismissGroup={dismissGroup} />
+                  <TasksView tasks={tasks} posts={posts} onRetry={retryTask} onOpen={openPost} onDismiss={dismissTask} onDismissGroup={dismissGroup} onConfirmTask={confirmTask} />
                 </div>
               </div>
             </div>

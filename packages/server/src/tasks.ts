@@ -130,7 +130,7 @@ export async function createTasks(
   const browserMode = resolvePublishBatchMode(post.type, queuedIds);
   for (const taskId of queuedIds) {
     setTaskBrowserMode(taskId, browserMode);
-    void runTask(taskId).catch(() => {});
+    void runTask(taskId, browserMode).catch(() => {});
   }
   return dtos;
 }
@@ -150,11 +150,13 @@ async function buildDraft(postId: string, targetChannel: TaskChannel | null): Pr
   };
 }
 
-async function runTask(taskId: string): Promise<void> {
+async function runTask(taskId: string, modeOverride?: BrowserMode): Promise<void> {
   const prisma = getPrisma();
   const task = await prisma.publishTask.findUnique({ where: { id: taskId } });
   if (!task) return;
-  const browserMode = taskBrowserMode(taskId, task.platformId, task.postId ? (await getPost(task.postId))?.type ?? "article" : "article");
+  const postType = task.postId ? (await getPost(task.postId))?.type ?? "article" : "article";
+  const browserMode = modeOverride ?? taskBrowserMode(taskId, task.platformId, postType);
+  setTaskBrowserMode(taskId, browserMode);
   const adapter = getAdapter(task.platformId);
   if (!adapter) {
     await prisma.publishTask.update({
@@ -258,6 +260,13 @@ export async function confirmTask(taskId: string, url?: string): Promise<TaskDTO
       finishedAt: new Date(),
     },
   });
+  await prisma.publishLog.create({
+    data: {
+      taskId,
+      event: "manual.confirm.success",
+      payloadJson: JSON.stringify({ url: url ?? null, source: "user" }),
+    },
+  }).catch(() => {});
   const post = await prisma.post.findUnique({ where: { id: task.postId }, select: { title: true } });
   return { ...toTaskDTO(task), postTitle: post?.title || "未命名" };
 }
@@ -270,12 +279,13 @@ export async function retryTask(taskId: string): Promise<TaskDTO> {
     if (mode === "visible") releaseBrowser(mode);
     forgetTaskBrowserMode(taskId);
   }
-  setTaskBrowserMode(taskId, taskBrowserMode(taskId, current.platformId, postType));
+  const retryMode = taskBrowserMode(taskId, current.platformId, postType);
+  setTaskBrowserMode(taskId, retryMode);
   await getPrisma().publishTask.update({
     where: { id: taskId },
     data: { status: "queued", stage: 0, progress: 0, failReason: null, url: null, finishedAt: null },
   });
-  void runTask(taskId).catch(() => {});
+  void runTask(taskId, retryMode).catch(() => {});
   const t = await getPrisma().publishTask.findUniqueOrThrow({ where: { id: taskId } });
   const post = await getPrisma().post.findUnique({ where: { id: t.postId }, select: { title: true } });
   return { ...toTaskDTO(t), postTitle: post?.title || "未命名" };

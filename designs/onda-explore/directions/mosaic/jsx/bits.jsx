@@ -43,11 +43,20 @@ function AudioBar({ durationSec, color = "#0EC3D4", compact = false }) {
   );
 }
 
-/* 发布任务浮动指示条 */
+/* 发布任务浮动指示条：只是短暂提醒，发布队列才是完整事实源；6 秒后自动消失。 */
 function FloatingPill({ tasks, onClick }) {
+  const [hidden, setHidden] = React.useState(false);
   const running = tasks.filter((t) => t.status === "running");
-  if (!running.length) return null;
   const avg = Math.round(running.reduce((s, t) => s + t.progress, 0) / running.length);
+
+  React.useEffect(() => {
+    if (!running.length) return;
+    setHidden(false);
+    const timer = setTimeout(() => setHidden(true), 6000);
+    return () => clearTimeout(timer);
+  }, [running.length]);
+
+  if (!running.length || hidden) return null;
   return (
     <button className="m-pill" onClick={onClick}>
       <span className="sqs">

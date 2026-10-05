@@ -10,6 +10,49 @@ const TYPE_ORDER = ["article", "image", "video", "audio"];
 
 const PALETTE = ["#2C6FF0", "#D52088", "#FD8D11", "#0EC3D4", "#07B56F", "#16130E"];
 
+const K_BLUE = "#2C6FF0";
+const K_MAGENTA = "#D52088";
+const K_ORANGE = "#FD8D11";
+const K_CYAN = "#0EC3D4";
+const K_GREEN = "#07B56F";
+const K_INK = "#16130E";
+const K_PALE = "#E8E4D8";
+
+const STAGES = ["渲染排版", "上传素材", "填充编辑器", "人工确认"];
+
+/* 原型工具函数：只生成稳定假数据，不模拟真实平台行为。 */
+const DEFAULT_TARGETS = {
+  article: ["wechat", "xhs", "zhihu"],
+  image: ["xhs", "weibo", "jike"],
+  video: ["wechat", "xhs", "x"],
+  audio: ["xiaoyuzhou", "ximalaya"],
+};
+
+function asset(color, index = 0) {
+  return { id: `asset-${color.replace(/[^a-z0-9]/gi, "")}-${index}`, color };
+}
+
+function shots(colors) {
+  return colors.map((color, index) => asset(color, index));
+}
+
+function platformLink(platformId, token) {
+  const p = PLATFORMS.find((x) => x.id === platformId);
+  return "https://" + (p?.link || "example.com/item/") + (token || "demo");
+}
+
+function newToken() {
+  return Math.random().toString(36).slice(2, 10).toUpperCase();
+}
+
+function supportsType(platform, type) {
+  return platform.supports?.includes(type) ?? false;
+}
+
+function channelsOf(platform) {
+  return platform.account?.channels || [];
+}
+
 /*
  * 平台矩阵：每个平台声明自己的品牌色、账号状态与「支持哪些发布类型」。
  * 发布弹层只列支持当前稿子类型的平台（见 sheets.jsx）。
@@ -87,7 +130,10 @@ const PLATFORMS = [
       channels: [
         { id: "lz-main", name: "九漾电台", uid: "荔枝播单 lz8823", items: "56 期" },
       ] } },
+];
 
+const POSTS = [
+  /* ---------- 文章 · 18 ---------- */
   {
     id: "a2", type: "article", updated: "09-10 21:44",
     title: "把菜园搬上天台：三个月的试错记录",

@@ -4,7 +4,7 @@
 import React from "react";
 import ReactDOM from "react-dom";
 import { STAGE_LABELS, TYPE_META, type PlatformDTO, type TaskDTO } from "@tassello/shared";
-import { Button, Link as OndaLink } from "@heroui/react";
+import { Button, Link as OndaLink, Modal } from "@heroui/react";
 import { PlatformMark } from "@tassello/ui/platform-icons";
 import { Alert, Check, Refresh, X } from "reicon-react";
 
@@ -20,22 +20,27 @@ function failKind(reason: string | null): "dead" | "fix" | "retry" {
 }
 const FAIL_TAG: Record<"dead" | "fix", string> = { dead: "无法重试", fix: "需改稿" };
 
+function isAwaiting(task: TaskDTO): boolean {
+  return task.status === "running" && task.stage === 3 && task.progress >= 100;
+}
+
 function PlatformTile({
-  task, platform, onRetry, onConfirm, onDelete,
+  task, platform, onRetry, onAskConfirm, onDelete,
 }: {
   task: TaskDTO;
   platform?: PlatformDTO;
   onRetry: (id: string) => void;
-  onConfirm: (id: string) => void;
+  onAskConfirm: (task: TaskDTO) => void;
   onDelete: (id: string) => void;
 }) {
   const p = platform ?? { id: task.platformId, name: task.platformId, char: "?", color: "#2C6FF0", fg: undefined };
   const running = task.status === "running";
   const ok = task.status === "success";
   const pct = Math.max(0, Math.min(100, Math.floor(task.progress)));
-  const awaiting = running && task.stage === 3 && task.progress >= 100;
+  const awaiting = isAwaiting(task);
+  const activeRunning = task.status === "running" && !awaiting;
   /* 水位层只在真正推进时渲染：等待确认（100%+等）再画一层会和底下的平台 icon 叠成重影 */
-  const filling = running && !awaiting;
+  const filling = activeRunning;
   const fg = (p as { fg?: string }).fg || "#fff";
   const pc = (p as { color: string }).color;
 
@@ -85,11 +90,14 @@ function PlatformTile({
   if (awaiting) {
     // 人工确认：适配器已把内容填进浏览器，等用户点完发布回来标记
     return (
-      <span title={`${p.name}${task.channelName ? ` · ${task.channelName}` : ""} · 已到「${STAGE_LABELS[3]}」，检查浏览器后点这里标记完成`}>
+      <span
+        title={`${p.name}${task.channelName ? ` · ${task.channelName}` : ""} · 已到「${STAGE_LABELS[3]}」，检查后回填结果`}
+        onClick={() => onAskConfirm(task)}
+      >
         <Button
           className={TILE + " cursor-default bg-hover"}
           style={{ color: pc }}
-          onPress={() => onConfirm(task.id)}
+          onPress={() => onAskConfirm(task)}
         >
           {body}
           <span className="absolute bottom-[-7px] right-[-7px] z-[3] flex h-[17px] min-w-5 items-center justify-center rounded-md border-2 border-white bg-accent px-1 font-mono text-[9.5px] font-extrabold text-white">等</span>
@@ -124,7 +132,6 @@ function FailedTile({
   const when = (task.finishedAt || "").slice(11, 16);
   const p = platform ?? { id: task.platformId, name: task.platformId, char: "?", color: "#2C6FF0", fg: undefined };
   const label = p.name;
-  const pc = (p as { color: string }).color;
   const wrapRef = React.useRef<HTMLSpanElement | null>(null);
   const tipRef = React.useRef<HTMLSpanElement | null>(null);
   const [open, setOpen] = React.useState(false);
@@ -183,18 +190,20 @@ function FailedTile({
 }
 
 export function TasksView({
-  tasks, posts, platforms, onRetry, onConfirm, onOpen, onDelete,
+  tasks, posts, platforms, onRetry, onConfirmTask, onOpen, onDelete,
 }: {
   tasks: TaskDTO[];
   posts: { id: string; type: string; title: string }[];
   platforms: PlatformDTO[];
   onRetry: (id: string) => void;
-  onConfirm: (id: string) => void;
+  onConfirmTask: (id: string, url: string | null) => void;
   onOpen: (id: string) => void;
   /** 删除队列记录：传该条记录组里的任务 id 列表（不动稿子与平台账号） */
   onDelete: (ids: string[]) => void;
 }) {
-  const running = tasks.filter((t) => t.status === "running" && !(t.stage === 3 && t.progress >= 100));
+  const [confirmTask, setConfirmTask] = React.useState<TaskDTO | null>(null);
+  const running = tasks.filter((t) => t.status === "running" && !isAwaiting(t));
+  const awaiting = tasks.filter(isAwaiting);
   const onDeleteOne = (id: string) => onDelete([id]);
   const failed = tasks.filter((t) => t.status === "failed");
   const ok = tasks.filter((t) => t.status === "success");
@@ -212,7 +221,7 @@ export function TasksView({
   });
   order.forEach((g) => {
     g.post = posts.find((p) => p.id === g.postId);
-    g.running = g.tasks.filter((t) => t.status === "running").length;
+    g.running = g.tasks.filter((t) => t.status === "running" && !isAwaiting(t)).length;
     /* 忙 = 排队或真正执行中；等待确认（stage3+100%）不算，可删 */
     g.busy = g.tasks.some((t) => t.status === "queued" || (t.status === "running" && !(t.stage === 3 && t.progress >= 100)));
     g.bad = g.tasks.filter((t) => t.status === "failed").length;
@@ -227,6 +236,7 @@ export function TasksView({
     <div>
       <div className="mb-[18px] flex flex-wrap items-center gap-[18px] font-mono text-xs text-ink2">
         <span><span className="mr-1.5 inline-block h-2.5 w-2.5 rounded-[3px] bg-blue" />进行中<b className="ml-[5px] text-[15px] text-ink">{running.length}</b></span>
+        <span><span className="mr-1.5 inline-block h-2.5 w-2.5 rounded-[3px] bg-accent" />待确认<b className="ml-[5px] text-[15px] text-ink">{awaiting.length}</b></span>
         <span><span className="mr-1.5 inline-block h-2.5 w-2.5 rounded-[3px] bg-green" />成功<b className="ml-[5px] text-[15px] text-ink">{ok.length}</b></span>
         <span><span className="mr-1.5 inline-block h-2.5 w-2.5 rounded-[3px] bg-error" />失败<b className="ml-[5px] text-[15px] text-ink">{failed.length}</b></span>
         <span className="ml-auto text-ink3">发布在后台跑，不阻塞界面</span>
@@ -259,7 +269,7 @@ export function TasksView({
                       task={task}
                       platform={platforms.find((x) => x.id === task.platformId)}
                       onRetry={onRetry}
-                      onConfirm={onConfirm}
+                      onAskConfirm={setConfirmTask}
                       onDelete={onDeleteOne}
                     />
                   ))}
@@ -287,6 +297,126 @@ export function TasksView({
           );
         })}
       </div>
+
+      {confirmTask && (
+        <ConfirmPublishDialog
+          task={confirmTask}
+          platforms={platforms}
+          onClose={() => setConfirmTask(null)}
+          onConfirm={(taskId, url) => {
+            onConfirmTask(taskId, url);
+            setConfirmTask(null);
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+
+/* 人工确认必须经过显式弹层：避免把“等”误点成发布成功。
+   有公开链接时必须回填；没有公开链接时，也要求用户显式承担确认责任。 */
+function ConfirmPublishDialog({
+  task, platforms, onClose, onConfirm,
+}: {
+  task: TaskDTO;
+  platforms: PlatformDTO[];
+  onClose: () => void;
+  onConfirm: (id: string, url: string | null) => void;
+}) {
+  const [url, setUrl] = React.useState(task.url ?? "");
+  const [noPublicUrl, setNoPublicUrl] = React.useState(false);
+  const p = platforms.find((x) => x.id === task.platformId) ?? {
+    id: task.platformId, name: task.platformId, color: "#2C6FF0", link: "",
+  };
+  const normalizedUrl = url.trim();
+  const urlInvalid = !!normalizedUrl && !/^https?:\/\/\S+$/i.test(normalizedUrl);
+  const canConfirm = !urlInvalid && (!!normalizedUrl || noPublicUrl);
+  const inspectUrl = task.url || p.link || "#";
+
+  return (
+    <Modal>
+      <Modal.Backdrop isOpen onOpenChange={(open) => { if (!open) onClose(); }}>
+        <Modal.Container>
+          <Modal.Dialog
+            className="max-w-[520px] rounded-[18px] bg-paper p-6 shadow-[0_14px_40px_rgba(15,15,15,0.16)]"
+            role="dialog"
+            aria-label={`确认${p.name}发布结果`}
+          >
+            <Modal.Heading className="text-[17px] font-bold tracking-[-0.2px] text-ink">
+              确认 {p.name} 发布结果
+            </Modal.Heading>
+
+            <div className="mt-4 flex min-w-0 items-baseline gap-3">
+              <span className="w-9 flex-none font-mono text-[10.5px] text-ink3">任务</span>
+              <b className="min-w-0 truncate text-sm text-ink">{task.postTitle}</b>
+            </div>
+            {task.channelName && (
+              <div className="mt-2.5 flex min-w-0 items-baseline gap-3">
+                <span className="w-9 flex-none font-mono text-[10.5px] text-ink3">目标</span>
+                <b className="min-w-0 truncate text-sm text-ink">{task.channelName}</b>
+              </div>
+            )}
+
+            <OndaLink
+              className="mt-4 inline-flex text-sm font-bold text-accent hover:underline"
+              href={inspectUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              打开 {p.name} 页面检查
+            </OndaLink>
+
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              if (!canConfirm) return;
+              onConfirm(task.id, noPublicUrl ? null : normalizedUrl);
+            }}>
+              <label className="mt-5 block">
+                <span className="block text-[12.5px] font-bold text-ink">回填发布链接</span>
+                <input
+                  type="url"
+                  inputMode="url"
+                  placeholder="https://..."
+                  value={url}
+                  onChange={(e) => setUrl(e.target.value)}
+                  aria-invalid={urlInvalid}
+                  className={
+                    "mt-2 w-full rounded-[10px] border bg-card px-3 py-2.5 text-[13px] text-ink outline-none transition-colors " +
+                    (urlInvalid ? "border-error" : "border-line focus:border-accent")
+                  }
+                />
+                {urlInvalid && (
+                  <span className="mt-1.5 block text-[11.5px] text-error">请输入 http(s) 开头的完整链接。</span>
+                )}
+              </label>
+
+              <label className="mt-3.5 flex items-start gap-2.5 text-[12.5px] leading-relaxed text-ink2">
+                <input
+                  type="checkbox"
+                  checked={noPublicUrl}
+                  onChange={(e) => setNoPublicUrl(e.target.checked)}
+                  className="mt-0.5 h-[15px] w-[15px] accent-accent"
+                />
+                <span>该结果没有公开链接，我已在平台确认完成</span>
+              </label>
+
+              <div className="mt-6 flex items-center justify-end gap-2.5">
+                <Button variant="ghost" className="rounded-full bg-transparent px-3.5 py-2 text-[13.5px] font-bold text-ink2 data-[hovered=true]:bg-hover" onPress={onClose}>
+                  取消
+                </Button>
+                <Button
+                  type="submit"
+                  isDisabled={!canConfirm}
+                  className="rounded-full bg-accent px-5 py-2 text-[13.5px] font-bold text-white data-[disabled=true]:opacity-35 data-[hovered=true]:brightness-105"
+                >
+                  确认发布完成
+                </Button>
+              </div>
+            </form>
+          </Modal.Dialog>
+        </Modal.Container>
+      </Modal.Backdrop>
+    </Modal>
   );
 }

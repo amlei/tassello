@@ -215,7 +215,11 @@ export const zhihuAdapter: PlatformAdapter<ZhihuProfile> = {
       const title = (post.title || "").trim();
       const result = await ctx.runPage("zhihu", {
         url: ZHIHU_UPLOAD_VIDEO_URL, keepOpen: true, activate: true,
-      }, async (cdp, sessionId) => uploadZhihuVideoDraft(cdp, sessionId, video.path, title, onStage));
+      }, async (cdp, sessionId) => uploadZhihuVideoDraft(cdp, sessionId, video.path, title, (post.body || "").trim(), onStage));
+      if (!result) {
+        ctx.log("zhihu.video.draft-not-found", { waitedMs: 240_000, keptOpen: true });
+        return { url: ZHIHU_UPLOAD_VIDEO_URL, needsManualConfirm: true, receipt: { kind: "upload-unverified" } };
+      }
       return {
         url: ZHIHU_UPLOAD_VIDEO_URL,
         needsManualConfirm: true,
@@ -366,13 +370,67 @@ function replaceLocalZhihuImages(
   return replaced;
 }
 
+/** 知乎上传成功后的页内表单：title 是 React textarea，介绍是 Draft.js contenteditable。 */
+async function fillZhihuVideoForm(
+  cdp: CdpLike,
+  sessionId: string,
+  title: string,
+  content: string,
+): Promise<void> {
+  const titleOk = await evaluateScalar<boolean>(
+    cdp,
+    sessionId,
+    `(() => {
+      const editor = document.querySelector('textarea[name="title"]');
+      if (!editor || editor.offsetHeight === 0) return false;
+      const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+      setter?.call(editor, ${JSON.stringify(title)});
+      editor.dispatchEvent(new Event("input", { bubbles: true }));
+      return true;
+    })()`,
+    { timeoutMs: 5_000 },
+  ).catch(() => false);
+  if (!titleOk) throw new Error("未找到知乎视频标题输入框（页面结构可能变更）");
+
+  const focused = await evaluateScalar<boolean>(
+    cdp,
+    sessionId,
+    `(() => {
+      const editor = [...document.querySelectorAll('.public-DraftEditor-content[contenteditable="true"]')]
+        .find((e) => e.offsetWidth > 0 && e.offsetHeight > 0);
+      if (!editor) return false;
+      editor.focus();
+      return document.activeElement === editor;
+    })()`,
+    { timeoutMs: 5_000 },
+  ).catch(() => false);
+  if (!focused) throw new Error("未找到知乎视频介绍编辑器（页面结构可能变更）");
+  await cdp.send("Input.insertText", { text: content }, { sessionId });
+
+  // Draft.js 受控更新是异步的；必须确认内容真的稳定留在页面上。
+  await new Promise((resolve) => setTimeout(resolve, 1200));
+  const saved = await evaluateScalar<{ title: string; content: string }>(
+    cdp,
+    sessionId,
+    `(() => JSON.parse(JSON.stringify({
+      title: document.querySelector('textarea[name="title"]')?.value || "",
+      content: [...document.querySelectorAll('.public-DraftEditor-content[contenteditable="true"]')]
+        .find((e) => e.offsetWidth > 0 && e.offsetHeight > 0)?.innerText?.trim() || "",
+    })))()`,
+    { timeoutMs: 5_000 },
+  ).catch(() => ({ title: "", content: "" }));
+  if (saved.title !== title) throw new Error("知乎视频标题未稳定写入");
+  if (!saved.content) throw new Error("知乎视频介绍未稳定写入");
+}
+
 async function uploadZhihuVideoDraft(
   cdp: CdpLike,
   sessionId: string,
   assetPath: string,
   title: string,
+  content: string,
   onStage: StageReporter,
-): Promise<ZhihuVideoDraft> {
+): Promise<ZhihuVideoDraft | null> {
   onStage({ stage: 1, progress: 10, message: "连接知乎视频上传编辑器" });
   for (let attempt = 0; attempt < 30; attempt += 1) {
     const ready = await evaluateScalar<boolean>(cdp, sessionId, `location.hostname === "www.zhihu.com" && !!document.querySelector('input[type="file"][accept*=".mp4"]')`).catch(() => false);
@@ -422,12 +480,15 @@ async function uploadZhihuVideoDraft(
     })()`, { timeoutMs: 20_000 }).catch(() => [] as ZhihuVideoDraft[]);
     const matched = drafts.find((draft) => draft.title === normalizedTitle) ?? drafts[0];
     if (matched) {
-      onStage({ stage: 3, progress: 100, message: "视频已上传并保存为知乎想法草稿" });
+      onStage({ stage: 2, progress: 80, message: "填充知乎视频标题与介绍" });
+      await fillZhihuVideoForm(cdp, sessionId, normalizedTitle, content);
+      onStage({ stage: 3, progress: 100, message: "视频已上传，标题与介绍已填充；请检查后手动发布" });
       return matched;
     }
     await new Promise((resolve) => setTimeout(resolve, 1_000));
   }
-  throw new Error("知乎视频上传后未找到草稿");
+  onStage({ stage: 3, progress: 100, message: "自动草稿未出现；请在上传页继续检查视频状态并手动完成" });
+  return null;
 }
 
 async function publishPin(

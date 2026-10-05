@@ -29,8 +29,8 @@ export function QueueScreen({
     try { await api.retryTask(id); } catch {}
     void api.listTasks().then(setTasks).catch(() => {});
   };
-  const confirmTask = async (id: string) => {
-    try { await api.confirmTask(id); } catch {}
+  const confirmTask = async (id: string, url: string | null) => {
+    try { await api.confirmTask(id, url ?? undefined); } catch {}
     void api.listTasks().then(setTasks).catch(() => {});
   };
   /* 删除队列记录（一组或单条失败）：只删记录，不动稿子与平台账号 */
@@ -60,7 +60,7 @@ export function QueueScreen({
             posts={postMins}
             platforms={platforms}
             onRetry={(id) => void retryTask(id)}
-            onConfirm={(id) => void confirmTask(id)}
+            onConfirmTask={(id, url) => void confirmTask(id, url)}
             onOpen={(id) => router.push(`/editor/${id}`)}
             onDelete={(ids) => void deleteTasks(ids)}
           />

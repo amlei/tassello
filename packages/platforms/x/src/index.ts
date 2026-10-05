@@ -190,7 +190,7 @@ export const xAdapter: PlatformAdapter<XProfile> = {
     onStage: StageReporter,
     options?: AdapterPublishOptions,
   ): Promise<PublishResult> {
-    const intent = options?.intent ?? "auto";
+    const intent = post.type === "video" ? "draft" : options?.intent ?? "auto";
     if (options?.channel === "article") {
       throw new Error("X Articles 编辑器未接入；当前只支持普通帖子（想法）");
     }

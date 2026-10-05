@@ -59,7 +59,7 @@
   --overlay-foreground: #e6e5e3;
   --muted: #6f6e69;
   --default: #e6e5e3;
-  --default-foreground: #191919; /* default 变体按钮文字（未使用）；ghost 文字走 text-ink */
+  --default-foreground: #e6e5e3; /* HeroUI ghost / secondary 按钮前景跟随深色 ink */
   --field-background: #252525;
   --field-foreground: #e6e5e3;
   --field-placeholder: #6f6e69;

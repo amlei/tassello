@@ -112,26 +112,32 @@ async function mouseClick(cdp: CdpLike, sessionId: string, x: number, y: number)
   await cdp.send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1 } as never, { sessionId });
 }
 
-/** 点发布页顶部的形态 tab（上传视频 / 上传图文 / 写长文） */
+/** 点发布页顶部的形态 tab（上传视频 / 上传图文 / 写长文）。
+ *  登录接口就绪不代表 React tab 已挂载，所以入口查找必须在短窗口内轮询。 */
 async function switchTab(cdp: CdpLike, sessionId: string, tabText: string): Promise<void> {
-  const ok = await evaluateScalar<boolean>(
-    cdp,
-    sessionId,
-    `(() => {
-      const tabs = Array.from(document.querySelectorAll('[role="tab"], li, div, span'))
-        .filter((el) => (el.textContent || "").trim() === ${JSON.stringify(tabText)}
-          && el.offsetParent !== null
-          && el.children.length <= 2);
-      // 取最内层匹配（外层容器 textContent 也等于目标文本）
-      const el = tabs[tabs.length - 1];
-      if (!el) return false;
-      el.click();
-      return true;
-    })()`,
-    { timeoutMs: 10_000 },
-  );
-  if (!ok) throw new Error(`未找到「${tabText}」入口（页面结构可能变更）`);
-  await sleep(1500);
+  const expression = `(() => {
+    const tabs = Array.from(document.querySelectorAll('[role="tab"], li, div, span'))
+      .filter((el) => (el.textContent || "").trim() === ${JSON.stringify(tabText)}
+        && el.offsetParent !== null
+        && el.children.length <= 2);
+    // 取最内层匹配（外层容器 textContent 也等于目标文本）
+    const el = tabs[tabs.length - 1];
+    if (!el) return false;
+    el.click();
+    return true;
+  })()`;
+  const start = Date.now();
+  for (;;) {
+    const ok = await evaluateScalar<boolean>(cdp, sessionId, expression, { timeoutMs: 5_000 }).catch(() => false);
+    if (ok) {
+      await sleep(1500);
+      return;
+    }
+    if (Date.now() - start > 20_000) {
+      throw new Error(`未找到「${tabText}」入口（页面加载超时或结构可能变更）`);
+    }
+    await sleep(750);
+  }
 }
 
 /** 把本地文件塞进当前形态的上传入口（DOM.setFileInputFiles，入口是初始化即存在的 upload-input） */
@@ -550,24 +556,27 @@ export const xhsAdapter: PlatformAdapter<XhsProfile> = {
       // 按钮在 xhs-publish-btn 的 closed shadow DOM 里，pierce 拿坐标 + 真实鼠标点击
       const point = await findShadowTextPoint(cdp, sid, "暂存离开");
       await mouseClick(cdp, sid, point[0], point[1]);
-      // 等保存反馈（toast「保存成功」或草稿箱计数出现），宽松处理
+      // 只接受明确的保存 toast；“草稿箱”是常驻入口，不能当保存成功证据。
       let saved = false;
+      let sample = "";
       for (let i = 0; i < 15; i++) {
         await sleep(2000);
         try {
-          saved = await evaluateScalar<boolean>(
+          const probe = await evaluateScalar<{ saved: boolean; sample: string }>(
             cdp,
             sid,
             `(() => {
               const t = (document.body && document.body.innerText) || "";
-              return /保存成功|已保存|草稿箱/.test(t);
+              return JSON.parse(JSON.stringify({ saved: /保存成功|已保存/.test(t), sample: t.slice(0, 300) }));
             })()`,
             { timeoutMs: 8_000 },
           );
-          if (saved) break;
+          sample = probe.sample;
+          if (probe.saved) { saved = true; break; }
         } catch {}
       }
-      ctx.log("xhs.publish.draft", { saved });
+      ctx.log("xhs.publish.draft", { saved, sample });
+      if (!saved) throw new Error("小红书草稿保存失败（未出现明确的「保存成功/已保存」提示）");
       const draftEntry = `${XHS_PUBLISH_URL}（右上角「草稿箱」）`;
       onStage({ stage: 3, progress: 100, message: `已存草稿，草稿入口：${draftEntry}` });
       return { url: XHS_PUBLISH_URL, needsManualConfirm: true };
