@@ -99,11 +99,11 @@ export const api = {
     });
     return unwrap<AppSettings>(res);
   },
-  async publish(postId: string, platformIds: string[]): Promise<TaskDTO[]> {
+  async publish(postId: string, platformIds: string[], channelIds: Record<string, string> = {}): Promise<TaskDTO[]> {
     const res = await fetch("/api/publish", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ postId, platformIds }),
+      body: JSON.stringify({ postId, platformIds, channelIds }),
     });
     return unwrap<TaskDTO[]>(res);
   },

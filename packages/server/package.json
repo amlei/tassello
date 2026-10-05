@@ -10,7 +10,6 @@
     "@tassello/platform-douban": "workspace:*",
     "@tassello/platform-jike": "workspace:*",
     "@tassello/platform-lizhi": "workspace:*",
-    "@tassello/platform-qingting": "workspace:*",
     "@tassello/platform-wechat": "workspace:*",
     "@tassello/platform-weibo": "workspace:*",
     "@tassello/platform-x": "workspace:*",

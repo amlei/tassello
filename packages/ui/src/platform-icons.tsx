@@ -1,16 +1,17 @@
-/* platform-icons —— 平台品牌图标（fill 走 currentColor）
- * SVG 来源：wechat/weibo/xhs/bili/x/zhihu/douban/toutiao/baijiahao/douyin 取自 brands.reicon.dev；
- * jike/xiaoyuzhou/ximalaya/lizhi/qingting 使用用户提供图片（apps/web/public/platforms/）。
- * 都没有的平台回退渲染 char 字块 */
-"use client";
+/* @tassello/ui —— 跨端平台品牌图标：SVG 与图片资源只维护一份。 */
+import type { CSSProperties } from "react";
+import jikeImage from "../assets/platforms/jike.png";
+import xiaoyuzhouImage from "../assets/platforms/xiaoyuzhou.png";
+import ximalayaImage from "../assets/platforms/ximalaya.png";
+import lizhiImage from "../assets/platforms/lizhi.png";
 
-/* 图片型平台标记（多色官方图标，随图片渲染，不随 currentColor 变色） */
-export const PLATFORM_IMAGE_MARKS: Record<string, string> = {
-  jike: "/platforms/jike.png",
-  xiaoyuzhou: "/platforms/xiaoyuzhou.png",
-  ximalaya: "/platforms/ximalaya.png",
-  lizhi: "/platforms/lizhi.png",
-  qingting: "/platforms/qingting.png",
+export type PlatformImageSource = string | { src: string };
+
+export const PLATFORM_IMAGE_MARKS: Record<string, PlatformImageSource> = {
+  jike: jikeImage,
+  xiaoyuzhou: xiaoyuzhouImage,
+  ximalaya: ximalayaImage,
+  lizhi: lizhiImage,
 };
 
 export const PLATFORM_MARKS: Record<string, { viewBox: string; paths: { d: string; evenodd?: boolean; stroke?: boolean; width?: number }[] }> = {
@@ -89,14 +90,15 @@ export function PlatformMark({
   /** 尺寸/边距工具类：HeroUI 按钮会用 .button svg 强制 16px，需要显式覆盖 */
   className?: string;
 }) {
-  const img = PLATFORM_IMAGE_MARKS[id];
-  if (img) {
+  const imageSource = PLATFORM_IMAGE_MARKS[id];
+  const image = typeof imageSource === "string" ? imageSource : imageSource?.src;
+  if (image) {
     /* 图片图标不随 currentColor 变色，用透明度对齐字块的三态：
      * lit = 全彩（点亮）；dim = 未点亮半透明；off = 未接入/失败 —— 去色 + 更淡，
      * 跟 SVG 走 ink3 灰的 off 态保持同一个语言：凭据没拿到就不许有平台色。
      * 不做灰度会出现在账号区和平台区「同一平台两种状态语言」的割裂。 */
     const imgSize = Math.round(size * imgScale);
-    const style: React.CSSProperties = { display: "block" };
+    const style: CSSProperties = { display: "block" };
     if (tone === "off") {
       style.opacity = 0.35;
       style.filter = "grayscale(1)";
@@ -105,7 +107,7 @@ export function PlatformMark({
     }
     return (
       // eslint-disable-next-line @next/next/no-img-element
-      <img src={img} width={imgSize} height={imgSize} alt="" aria-hidden="true" style={style} className={className} />
+      <img src={image} width={imgSize} height={imgSize} alt="" aria-hidden="true" style={style} className={className} />
     );
   }
   const mark = PLATFORM_MARKS[id];

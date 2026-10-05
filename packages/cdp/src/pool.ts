@@ -47,6 +47,9 @@ let connecting: Promise<CdpConnection> | null = null;
 let connectingMode: BrowserMode = "headless";
 let chromeProc: ChildProcess | null = null;
 let activeMode: BrowserMode | null = null;
+let idleTimer: ReturnType<typeof setTimeout> | null = null;
+let maintenance = false;
+const BROWSER_IDLE_CLOSE_MS = Number(process.env.TASSELLO_BROWSER_IDLE_CLOSE_MS ?? 5000);
 
 /** 模式租约：正在执行的 page 和等待人工确认的 visible 批次都会计数。
  *  计数未归零前，相反模式的 acquire 必须等待，绝不能 shutdown 浏览器。 */
@@ -58,7 +61,10 @@ export type BrowserMode = "headless" | "visible";
 /** 取共享浏览器连接：已有调试端口就复用，否则拉起。
  *  acquire 会占用一个模式租约；调用方完成后必须 releaseBrowser。 */
 export async function acquireConnection(mode: BrowserMode): Promise<CdpConnection> {
+  if (maintenance) throw new Error("浏览器正在维护，请稍后重试");
   const acquire = acquireQueue.catch(() => {}).then(async () => {
+    if (maintenance) throw new Error("浏览器正在维护，请稍后重试");
+
     for (;;) {
       if (activeMode && activeMode !== mode && modeLeases[activeMode] > 0) {
         await sleep(100);
@@ -107,6 +113,37 @@ export async function acquireConnection(mode: BrowserMode): Promise<CdpConnectio
   return acquire;
 }
 
+function cancelIdleClose(): void {
+  if (idleTimer) {
+    clearTimeout(idleTimer);
+    idleTimer = null;
+  }
+}
+
+function scheduleIdleClose(): void {
+  if (maintenance || modeLeases.headless > 0 || modeLeases.visible > 0) return;
+  cancelIdleClose();
+  idleTimer = setTimeout(() => {
+    idleTimer = null;
+    if (!maintenance && modeLeases.headless === 0 && modeLeases.visible === 0) shutdownBrowser();
+  }, Math.max(0, BROWSER_IDLE_CLOSE_MS));
+  // Bun/Node 定时器不该阻止桌面应用退出；真正关闭由 Runtime 或进程生命周期兜底。
+  idleTimer.unref?.();
+}
+
+/** 导入 profile 是维护操作：先拿到 maintenance，才能安全关闭/替换专用 profile。 */
+export function beginBrowserMaintenance(): boolean {
+  if (modeLeases.headless > 0 || modeLeases.visible > 0) return false;
+  maintenance = true;
+  cancelIdleClose();
+  return true;
+}
+
+export function endBrowserMaintenance(): void {
+  maintenance = false;
+  scheduleIdleClose();
+}
+
 /** visible 人工确认批次在 adapter 返回后仍要继续持有浏览器。 */
 export function retainBrowser(mode: BrowserMode): void {
   if (activeMode === mode) modeLeases[mode] += 1;
@@ -114,6 +151,7 @@ export function retainBrowser(mode: BrowserMode): void {
 
 export function releaseBrowser(mode: BrowserMode): void {
   modeLeases[mode] = Math.max(0, modeLeases[mode] - 1);
+  scheduleIdleClose();
 }
 
 /** 导入 profile 前必须阻断：visible 人工批次 / 登录页租约存在时不能杀应用 Chrome。 */
@@ -136,6 +174,7 @@ export async function withBrowserLease<T>(
 
 /** 关停本应用的浏览器实例（连接断开 + 进程结束），profile 即可被安全替换 */
 export function shutdownBrowser(): void {
+  cancelIdleClose();
   try {
     conn?.close();
   } catch {}

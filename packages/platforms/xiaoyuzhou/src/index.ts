@@ -266,14 +266,14 @@ export const xiaoyuzhouAdapter: PlatformAdapter<XiaoyuzhouProfile> = {
     if (!audioAsset) throw new Error("小宇宙发布需要一个音频素材（WAV/MP3/M4A，≤2GB）");
     const imageAsset = post.assets.find((a) => a.kind === "image" && a.path);
 
-    // 目标节目：env 指定 > 唯一节目默认 > 多节目时报错列出可选
+    // 目标节目：用户选择 > env 兜底 > 唯一节目默认；多节目且无选择时不猜。
     const channels = acct?.profile?.channels ?? [];
     const pidEnv = process.env.TASSELLO_XIAOYUZHOU_PID?.trim();
-    const channel = pidEnv
-      ? channels.find((c) => c.pid === pidEnv)
-      : channels.length === 1
-        ? channels[0]
-        : undefined;
+    const channel = (post.targetChannel
+      ? channels.find((c) => c.pid === post.targetChannel!.id)
+      : undefined)
+      ?? (pidEnv ? channels.find((c) => c.pid === pidEnv) : undefined)
+      ?? (channels.length === 1 ? channels[0] : undefined);
     if (!channel) {
       const list = channels.map((c) => `${c.pid}(${c.title})`).join(", ") || "（无）";
       throw new Error(`未能确定目标节目：请用 TASSELLO_XIAOYUZHOU_PID 指定。账号下节目：${list}`);

@@ -3,6 +3,7 @@ import { $ } from "bun";
 
 const targets = [
   "packages/shared",
+  "packages/ui",
   "packages/db",
   "packages/render",
   "packages/cdp",
@@ -15,7 +16,6 @@ const targets = [
   "packages/platforms/xiaoyuzhou",
   "packages/platforms/ximalaya",
   "packages/platforms/lizhi",
-  "packages/platforms/qingting",
   "packages/server",
   "apps/web",
   "apps/obsidian",

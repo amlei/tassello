@@ -6,7 +6,7 @@ import { TYPE_META, TYPE_ORDER, type PlatformDTO, type ContentType, type AppSett
 import { Button, Modal, Popover } from "@heroui/react";
 import { Alert, Check, Refresh, X } from "reicon-react";
 import { ChevronDown, ChevronLeft, ChevronRight } from "reicon-react";
-import { PLATFORM_IMAGE_MARKS, PLATFORM_MARKS, PlatformMark } from "./platform-icons";
+import { PLATFORM_IMAGE_MARKS, PLATFORM_MARKS, PlatformMark } from "@tassello/ui/platform-icons";
 import { ChromeIcon, EdgeIcon } from "./browser-icons";
 import { ThemeSwitcher } from "./theme";
 
@@ -34,7 +34,7 @@ const CHIP = "inline-block flex-none min-w-[66px] rounded-full border px-[9px] p
 
 function StatusChip({ p, busy }: { p: PlatformDTO; busy: boolean }) {
   const off = p.status !== "active" || !p.account || p.account.state !== "ok";
-  if (busy) return <span className={CHIP}>检查中…</span>;
+  if (busy) return <span className={CHIP + " border-accent/35 bg-accent-tint text-accent"}>检查中…</span>;
   if (p.status !== "active") return <span className={CHIP + " border-error/30 bg-error/10 text-error"}>planned</span>;
   if (off) return <span className={CHIP + " border-[#F2C2D1] text-error"}>未连接</span>;
   return <span className={CHIP + " border-[#B7E3CD] text-green"}>已获取</span>;
@@ -159,6 +159,23 @@ function AccountPopBody({
               <dd className="text-[12.5px] leading-[1.7] text-ink">{p.lands}</dd>
             </div>
           </dl>
+          {(a?.channels?.length ?? 0) > 0 && (
+            <div className="rounded-xl border border-line bg-hover/45 p-3">
+              <div className="mb-2 flex items-center justify-between font-mono text-[10.5px] text-ink3">
+                <span>频道</span>
+                <span>{String(a?.channels?.length ?? 0).padStart(2, "0")}</span>
+              </div>
+              <div className="flex max-h-[142px] flex-col gap-[7px] overflow-auto scroll-thin">
+                {a?.channels?.map((c) => (
+                  <div key={c.id} className="flex min-w-0 items-center gap-2">
+                    <span className="block h-[7px] w-[7px] flex-none rounded-full" style={{ background: p.color }} aria-hidden="true" />
+                    <span className="min-w-0 flex-1 truncate text-[12.5px] font-bold text-ink">{c.name}</span>
+                    <span className="flex-none font-mono text-[10px] text-ink3">{c.id}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           <Button variant="ghost" isDisabled={busy} className={relinkCls} onPress={() => onVerify(p.id)}>
             <Refresh size={11} strokeWidth={3.3} /> {busy ? "检查中…" : "重新检查"}
           </Button>
@@ -286,7 +303,7 @@ export function SettingsSheet({
                                 ? { background: "var(--color-hover)", color: "var(--color-ink3)" }
                                 : on
                                   ? { background: p.color, color: p.fg || "#fff" }
-                                  : { background: p.color + "2E", color: p.fg ? "var(--color-ink)" : p.color };
+                                  : { background: `color-mix(in srgb, ${p.color} 18%, transparent)`, color: p.fg ? "var(--color-ink)" : p.color };
                               return (
                                 <span key={p.id} title={p.name + (off ? ` · 账号未连接，点一下可修复` : on ? ` · 已是${t.zh}的默认平台` : ` · 点一下设为${t.zh}的默认平台`)} className="inline-flex">
                                   <Button

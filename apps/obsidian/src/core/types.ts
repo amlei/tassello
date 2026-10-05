@@ -1,5 +1,7 @@
+import { PLATFORM_METAS } from "@tassello/platform-core";
+
 export type ContentType = "article" | "image" | "video" | "audio";
-export type PlatformId = "weibo" | "zhihu" | "xhs" | "jike" | "douban" | "x";
+export type PlatformId = string;
 export type BrowserStatus =
   | "disconnected"
   | "checking"
@@ -68,69 +70,25 @@ export type PlatformCapability = {
   name: string;
   short: string;
   color: string;
+  fg?: string;
   glyph: string;
   supports: ContentType[];
   description: string;
 };
 
-export const PLATFORMS: PlatformCapability[] = [
-  {
-    id: "jike",
-    name: "即刻",
-    short: "即",
-    color: "#FFD400",
-    glyph: "即",
-    supports: ["image"],
-    description: "读取当前 Chrome 登录态，自动发送动态/图文",
-  },
-  {
-    id: "douban",
-    name: "豆瓣",
-    short: "豆",
-    color: "#2E963D",
-    glyph: "豆",
-    supports: ["article", "image"],
-    description: "创建豆瓣发言草稿；投递和发布由你完成",
-  },
-  {
-    id: "x",
-    name: "X",
-    short: "X",
-    color: "#16130E",
-    glyph: "X",
-    supports: ["article", "image"],
-    description: "发送普通帖子/想法；X Articles 暂不接入",
-  },
-  {
-    id: "weibo",
-    name: "微博",
-    short: "博",
-    color: "#FF8200",
-    glyph: "博",
-    supports: ["article", "image"],
-    description: "发送到微博首页 composer，自动点击发送",
-  },
-  {
-    id: "zhihu",
-    name: "知乎",
-    short: "知",
-    color: "#0084FF",
-    glyph: "知",
-    supports: ["article", "image"],
-    description: "创建知乎草稿，等待你人工确认",
-  },
-  {
-    id: "xhs",
-    name: "小红书",
-    short: "红",
-    color: "#FF2442",
-    glyph: "红",
-    supports: ["article", "image"],
-    description: "创建小红书草稿，等待你人工确认",
-  },
-];
+export const PLATFORMS: PlatformCapability[] = PLATFORM_METAS.map((meta) => ({
+  id: meta.id,
+  name: meta.name,
+  short: meta.char,
+  color: meta.color,
+  fg: meta.fg,
+  glyph: meta.char,
+  supports: meta.supports,
+  description: meta.lands,
+}));
 
 export const PLATFORM_BY_ID = new Map(PLATFORMS.map((p) => [p.id, p]));
+
 /** 同一 Markdown 在不同平台的实际发布形态；article 只是源类型，不代表平台一定有独立文章通道。 */
 export function effectiveContentType(platformId: PlatformId, sourceType: ContentType): ContentType {
   const capability = PLATFORM_BY_ID.get(platformId);

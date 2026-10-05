@@ -12,6 +12,8 @@
   --tp-error: var(--text-error);
   --tp-warn: var(--text-warning, #c88a00);
   --tp-ok: var(--text-success, #089e79);
+  --plat-x: var(--text-normal);
+  --plat-x-fg: var(--background-primary);
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -59,7 +61,7 @@
 }
 
 .tassello-publisher .mode {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 3px;
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 3px;
   padding: 3px; border: 1px solid var(--tp-line); border-radius: 10px; background: var(--tp-rail);
 }
 .tassello-publisher .mode button {
@@ -77,6 +79,211 @@
 /* 预览页下部固定在视口内：检查与平台选择保持可见，长正文只在 payload 卡片里滚动。 */
 .tassello-publisher .panel-body:has(.preview-frame) { overflow: hidden; }
 .tassello-publisher .panel-foot { flex: 0 0 auto; padding: 10px 14px; border-top: 1px solid var(--tp-line); background: var(--tp-card); }
+
+.tassello-publisher .selector-card {
+  padding: 7px; border: 1px solid var(--tp-line); border-radius: 10px; background: var(--tp-card);
+  display: flex; flex-direction: column; gap: 6px; box-shadow: 0 1px 2px rgba(0,0,0,.04);
+}
+.tassello-publisher .selector-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.tassello-publisher .selector-label { width: 28px; flex: 0 0 auto; color: var(--tp-ink3); font-size: 9.5px; font-weight: 800; text-align: center; }
+.tassello-publisher .type-options {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(52px, 1fr));
+  gap: 4px;
+}
+.tassello-publisher .type-options button {
+  width: 100%;
+  min-width: 0;
+  height: 30px;
+  padding: 0 4px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  white-space: nowrap;
+}
+.tassello-publisher .platform-options {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding: 4px;
+  margin: -4px;
+}
+.tassello-publisher .platform-options::-webkit-scrollbar { display: none; }
+.tassello-publisher .platform-option {
+  position: relative;
+  flex: 0 0 auto;
+  width: 27px;
+  height: 27px;
+  border: 0;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  overflow: visible;
+  color: white;
+  font-size: 10px;
+  font-weight: 900;
+  cursor: pointer;
+  opacity: .46;
+}
+.tassello-publisher .platform-option:hover { opacity: .76; }
+.tassello-publisher .selector-summary {
+  min-height: 27px;
+  padding: 0 5px 0 7px;
+  border-top: 1px solid var(--tp-line);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--tp-ink2);
+  font-size: 10.5px;
+}
+.tassello-publisher .selector-summary .count { display: inline-flex; align-items: baseline; gap: 3px; }
+.tassello-publisher .selector-summary .count strong {
+  color: var(--tp-ink);
+  font-family: var(--font-monospace);
+  font-size: 11px;
+  font-weight: 700;
+}
+.tassello-publisher .selector-summary .count .total { color: var(--tp-ink3); font-family: var(--font-monospace); font-size: 10px; }
+.tassello-publisher .selector-summary .divider { width: 1px; height: 14px; background: var(--tp-line); }
+.tassello-publisher .selector-summary .summary-link {
+  margin-left: auto;
+  min-height: 21px;
+  padding: 0 7px;
+  border-radius: 99px;
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--tp-ink2);
+  font-size: 10px;
+  font-weight: 650;
+  transition: .15s ease;
+}
+.tassello-publisher .selector-summary .summary-link:hover { background: var(--tp-hover); color: var(--tp-ink); }
+.tassello-publisher .selector-summary .summary-link .arrow {
+  font-family: var(--font-monospace);
+  font-size: 10px;
+  line-height: 1;
+  transform: translateY(.5px);
+}
+.tassello-publisher .platform-option.active,
+.tassello-publisher .platform-option.selected {
+  opacity: 1;
+  box-shadow: 0 0 0 2px var(--tp-card), 0 0 0 4px var(--tp-ink);
+}
+.tassello-publisher .platform-wall {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(42px, 1fr));
+  gap: 8px;
+}
+.tassello-publisher .platform-icon {
+  position: relative;
+  width: 42px;
+  height: 42px;
+  border: 0;
+  border-radius: 12px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  overflow: visible;
+  cursor: pointer;
+  transition: transform .16s ease, opacity .16s ease;
+}
+.tassello-publisher .platform-icon.muted { background: var(--tp-hover) !important; color: var(--tp-ink3) !important; box-shadow: none !important; }
+.tassello-publisher .platform-icon.muted:hover { transform: none; }
+.tassello-publisher .platform-icon:hover { transform: translateY(-2px); }
+.tassello-publisher .platform-icon.selected {
+  box-shadow: 0 0 0 2px var(--tp-card), 0 0 0 4px var(--tp-accent);
+}
+.tassello-publisher .platform-icon .check {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  z-index: 3;
+  width: 18px;
+  height: 18px;
+  border-radius: 7px;
+  background: var(--tp-card);
+  color: var(--tp-ink);
+  border: 2px solid var(--tp-accent);
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 1;
+}
+.tassello-publisher .platform-option .glyph,
+.tassello-publisher .platform-icon .glyph,
+.tassello-publisher .target-top .glyph,
+.tassello-publisher .chip .glyph {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: inherit;
+}
+.tassello-publisher .platform-option .glyph svg,
+.tassello-publisher .platform-option .glyph img,
+.tassello-publisher .platform-icon .glyph svg,
+.tassello-publisher .platform-icon .glyph img,
+.tassello-publisher .target-top .glyph svg,
+.tassello-publisher .target-top .glyph img,
+.tassello-publisher .chip .glyph svg,
+.tassello-publisher .chip .glyph img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.tassello-publisher .findings-panel {
+  flex: 0 0 auto;
+  width: 100%;
+  border: 1px solid var(--tp-line); border-radius: 9px; background: var(--tp-card); overflow: hidden;
+}
+.tassello-publisher .findings-toggle {
+  width: 100%; min-height: 30px; padding: 6px 8px; border: 0; background: transparent;
+  color: var(--tp-ink2); font-size: 10px; font-weight: 800;
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  cursor: pointer;
+}
+.tassello-publisher .findings-state { color: var(--tp-ink3); font-family: var(--font-monospace); font-size: 9px; }
+.tassello-publisher .findings-panel .findings { padding: 0 7px 7px; }
+.tassello-publisher .preview-content { display: flex; flex-direction: column; gap: 9px; }
+.tassello-publisher .platform-wall { display: grid; grid-template-columns: repeat(auto-fill, minmax(42px, 1fr)); gap: 8px; }
+.tassello-publisher .platform-wall .platform-icon,
+.tassello-publisher .platform-options .platform-option {
+  overflow: hidden;
+}
+.tassello-publisher .platform-wall .platform-icon svg,
+.tassello-publisher .platform-wall .platform-icon img,
+.tassello-publisher .platform-options .platform-option svg,
+.tassello-publisher .platform-options .platform-option img {
+  display: block;
+}
+.tassello-publisher .platform-icon {
+  position: relative; width: 42px; height: 42px; border: 0; border-radius: 12px; padding: 0;
+  display: grid; place-items: center; background: color-mix(in srgb, var(--tp-ink) 8%, var(--tp-card));
+  color: var(--tp-ink2); transition: transform .16s ease, opacity .16s ease;
+}
+.tassello-publisher .platform-icon.muted { background: var(--tp-hover) !important; color: var(--tp-ink3) !important; box-shadow: none !important; }
+.tassello-publisher .platform-icon.muted:hover { transform: none; }
+.tassello-publisher .platform-icon:hover { transform: translateY(-2px); }
+.tassello-publisher .platform-icon.selected {
+  background: var(--tp-accent); color: white;
+  box-shadow: 0 0 0 2px var(--tp-card), 0 0 0 4px var(--tp-accent);
+}
+
+.tassello-publisher .notice {
+  padding: 9px 10px; border: 1px solid var(--tp-line); border-radius: 9px;
+  background: var(--tp-rail); color: var(--tp-ink2); font-size: 10.5px; line-height: 1.45;
+}
 
 .tassello-publisher .section-title {
   display: flex; align-items: center; justify-content: space-between;
@@ -108,12 +315,15 @@
   padding: 12px; border: 1px solid var(--tp-line); border-radius: 11px;
   background: var(--tp-card); box-shadow: 0 1px 2px rgba(0,0,0,.04); overflow-wrap: anywhere;
 }
-.tassello-publisher .preview-frame > .rich { flex: 1 1 auto; min-height: 0; overflow: auto; padding-right: 2px; }
+.tassello-publisher .preview-frame { flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain; }
+.tassello-publisher .preview-content { display: flex; flex-direction: column; gap: 9px; }
+.tassello-publisher .preview-frame > .rich { padding-right: 2px; }
 .tassello-publisher .preview-frame.empty { display: flex; align-items: center; justify-content: center; color: var(--tp-ink3); text-align: center; }
 .tassello-publisher .preview-frame img { max-width: 100%; }
 .tassello-publisher .attachments {
   display: flex; gap: 7px; width: 100%; margin: 0 -2px .8em; padding: 0 2px 2px;
-  overflow-x: auto; scrollbar-width: none; cursor: grab; touch-action: pan-y;
+  overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: none;
+  scrollbar-width: none; cursor: grab; touch-action: pan-y;
 }
 .tassello-publisher .attachments::-webkit-scrollbar { display: none; }
 .tassello-publisher .attachments.dragging { cursor: grabbing; user-select: none; }
@@ -123,6 +333,7 @@
 .tassello-publisher .attachments img {
   width: 100%; height: 118px; object-fit: contain; border-radius: 8px;
   border: 1px solid var(--tp-line); background: var(--tp-rail); display: block;
+  user-select: none; -webkit-user-drag: none;
 }
 .tassello-publisher .rich p { line-height: 1.65; margin: 0 0 .7em; }
 .tassello-publisher .rich h1, .tassello-publisher .rich h2, .tassello-publisher .rich h3 { margin: .7em 0 .4em; }
@@ -148,7 +359,6 @@
   border-radius: 6px; color: white; font-size: 10px; font-weight: 800;
   display: inline-flex; align-items: center; justify-content: center;
 }
-.tassello-publisher .target-top .glyph svg, .tassello-publisher .chip .glyph svg { display: block; }
 .tassello-publisher .target-desc { margin-top: 4px; color: var(--tp-ink2); font-size: 11.5px; line-height: 1.4; }
 .tassello-publisher .target-desc.warning { color: var(--tp-warn); }
 .tassello-publisher .status {

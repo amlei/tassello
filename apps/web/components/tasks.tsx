@@ -5,7 +5,7 @@ import React from "react";
 import ReactDOM from "react-dom";
 import { STAGE_LABELS, TYPE_META, type PlatformDTO, type TaskDTO } from "@tassello/shared";
 import { Button, Link as OndaLink } from "@heroui/react";
-import { PlatformMark } from "./platform-icons";
+import { PlatformMark } from "@tassello/ui/platform-icons";
 import { Alert, Check, Refresh, X } from "reicon-react";
 
 /* 失败分类：动作跟着类型走
@@ -69,21 +69,23 @@ function PlatformTile({
       return <span title={`${p.name} · 已发布`}>{tile}</span>;
     }
     return (
+      <span title={`${p.name}${task.channelName ? ` · ${task.channelName}` : ""} 已发布，点击访问`}>
       <OndaLink
         className={TILE}
         style={{ background: pc, color: fg }}
         href={task.url}
-        aria-label={`${p.name} 已发布，点击访问`}
+        aria-label={`${p.name}${task.channelName ? ` · ${task.channelName}` : ""} 已发布，点击访问`}
       >
         {body}
         <span className="absolute right-[-6px] top-[-6px] z-[3] flex h-[19px] w-[19px] items-center justify-center rounded-[7px] border-2 border-white text-white" style={{ background: "var(--color-green)" }}><Check size={10} strokeWidth={4} /></span>
       </OndaLink>
+      </span>
     );
   }
   if (awaiting) {
     // 人工确认：适配器已把内容填进浏览器，等用户点完发布回来标记
     return (
-      <span title={`${p.name} · 已到「${STAGE_LABELS[3]}」，检查浏览器后点这里标记完成`}>
+      <span title={`${p.name}${task.channelName ? ` · ${task.channelName}` : ""} · 已到「${STAGE_LABELS[3]}」，检查浏览器后点这里标记完成`}>
         <Button
           className={TILE + " cursor-default bg-hover"}
           style={{ color: pc }}
@@ -97,7 +99,7 @@ function PlatformTile({
   }
   if (running) {
     return (
-      <span className={TILE + " cursor-default bg-hover hover:translate-y-0"} style={{ color: pc }} title={`${p.name} · ${STAGE_LABELS[task.stage]} ${pct}%`}>
+      <span className={TILE + " cursor-default bg-hover hover:translate-y-0"} style={{ color: pc }} title={`${p.name}${task.channelName ? ` · ${task.channelName}` : ""} · ${STAGE_LABELS[task.stage]} ${pct}%`}>
         {body}
         <span className="absolute bottom-[-7px] right-[-7px] z-[3] flex h-[17px] min-w-5 items-center justify-center rounded-md border-2 border-white bg-accent px-1 font-mono text-[9.5px] font-extrabold text-white">{pct}</span>
       </span>
@@ -245,6 +247,11 @@ export function TasksView({
                 >
                   {g.tasks[0]?.postTitle || "未命名"}
                 </Button>
+                {g.tasks.some((task) => task.channelName) && (
+                  <span className="hidden min-w-0 flex-none max-w-[24%] truncate text-[12px] font-bold text-ink2 xl:block" title={g.tasks.map((t) => [t.channelName, t.failReason].filter(Boolean).join(" · ")).filter(Boolean).join(" / ")}>
+                    {g.tasks.map((task) => task.channelName).filter(Boolean).join(" / ")}
+                  </span>
+                )}
                 <div className="ml-1.5 flex flex-none items-center gap-3.5">
                   {g.tasks.map((task) => (
                     <PlatformTile

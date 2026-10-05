@@ -26,7 +26,7 @@ const PALETTE = ["#2C6FF0", "#D52088", "#FD8D11", "#0EC3D4", "#07B56F", "#16130E
  *  · 头条号 —— 创作栏含 文章 / 视频 / 微头条 / 问答（自家也有音频，但音频出口统一交给播客平台）
  *  · 百家号 —— 图文 / 图集 / 视频 / 动态 / 直播（同上：音频不列）
  *  · 抖音 —— 视频 / 图文；2025 年底上线长图文（文章，最多 8000 字、30 图）；音频只作背景音
- *  · 小宇宙 / 喜马拉雅 / 荔枝播客 / 蜻蜓FM —— 音频出口：收声音（喜马拉雅在自家后台另有视频形态，
+ *  · 小宇宙 / 喜马拉雅 / 荔枝播客 —— 音频出口：收声音（喜马拉雅在自家后台另有视频形态，
  *    但对本工作台只当音频目的地用），因此 supports 只写 audio
  *
  * 一条产品判断：音频＝播客，所以「audio」只留给播客平台与微信公众号（语音），
@@ -68,7 +68,7 @@ const PLATFORMS = [
    * 账号 → 频道：播客/音频平台的一个账号底下往往不止一个发布目标 ——
    * 小宇宙一个账号可以有多个播客节目，喜马拉雅一个主播号可以有多个专辑，
    * 荔枝播客一个账号可以有多个播单。凭据挂在账号上，发布目标落在频道上：
-   * 单频道的平台（荔枝 / 蜻蜓）发布时不用选；多频道的平台发布弹层里要挑一个频道。
+   * 单频道平台发布时不用选；多频道的平台发布弹层里要挑一个频道。
    */
   { id: "xiaoyuzhou", name: "小宇宙",    char: "宇", color: "#6E4AFF", state: "ok",   link: "www.xiaoyuzhoufm.com/episode/", supports: ["audio"],
     account: { name: "九漾电台", kind: "播客", uid: "小宇宙 ID onda", until: "2027-03-01", checked: "09-16 11:02", lands: "单集进所选节目的草稿，发布要你去小宇宙创作者后台点一次",
@@ -87,72 +87,7 @@ const PLATFORMS = [
       channels: [
         { id: "lz-main", name: "九漾电台", uid: "荔枝播单 lz8823", items: "56 期" },
       ] } },
-  { id: "qingting",  name: "蜻蜓FM",     char: "蜻", color: "#1FA2E0", state: "ok",   link: "www.qtfm.cn/programs/",        supports: ["audio"],
-    account: { name: "九漾 Onda", kind: "主播号", uid: "蜻蜓 ID qtf_39a2", until: "2027-01-08", checked: "09-16 11:12", lands: "上传到所选专辑，成为一条待审核的声音",
-      /* 蜻蜓FM 后台同样是「专辑管理」结构：一个主播号可建多个专辑，
-         还能认领 rss 节目 / podcast 托管 —— 频道与账号同样要分开 */
-      channels: [
-        { id: "qt-train", name: "青春列车", uid: "蜻蜓专辑 · rss 内容", items: "20 集" },
-        { id: "qt-main",  name: "九漾 Onda", uid: "蜻蜓专辑 qtf_39a2", items: "89 条声音" },
-      ] } },
-];
 
-/** 这个平台收不收这种稿子 */
-function supportsType(platform, type) {
-  return platform.supports.indexOf(type) >= 0;
-}
-
-/* 图片素材带稳定 id：正文里用 ![说明](asset://id) 引用，拖拽换位不会指错图 */
-let assetSeq = 0;
-function asset(color) {
-  assetSeq += 1;
-  return { id: "a" + assetSeq, color };
-}
-/* 一组色块素材：贴图 / 视频封面的缩略条用它拼 */
-function shots(colors) {
-  return colors.map((c) => asset(c));
-}
-
-/* 默认发布平台：按稿子类型各一份名单，发布时自动点亮（可在「默认平台」里改） */
-const DEFAULT_TARGETS = {
-  article: ["wechat", "xhs"],
-  image: ["xhs", "jike"],
-  video: ["douyin", "bili"],
-  audio: ["wechat", "xiaoyuzhou"],
-};
-
-/* 这个平台账号底下有几个发布目标：单频道平台发布时不用选 */
-function channelsOf(platform) {
-  const list = platform.account && platform.account.channels;
-  return list && list.length ? list : null;
-}
-
-/* 发布成功后的回执链接 */
-function platformLink(platformId, token) {
-  const p = PLATFORMS.find((x) => x.id === platformId);
-  return (p && p.link ? p.link : "example.com/") + (token || "00000000");
-}
-function newToken() {
-  return Math.random().toString(36).slice(2, 10).toUpperCase();
-}
-
-const STAGES = ["渲染排版", "上传素材", "填充编辑器", "人工确认"];
-
-/* 色板别名：写素材时用两个字母，比六个十六进制好认 */
-const K_BLUE = "#2C6FF0", K_MAGENTA = "#D52088", K_ORANGE = "#FD8D11", K_CYAN = "#0EC3D4", K_GREEN = "#07B56F", K_INK = "#16130E", K_PALE = "#8FB8FF";
-
-/*
- * 稿子没有「发布状态」字段：发布事实全部记在任务队列里（见 app.jsx 的 tasks）。
- * 稿子只描述内容本身 —— 类型、标题、正文、素材、更新时间。
- */
-const POSTS = [
-  /* ---------- 文章 · 18 ---------- */
-  {
-    id: "a1", type: "article", updated: "09-12 14:02",
-    title: "为什么我们团队在周五下午不发版",
-    body: "上周五下午四点，运维群里有人发了一张截图：支付服务的错误率曲线像被人踩了一脚，直直地竖了起来。半小时后定位到原因——一个本该下周一才合入的变更，被提前带上了线。\n\n这不是第一次了。我们复盘了过去一年的十七次线上事故，发现其中六次发生在周五下午三点之后。不是大家周五状态不好，而是周五发版这件事本身就不划算：改动的收益要等下周一才能被用户感知，但风险却要整个周末来承担。#工程文化\n\n现在我们定了三条规矩。第一，周五下午只许发文档和配置回滚，不许发代码。第二，谁要在周五发版，谁就自己留在群里值守到周日晚上。第三，所有「紧急修复」必须由两个人同时确认它真的紧急——后来发现，九成五的「紧急」都可以等到周一。#发布纪律\n\n规矩实行了四个月，周末的告警量下降了七成。省下来的不只是睡眠时间，还有整个团队对「上线」这件事的信任感。\n\n![配图](asset://a1)\n\n顺带说一个意料之外的变化：不发版的周五下午，慢慢变成了团队的「慢时间」。有人整理这周的技术债清单，有人写复盘文档，有人把积了很久的代码评审一次清完。起初我担心效率会掉，结果迭代速度反而快了一点——大概是因为没人再需要在周日晚上抱着电脑回滚版本，周一早上的站会也没人顶着黑眼圈了。\n\n如果你所在的团队也有类似的习惯，欢迎把这条转给那个总在周五下午说「就改一行，应该没事」的同事。一行也是改动，改动就有概率，概率落到周末头上，就是一整个周末。",
-    images: shots([K_PALE]),
-  },
   {
     id: "a2", type: "article", updated: "09-10 21:44",
     title: "把菜园搬上天台：三个月的试错记录",

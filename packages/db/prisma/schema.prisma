@@ -41,6 +41,7 @@ model PlatformAccount {
   avatarUrl     String?
   authExpiresAt DateTime?
   lastCheckedAt DateTime?
+  profileGeneration String? // 校验时使用的浏览器 profile 版本；导入后变更则必须重校验
   lands         String?
   credentialRef String? // safeStorage/SecretBox 密文引用；机密绝不进 profile
   profile       String    @default("{}") // 平台私有 JSON，schema 归平台包所有
@@ -78,6 +79,8 @@ model PublishTask {
   postId     String
   platformId String
   accountUid String? // 发布时账号快照（无外键）
+  channelId   String? // 发布目标：播客节目 / 专辑 / 播单（快照，无外键）
+  channelName String? // 队列展示与失败归因
   status     String    @default("queued") // queued | running | success | failed
   stage      Int       @default(0) // 0渲染排版 1上传素材 2填充编辑器 3人工确认
   progress   Int       @default(0)

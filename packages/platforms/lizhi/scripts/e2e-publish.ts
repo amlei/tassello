@@ -1,25 +1,31 @@
-/* e2e：荔枝播客发布链路 —— 本期阻塞（登录态过期，需人工验证码/扫码重新登录），publish 显式报错。
- * 保留此脚本作为续探入口：拿到登录态并完成存草稿链路适配后，
- * 用法：bun packages/platforms/lizhi/scripts/e2e-publish.ts <音频路径> [标题] [简介] [播单id]
- * 红线：荔枝发布语义 = 只存草稿。最多走到「草稿保存成功」即停（needsManualConfirm: true），
- * 绝不点击「发布」类按钮，正式发布由用户在荔枝后台完成。 */
+/* e2e：荔枝手动上传向导 —— 用户选择播单后，把音频交给 batchToSheet 并停住。
+ * 红线：绝不点击「发布 / 保存 / 创建」类按钮，最终动作由用户在可见页面完成。
+ * 用法：bun packages/platforms/lizhi/scripts/e2e-publish.ts <播单id> [音频路径]
+ */
 import { lizhiAdapter } from "../src/index";
-const [, , audio = "/tmp/lizhi-test.m4a", title = "tassello 链路测试", body = "tassello 存草稿链路测试，测试完即删。", channelId = ""] = process.argv;
-const ctx = { secrets: { get: async () => null, set: async () => {} }, log: (e: string, p?: unknown) => console.log("[log]", e, p ?? "") };
-const onStage = (e: { stage: number; progress: number; message?: string | null }) => console.log(`[stage ${e.stage}] ${e.progress}% ${e.message ?? ""}`);
-const r = await lizhiAdapter.publish(
+import { withPage } from "@tassello/cdp";
+
+const [, , channelId = "", audio = "/tmp/lizhi-test.m4a", title = "tassello 链路测试", body = "tassello 手动上传向导测试"] = process.argv;
+if (!channelId) throw new Error("用法：bun e2e-publish.ts <播单id> [音频路径] [标题] [简介]");
+
+const result = await lizhiAdapter.publish(
   {
     id: "e2e",
     type: "audio",
     title,
     body,
     bodyHtml: "",
-    durationSec: 30,
-    assets: [{ id: "a1", kind: "audio", path: audio }, ...(channelId ? [{ id: "ch", kind: "channel", path: channelId }] : [])],
+    durationSec: null,
+    assets: [{ id: "a1", kind: "audio", path: audio }],
+    targetChannel: { id: channelId, name: `e2e:${channelId}` },
   },
   { id: "t", uid: null, profile: undefined as never },
-  ctx,
-  onStage,
+  {
+    log: (event, payload) => console.log("[log]", event, payload ?? ""),
+    runPage: (platformId, options, handler) =>
+      withPage(platformId, { ...options, mode: "visible" }, handler),
+  },
+  (event) => console.log(`[stage ${event.stage}] ${event.progress}% ${event.message ?? ""}`),
 );
-console.log("RESULT:", JSON.stringify(r));
+console.log("RESULT:", JSON.stringify(result, null, 2));
 process.exit(0);

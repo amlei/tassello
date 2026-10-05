@@ -234,6 +234,10 @@ export class TasselloPublisherPlugin extends Plugin {
       engine: this.engine,
       getSelectedPlatforms: () => [...this.selectedPlatforms],
       getDefaultPlatforms: (type) => this.settings.defaultPlatforms[type] ?? [],
+      setDefaultPlatforms: async (type, values) => {
+        this.settings.defaultPlatforms[type] = values;
+        await this.scheduleSave();
+      },
       setSelectedPlatforms: async (values) => {
         this.selectedPlatforms = values;
         await this.scheduleSave();

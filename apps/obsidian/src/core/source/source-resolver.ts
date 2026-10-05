@@ -64,13 +64,14 @@ export async function createSourceDraft(
   app: App,
   input: LiveSource,
   defaultPlatformIds?: PlatformId[],
+  options?: { sourceType?: import("../types").ContentType },
 ): Promise<SourceDraft> {
   const { frontmatter, body } = splitNote(input.raw);
   const file = input.file;
   const title = (frontmatter.title || titleFromMarkdown(body, file.basename) || file.basename).trim();
   const bodyForPayload = stripLeadingTitleHeading(body, title);
   const inferredType = /!\[\[|!\[[^\]]*\]\([^)]+\)/.test(bodyForPayload) ? "image" : "article";
-  const type = frontmatter.type ?? inferredType;
+  const type = options?.sourceType ?? frontmatter.type ?? inferredType;
   const html = await markdownToHtml(bodyForPayload);
   const plain = plainFromMarkdown(bodyForPayload);
   const { assets, findings } = await resolveImageEmbeds(app, file.path, bodyForPayload);

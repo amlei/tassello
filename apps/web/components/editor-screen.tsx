@@ -30,6 +30,7 @@ export function EditorScreen({
   const [tasks, setTasks] = React.useState(initialTasks);
   const [sheetOpen, setSheetOpen] = React.useState(false);
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
+  const [channelIds, setChannelIds] = React.useState<Record<string, string>>({});
   /* 未保存离开确认：pendingLeave 存放被拦下的动作 */
   const [pendingLeave, setPendingLeave] = React.useState<(() => void) | null>(null);
 
@@ -180,15 +181,17 @@ export function EditorScreen({
         .filter((p) => p.status === "active" && p.account?.state === "ok" && p.supports.includes(post.type) && want.includes(p.id))
         .map((p) => p.id),
     );
+    setChannelIds({});
     setSheetOpen(true);
   };
-  const confirmPublish = async () => {
+  const confirmPublish = async (selectedChannelIds: Record<string, string>) => {
     try {
-      const created = await api.publish(post.id, selectedIds);
+      const created = await api.publish(post.id, selectedIds, selectedChannelIds);
       setTasks((ts) => [...created, ...ts]);
     } catch {}
     setSheetOpen(false);
     setSelectedIds([]);
+    setChannelIds({});
     router.refresh();
   };
 
@@ -223,10 +226,12 @@ export function EditorScreen({
           post={post}
           platforms={platforms}
           selectedIds={selectedIds}
+          channelIds={channelIds}
+          onChannel={(platformId, channelId) => setChannelIds((s) => ({ ...s, [platformId]: channelId }))}
           onToggle={(id) => setSelectedIds((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]))}
           onImport={imp.ask}
           onClose={() => setSheetOpen(false)}
-          onConfirm={() => void confirmPublish()}
+          onConfirm={(ids) => void confirmPublish(ids)}
         />
       )}
 

@@ -42,6 +42,7 @@ Next.js standalone server（核心，127.0.0.1:<port>，独立进程）
 - **双形态，单数据源**：server 不依赖任何 Electron API，Electron 只是宿主之一。网页模式不是为了给人当第二产品入口，**就是给 Agent 留的使用与调试通道**（走 HTTP API 或直接操作页面）；两者读写同一个 `TASSELLO_DATA_DIR`。
 - **凭据加密抽象 `SecretBox`**：当前实现 `FileSecretBox`（`dataDir/secrets.json`，chmod 600）；桌面模式后续可无缝换 Electron safeStorage 实现，平台适配器无感知。
 - **浏览器模式统一由 Runtime 决定**：verify 和可自动完成/可持久草稿的发布默认 `headless=new`；适配器不声明 `mode`。持久化能力按「平台 + 内容类型」声明：例如知乎/微博文章是 draft，但两者与即刻的贴图是 state。若本批选中任一平台在当前稿子类型下只能停留在页面状态，则整批改用 visible，并在整批完成后继续保留浏览器给用户收尾。
+- **播客目标是「账号 → 频道」两级模型**：账号凭据挂在 `PlatformAccount`，具体节目/专辑/播单在 profile.channels；发布弹层必须选择多频道目标，目标随 `PublishTask.channelId/channelName` 快照，供重试与失败归因。所有播客平台都不代点最终发布。
 - **人工确认闭环**：自动化完成后，可持久草稿的任务返回 URL 并停在 `stage 3 / progress 100 / running`；state-only visible 批次保留浏览器会话。用户完成平台侧动作后回队列确认（`POST /api/tasks/:id {action:"confirm", url?}`，可附回执链接）完成任务。
 - 任务状态机：`queued → rendering(渲染排版) → uploading(上传素材) → filling(填充编辑器) → awaiting_confirm(人工确认) → success | failed`
 - 「人工确认」由平台能力与发布批次决定，不再是所有 CDP 平台的固定形态；`autoSubmit` 平台可直接 success。
@@ -230,7 +231,9 @@ export type PlatformMeta = {
   - 浏览器模式默认 `headless=new`；adapter-facing `PageRunOptions` 不暴露 `mode`，由 `serverAdapterContext` 注入
   - 发布批次包含 state-only 平台时整批 visible；`withBrowserLease` 的模式租约跨越一个任务的所有 page 调用，`awaiting_confirm` 会继续保留 visible Chrome，直到 confirm/retry/delete 释放
   - 按平台互斥占用：同一时刻一个平台一个 page session，发布与 verify 排队；相反浏览器模式必须等待对方租约归零，不能直接 shutdown 正在等待人工收尾的浏览器
-  - profile 导入前检查 `hasBrowserLease()`；有登录页或人工发布租约时阻断导入
+  - 专用 Chrome 按需启动、空闲自动关闭：最后一个 browser lease 结束后短暂等待；没有排队任务就 shutdown。visible `awaiting_confirm` 会持有租约，因此不会被自动关闭
+  - 启动时只做增量 verify：fresh（最近已检查）且 `profileGeneration` 未变的账号不启动浏览器
+  - 导入 profile 进入 maintenance：先安全关闭专用 Chrome，再检测用户日常 Chrome；日常 Chrome 仍运行时阻断复制。复制成功后轮转 `profileGeneration` 并后台强制重校验
   - 登录态生命周期：从日常浏览器导入 → verify 定期校验（账号卡显示「最近校验」）→ fail 时提示重新导入或人工登录
 - **工程铁律**：小红书等 Vue 站点的页面对象是响应式 Proxy，直接序列化会炸。封装层只提供 `evaluateScalar`（只允许标量/纯数组出页面），禁止把页面对象直接带回 Node 侧。
 - 文件上传：优先 CDP `DOM.setFileInputFiles`；对小红书视频类大文件，预研「permit + 直传存储」路线（见 platforms.md）。

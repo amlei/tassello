@@ -41,6 +41,8 @@ export type PlatformMeta = {
   autoSubmit: boolean;
   /** 按内容类型区分：draft = 可持久恢复；state = 页面状态，不保留就丢弃 */
   publishPersistence: Partial<Record<ContentType, PublishPersistence>>;
+  /** 个别平台会拒绝 HeadlessChrome，verify 需要显式使用可见浏览器 */
+  verifyMode?: "headless" | "visible";
   /** 发布去向文案（账号卡渲染用，平台级静态） */
   lands: string;
   status: PlatformStatus;
@@ -82,6 +84,12 @@ export type PostDTO = {
   assets: AssetDTO[];
 };
 
+export type ChannelDTO = {
+  id: string;
+  name: string;
+  coverUrl?: string | null;
+};
+
 export type AccountDTO = {
   id: string;
   platformId: string;
@@ -92,6 +100,10 @@ export type AccountDTO = {
   avatarUrl: string | null;
   authExpiresAt: string | null;
   lastCheckedAt: string | null;
+  /** 最近一次 verify 使用的 profile 版本；用于判断是否可以跳过启动浏览器 */
+  profileGeneration?: string | null;
+  /** 播客账号的发布目标：小宇宙节目 / 喜马拉雅专辑 / 荔枝播单 */
+  channels?: ChannelDTO[];
 };
 
 export type PlatformDTO = PlatformMeta & {
@@ -104,6 +116,8 @@ export type TaskDTO = {
   postTitle: string;
   platformId: string;
   accountUid: string | null;
+  channelId: string | null;
+  channelName: string | null;
   status: TaskStatus;
   stage: number;
   progress: number;
@@ -131,6 +145,8 @@ export const postUpdateSchema = z.object({
 export const publishRequestSchema = z.object({
   postId: z.string().min(1),
   platformIds: z.array(z.string().min(1)).min(1),
+  /** 平台 → 发布频道；播客账号有多个节目/专辑/播单时必选 */
+  channelIds: z.record(z.string(), z.string().min(1)).optional(),
 });
 
 export const settingsUpdateSchema = z.object({

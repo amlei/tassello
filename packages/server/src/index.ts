@@ -10,7 +10,6 @@ import { xAdapter } from "@tassello/platform-x";
 import { xiaoyuzhouAdapter } from "@tassello/platform-xiaoyuzhou";
 import { ximalayaAdapter } from "@tassello/platform-ximalaya";
 import { lizhiAdapter } from "@tassello/platform-lizhi";
-import { qingtingAdapter } from "@tassello/platform-qingting";
 import { verifyAllAccountsOnBoot } from "./accounts";
 
 let booted = false;
@@ -27,7 +26,6 @@ export function bootstrap(): void {
   registerAdapter(xiaoyuzhouAdapter as never);
   registerAdapter(ximalayaAdapter as never);
   registerAdapter(lizhiAdapter as never);
-  registerAdapter(qingtingAdapter as never);
   booted = true;
   verifyAllAccountsOnBoot();
 }

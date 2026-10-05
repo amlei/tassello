@@ -17,6 +17,7 @@ import { getPost } from "./posts";
 
 function toTaskDTO(t: {
   id: string; postId: string; platformId: string; accountUid: string | null;
+  channelId: string | null; channelName: string | null;
   status: string; stage: number; progress: number; failReason: string | null;
   url: string | null; createdAt: Date; finishedAt: Date | null;
 }): Omit<TaskDTO, "postTitle"> {
@@ -25,6 +26,8 @@ function toTaskDTO(t: {
     postId: t.postId,
     platformId: t.platformId,
     accountUid: t.accountUid,
+    channelId: t.channelId,
+    channelName: t.channelName,
     status: t.status as TaskStatus,
     stage: t.stage,
     progress: t.progress,
@@ -52,7 +55,30 @@ export async function runningCount(): Promise<number> {
 
 /** 发布：每个选中平台一个任务；无适配器/凭据缺失当场落失败（可归因）。
  *  批次可见性在创建时一次性决策：state-only 平台会把整批抬到 visible。 */
-export async function createTasks(postId: string, platformIds: string[]): Promise<TaskDTO[]> {
+type TaskChannel = { id: string; name: string };
+
+function channelsFromProfile(profileJson: string): TaskChannel[] {
+  try {
+    const profile = JSON.parse(profileJson) as { channels?: unknown };
+    if (!Array.isArray(profile.channels)) return [];
+    return profile.channels.flatMap((raw): TaskChannel[] => {
+      if (!raw || typeof raw !== "object") return [];
+      const value = raw as { id?: unknown; name?: unknown; title?: unknown };
+      const id = typeof value.id === "string" && value.id ? value.id : null;
+      const name = typeof value.name === "string" && value.name ? value.name : typeof value.title === "string" ? value.title : null;
+      if (!id && !name) return [];
+      return [{ id: id || name!, name: name || id! }];
+    });
+  } catch {
+    return [];
+  }
+}
+
+export async function createTasks(
+  postId: string,
+  platformIds: string[],
+  channelIds: Record<string, string> = {},
+): Promise<TaskDTO[]> {
   const prisma = getPrisma();
   const post = await getPost(postId);
   if (!post) throw new Error("稿子不存在");
@@ -64,15 +90,38 @@ export async function createTasks(postId: string, platformIds: string[]): Promis
     const meta = getAdapter(platformId)?.meta;
     let status: TaskStatus = "queued";
     let failReason: string | null = null;
+    let target: TaskChannel | null = null;
     if (!meta || meta.status !== "active") {
       status = "failed";
       failReason = `平台 ${platformId} 的适配器尚未接入（planned）`;
     } else if (!meta.supports.includes(post.type)) {
       status = "failed";
       failReason = `平台 ${meta.name} 不支持${TYPE_META[post.type].zh}类型`;
+    } else if (meta.supports.includes("audio")) {
+      const account = await prisma.platformAccount.findFirst({
+        where: { platformId, state: "ok" },
+        orderBy: { updatedAt: "desc" },
+      });
+      if (account) {
+        const channels = channelsFromProfile(account.profile);
+        const requestedId = channelIds[platformId]?.trim();
+        target = (requestedId ? channels.find((c) => c.id === requestedId) : null) ?? null;
+        if (requestedId && !target) {
+          status = "failed";
+          failReason = `发布频道不存在：${requestedId}`;
+        } else if (!target && channels.length > 1) {
+          status = "failed";
+          failReason = `请选择${meta.name}的发布节目/专辑/播单`;
+        } else if (!target && channels.length === 1) {
+          target = channels[0]!;
+        }
+      }
     }
     const task = await prisma.publishTask.create({
-      data: { postId, platformId, status, failReason, accountUid: null },
+      data: {
+        postId, platformId, status, failReason, accountUid: null,
+        channelId: target?.id ?? null, channelName: target?.name ?? null,
+      },
     });
     dtos.push({ ...toTaskDTO(task), postTitle });
     if (status === "queued") queuedIds.push(task.id);
@@ -86,7 +135,7 @@ export async function createTasks(postId: string, platformIds: string[]): Promis
   return dtos;
 }
 
-async function buildDraft(postId: string): Promise<PostDraft> {
+async function buildDraft(postId: string, targetChannel: TaskChannel | null): Promise<PostDraft> {
   const post = await getPost(postId);
   if (!post) throw new Error("稿子不存在");
   return {
@@ -97,6 +146,7 @@ async function buildDraft(postId: string): Promise<PostDraft> {
     bodyHtml: post.bodyHtml,
     durationSec: post.durationSec,
     assets: post.assets.map((a) => ({ id: a.id, kind: a.kind, path: a.path, color: a.color })),
+    targetChannel: targetChannel ?? undefined,
   };
 }
 
@@ -154,7 +204,7 @@ async function runTask(taskId: string): Promise<void> {
      * 让浏览器从任务开始一直保留到用户在队列里确认完成。 */
     const result = await withBrowserLease(browserMode, async () => {
       const publishResult = await adapter.publish(
-        await buildDraft(task.postId),
+        await buildDraft(task.postId, task.channelId && task.channelName ? { id: task.channelId, name: task.channelName } : null),
         { id: account.id, uid: account.uid, profile: parsed.success ? parsed.data : profile },
         serverAdapterContext(task.platformId, (event, payload) => void log(event, payload), browserMode),
         (e) => void onStage(e),

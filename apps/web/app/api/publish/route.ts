@@ -8,7 +8,7 @@ export async function POST(req: Request) {
   const parsed = publishRequestSchema.safeParse(body);
   if (!parsed.success) return fail("参数不合法");
   try {
-    const tasks = await createTasks(parsed.data.postId, parsed.data.platformIds);
+    const tasks = await createTasks(parsed.data.postId, parsed.data.platformIds, parsed.data.channelIds);
     return json<ApiResult<TaskDTO[]>>({ ok: true, data: tasks });
   } catch (e) {
     return fail(e instanceof Error ? e.message : String(e), 500);

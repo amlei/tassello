@@ -228,7 +228,7 @@ export const ximalayaAdapter: PlatformAdapter<XimalayaProfile> = {
     },
   },
 
-  async publish(post: PostDraft, _acct, ctx: AdapterCtx, onStage: StageReporter): Promise<PublishResult> {
+  async publish(post: PostDraft, acct, ctx: AdapterCtx, onStage: StageReporter): Promise<PublishResult> {
     // 只支持音频：PostDraft.assets 里 kind="audio" 的文件
     const audio = post.assets.find((a) => a.kind === "audio" && a.path);
     if (!audio) throw new Error("喜马拉雅只支持音频发布：PostDraft.assets 需要一个 kind=audio 的文件");
@@ -236,8 +236,12 @@ export const ximalayaAdapter: PlatformAdapter<XimalayaProfile> = {
     const title = (post.title || "").trim();
     if (!title) throw new Error("喜马拉雅声音需要标题");
     const intro = (post.body || "").trim();
-    // 发布目标专辑：默认用平台记忆的「上次选择」；TASSELLO_XIMALAYA_ALBUM 可指定专辑名（e2e/测试用）
-    const albumTarget = process.env.TASSELLO_XIMALAYA_ALBUM?.trim() || "";
+    // 发布目标专辑：用户选择优先；env 兜底；否则保留平台记忆的「上次选择」。
+    const channels = acct?.profile?.channels ?? [];
+    const albumTarget = ((post.targetChannel
+      ? channels.find((c) => c.id === post.targetChannel!.id)?.name
+      : undefined)
+      ?? process.env.TASSELLO_XIMALAYA_ALBUM?.trim()) || "";
 
     ctx.log("ximalaya.publish.start", { title, audio: audio.path, albumTarget });
     onStage({ stage: 0, progress: 10, message: "打开喜马拉雅上传页" });

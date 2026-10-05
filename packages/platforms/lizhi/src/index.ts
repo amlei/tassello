@@ -11,21 +11,19 @@
  *   已登录时页面上下文 fetch getCurrentUserInfo + playsheet/list 解析账号与播单列表写入
  *   profile.channels。⚠️ 已登录分支尚未真机验证（阻塞于登录态），字段映射是防御式的，
  *   拿到登录态后跑 scripts/verify-smoke.ts 复核并按真实响应修正（不编造字段）。
- * - publish：产品语义 = 只存草稿，绝不自动发布。但上传链路（上传音频 → 填标题/简介 →
- *   选播单 → 存草稿）的已登录 UI/接口零证据（登录态阻塞），不编造端点 → 本期显式报错
- *   （先例：蜻蜓FM / 知乎视频通道，见 docs/platforms.md）。已探到的唯一上传相关线索是
- *   njnew.lizhi.fm/voice/getHuaWeiCloudUploadToken（华为云上传 token，probe-headers 抓到，
- *   响应体未验证），续探入口 scripts/e2e-publish.ts。
+ * - publish：荔枝没有已验证的“保存草稿”通道。用户选择播单后，打开批量上传至播单向导，
+ *   把音频交给页面 uploader，然后保持在可见页面由用户选择播单/补全信息并完成发布。
+ *   Runtime 永远不点击荔枝的发布/创建类按钮。
  */
 import { z } from "zod";
-import type { PlatformAdapter, AdapterCtx, VerifyResult } from "@tassello/platform-core";
+import type { PlatformAdapter, AdapterCtx, PostDraft, PublishResult, StageReporter, VerifyResult } from "@tassello/platform-core";
 
 type CdpConnection = CdpLike;
 import { getPlatformMeta } from "@tassello/platform-core";
 import { evaluateScalar, type Scalar } from "@tassello/cdp";
 
 /* 荔枝主播管理平台（hash 路由 SPA）与登录页（真机验证：未登录访问后台会被弹到这里） */
-export const LIZHI_MANAGE_URL = "https://nj.lizhi.fm/static/newsite/#/manage/sheet";
+export const LIZHI_MANAGE_URL = "https://nj.lizhi.fm/static/newsite/#/index";
 export const LIZHI_LOGIN_URL = "https://nj.lizhi.fm/account/login";
 /** 业务接口域（probe-headers.ts 抓包确认） */
 export const LIZHI_API_BASE = "https://njnew.lizhi.fm";
@@ -71,9 +69,12 @@ async function waitForManageReady(cdp: CdpLike, sessionId: string, timeoutMs = 2
       href = r.href;
       // 登录页判定：路径落到 /account/login（真机验证的未登录落点）
       if (r.href.includes("/account/login")) return { loggedIn: false, href: r.href };
-      // hash 路由就位且渲染出内容（管理后台 body 文本较长，真机已登录表现待复核）
-      if (r.href.includes("#/manage") && r.textLen > 100) return { loggedIn: true, href: r.href };
-      if (r.href.includes("#/manage")) sawManage = true;
+      // 新版创作者后台已登录时可能落在 #/index；旧管理路由也可能仍在使用。
+      // 只要不是登录页且渲染出后台内容，就交由后续接口返回码最终判定。
+      if (r.textLen > 100 && (r.href.includes("#/index") || r.href.includes("#/manage"))) {
+        return { loggedIn: true, href: r.href };
+      }
+      if (r.href.includes("#/manage") || r.href.includes("#/index")) sawManage = true;
     } catch {
       // 页面被服务端重定向/弹回登录页时 target 会销毁（真机踩坑：Inspected target navigated or
       // closed）——等价于未登录，不再重试
@@ -98,10 +99,10 @@ const FETCH_API_JS = `(async () => {
   // 已登录响应体未验证：rcode!==200 或结构不符时原样带回原文，由调用方防御式解析。
   const u = await get("https://njnew.lizhi.fm/user/getCurrentUserInfo");
   out.userRaw = u.body.slice(0, 4000);
-  try { const j = JSON.parse(u.body); if (j.rcode === 200) out.user = j.data ?? j.userInfo ?? null; } catch {}
+  try { const j = JSON.parse(u.body); if (j.rcode === 0 || j.rcode === 200) out.user = j.data ?? j.userInfo ?? null; } catch {}
   const p = await get("https://njnew.lizhi.fm/playsheet/list?type=0&keyword=");
   out.playsheetRaw = p.body.slice(0, 8000);
-  try { const j = JSON.parse(p.body); if (j.rcode === 200) out.playsheets = j.data ?? j.list ?? null; } catch {}
+  try { const j = JSON.parse(p.body); if (j.rcode === 0 || j.rcode === 200) out.playsheets = j.data?.list ?? j.data ?? j.list ?? null; } catch {}
   return JSON.parse(JSON.stringify(out));
 })()`;
 
@@ -135,6 +136,72 @@ function toChannels(raw: unknown): LizhiChannel[] {
       return { id: id || name, name: name || id, coverUrl: cover || null } as LizhiChannel;
     })
     .filter((c): c is LizhiChannel => c !== null);
+}
+
+/** 等批量上传页就绪；荔枝 SPA 是懒加载路由，直接判关键文案/文件入口。 */
+async function waitForBatchUploadReady(cdp: CdpLike, sessionId: string, timeoutMs = 30_000): Promise<boolean> {
+  const start = Date.now();
+  for (;;) {
+    try {
+      const ready = await evaluateScalar<boolean>(
+        cdp,
+        sessionId,
+        `(() => {
+          const t = (document.body && document.body.innerText) || "";
+          const input = Array.from(document.querySelectorAll("input[type=file]")).find((e) => /audio|mp3|m4a|wav/i.test(e.accept || ""));
+          return (t.includes("上传声音") || t.includes("批量上传至播单")) && !!input;
+        })()`,
+        { timeoutMs: 8_000 },
+      ).catch(() => false);
+      if (ready) return true;
+    } catch {}
+    if (Date.now() - start > timeoutMs) return false;
+    await sleep(1_000);
+  }
+}
+
+/** 荔枝没有已验证的“保存草稿”通道：把音频交给 batchToSheet 上传向导后停住，
+ *  让用户在可见页面里选择播单并完成最终发布。不点击任何「发布 / 保存 / 创建」。 */
+async function openManualUpload(
+  post: PostDraft,
+  target: { id: string; name: string },
+  ctx: AdapterCtx,
+  onStage: StageReporter,
+): Promise<PublishResult> {
+  const audio = post.assets.find((a) => a.kind === "audio" && a.path);
+  if (!audio) throw new Error("荔枝播客发布需要音频素材");
+
+  const url = "https://nj.lizhi.fm/static/newsite/#/content/batchToSheet";
+  onStage({ stage: 0, progress: 100, message: `打开荔枝批量上传至播单（${target.name}）` });
+  await ctx.runPage("lizhi", { url, keepOpen: true, activate: true }, async (cdp, sid) => {
+    if (!(await waitForBatchUploadReady(cdp, sid))) {
+      throw new Error("荔枝上传向导未就绪（可能未登录或页面结构变更）");
+    }
+    const inputs = await evaluateScalar<{ accept: string }[]>(
+      cdp,
+      sid,
+      `(() => Array.from(document.querySelectorAll("input[type=file]")).map((e) => ({ accept: e.getAttribute("accept") || "" })))()`,
+      { timeoutMs: 10_000 },
+    );
+    const idx = inputs.findIndex((i) => /audio|mp3|m4a|wav|aac|flac|ogg|aiff|amr|wma/i.test(i.accept));
+    if (idx < 0) throw new Error("未找到荔枝音频上传入口（页面结构可能变更）");
+    await cdp.send("DOM.enable", {}, { sessionId: sid });
+    const doc = (await cdp.send("DOM.getDocument", {}, { sessionId: sid })) as { root?: { nodeId?: number } };
+    const q = (await cdp.send(
+      "DOM.querySelectorAll",
+      { nodeId: doc.root?.nodeId, selector: "input[type=file]" },
+      { sessionId: sid },
+    )) as { nodeIds?: number[] };
+    const nodeId = q.nodeIds?.[idx];
+    if (!nodeId) throw new Error("荔枝音频 file input 未渲染");
+    await cdp.send("DOM.setFileInputFiles", { files: [audio.path!], nodeId }, { sessionId: sid });
+    onStage({ stage: 1, progress: 100, message: "音频已交给荔枝上传向导；请选择播单并人工完成发布" });
+  });
+  return {
+    url,
+    needsManualConfirm: true,
+    receipt: { channelId: target.id, channelName: target.name, note: "manual-upload-and-publish" },
+  };
 }
 
 export const lizhiAdapter: PlatformAdapter<LizhiProfile> = {
@@ -185,7 +252,7 @@ export const lizhiAdapter: PlatformAdapter<LizhiProfile> = {
         // 已登录响应字段未真机验证：解析不出账号标识时把原文带进 failReason 便于续探，不编造
         const uid = pickStr(api.user, ["uid", "userId", "id", "anchorId"]);
         const name = pickStr(api.user, ["nickname", "name", "userName", "anchorName"]) || null;
-        const avatarUrl = pickStr(api.user, ["headurl", "avatarUrl", "headUrl", "avatar", "logo"]) || null;
+        const avatarUrl = pickStr(api.user, ["icon", "headurl", "avatarUrl", "headUrl", "avatar", "logo"]) || null;
         const channels = toChannels(api.playsheets);
         ctx.log("lizhi.verify.ok", { uid: uid || null, channelCount: channels.length });
         if (!uid && !name) {
@@ -212,14 +279,10 @@ export const lizhiAdapter: PlatformAdapter<LizhiProfile> = {
     },
   },
 
-  async publish() {
-    // 产品语义：荔枝发布 = 只存草稿（上传音频 → 标题/简介 → 选播单 → 存草稿箱，needsManualConfirm，
-    // 绝不点「发布」）。真机阻塞：登录态过期（服务端会话失效，人工验证码/扫码登录），已登录的
-    // 上传链路 UI/接口零证据，不编造端点 → 显式报错（先例：蜻蜓FM、知乎视频通道）。
-    // 唯一已探线索：njnew.lizhi.fm/voice/getHuaWeiCloudUploadToken（华为云上传 token，probe-headers 抓到，响应体未验证）。
-    // 续探入口：scripts/sync-profile.ts → scripts/probe-*.ts → scripts/e2e-publish.ts（见本包 NOTES.md §5）。
-    throw new Error(
-      "荔枝播客发布通道本期未实现：登录态已过期（需人工验证码/扫码重新登录），存草稿链路未完成真机探测（见平台包 NOTES.md 阻塞记录）",
-    );
+  async publish(post: PostDraft, _acct, ctx: AdapterCtx, onStage: StageReporter): Promise<PublishResult> {
+    const target = post.targetChannel
+      ?? null;
+    if (!target) throw new Error("荔枝播客发布需要在发布弹层选择播单");
+    return openManualUpload(post, target, ctx, onStage);
   },
 };

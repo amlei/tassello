@@ -16,11 +16,18 @@
     "@tassello/platform-core": "workspace:*",
     "@tassello/platform-douban": "workspace:*",
     "@tassello/platform-jike": "workspace:*",
+    "@tassello/platform-lizhi": "workspace:*",
+    "@tassello/platform-wechat": "workspace:*",
     "@tassello/platform-weibo": "workspace:*",
     "@tassello/platform-x": "workspace:*",
     "@tassello/platform-xhs": "workspace:*",
+    "@tassello/platform-xiaoyuzhou": "workspace:*",
+    "@tassello/platform-ximalaya": "workspace:*",
     "@tassello/platform-zhihu": "workspace:*",
+    "@tassello/ui": "workspace:*",
     "marked": "^16.0.0",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
     "ws": "^8.18.0",
     "yaml": "^2.8.0",
     "zod": "^4.6.5"
@@ -28,6 +35,8 @@
   "devDependencies": {
     "@types/bun": "^1.2.0",
     "@types/node": "^24.0.0",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
     "@types/ws": "^8.18.0",
     "esbuild": "^0.27.0",
     "obsidian": "^1.8.7"

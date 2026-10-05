@@ -97,6 +97,8 @@
   --onda-ink3: #aba9a4;
   --onda-accent: #2383e2;
   --onda-accent-tint: #e9f3fb;
+  --plat-x: #16130e;
+  --plat-x-fg: #ffffff;
 }
 [data-theme="dark"] {
   --onda-bg: #191919;
@@ -110,6 +112,8 @@
   --onda-ink3: #6f6e69;
   --onda-accent: #4a9ee8;
   --onda-accent-tint: #20304a;
+  --plat-x: #e6e5e3;
+  --plat-x-fg: #191919;
 }
 @theme inline {
   /* 内容类型色：保留，只出现在小面积（方块/chip） */
@@ -133,6 +137,8 @@
   --color-selected: var(--onda-selected);
   --color-accent: var(--onda-accent);
   --color-accent-tint: var(--onda-accent-tint);
+  --color-plat-x: var(--plat-x);
+  --color-plat-x-fg: var(--plat-x-fg);
 
   --font-sans: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
   --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;

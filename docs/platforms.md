@@ -8,13 +8,14 @@
 - **自动化默认统一 headless**：verify、profile 导入后的重校验、以及所有能自动完成/能落成持久草稿的
   发布自动化都用 `--headless=new`。适配器不再声明或选择 `mode`；可见性由 Runtime 按发布批次决定。
 - **verify 不需要 visible**：2026-10-05 强制 headless 复测，已有登录态的豆瓣、即刻、公众号、微博、
-  小红书、小宇宙、喜马拉雅、知乎全部通过；X / 荔枝 / 蜻蜓失败均是登录态缺失或过期，不是 headless 限制。
+  小红书、小宇宙、喜马拉雅、知乎全部通过；X / 荔枝当时失败均是登录态缺失或过期，不是 headless 限制。
+  蜻蜓FM 已于同日移除：其主播后台登录态在专用 profile 重启后不可持久，不再作为平台维护。
 - **发布可见性按“本次选中平台集合”决定，不做成用户设置**：
   - 所有选中目标都能自动提交，或能落成**持久草稿/可恢复草稿** → 本次批次 headless；自动化结束后关闭
     任务页，只返回回执或草稿链接。
   - 任一选中目标在**当前内容类型**下没有持久草稿，只停留在编辑器/上传器的**页面状态** →
     **本次全部选中平台都使用 visible Chrome**，并且整批操作完成后不关闭浏览器，让用户在同一会话里
-    检查和完成最终发布。除小宇宙、喜马拉雅、蜻蜓外，即刻/知乎/微博的贴图也是 state；
+    检查和完成最终发布。除小宇宙、喜马拉雅外，即刻/知乎/微博的贴图也是 state；
     知乎/微博的文章另有草稿通道，所以按文章发布时仍是 draft。
   - mixed batch 采用全 visible，避免同一 profile 的 headless/visible 切换，也让用户只面对一次收尾流程。
   - Runtime 用 `withBrowserLease` 在任务边界持有批次浏览器；`awaiting_confirm` 会继续保留 visible 租约，
@@ -22,7 +23,7 @@
 - **人工确认语义拆开**：`needsManualConfirm` 表示“用户还要做最后动作”，不再隐含“必须保留一个可见标签页”。
   headless 草稿流返回 URL，由用户自己打开；只有 state-only batch 才保留 visible 会话。
 
-## 1. 平台矩阵（15 平台）
+## 1. 平台矩阵（14 平台；蜻蜓FM 已移除）
 
 | 平台 | 通道 | 账号信息来源（已验证=✅） | 阶段 |
 |---|---|---|---|
@@ -40,7 +41,9 @@
 | 小宇宙 | RSS（生态）/ CDP | 播客分发走 RSS 托管；后台操作用 CDP | 音频阶段 |
 | 喜马拉雅 | CDP | 不收 RSS，后台上传 | 音频阶段 |
 | 荔枝播客 | CDP | 同上 | 音频阶段 |
-| 蜻蜓FM | CDP | 同上 | 音频阶段 |
+
+> **2026-10-05 移除蜻蜓FM**：主播后台登录态在应用专用 profile 重启后不可持久，无法满足发布链路。
+> 已从注册表、Runtime、Obsidian、原型与本地账号数据中移除；下方 §2.9 的蜻蜓记录仅作历史保留。
 
 **结论：CDP 是主通道，API 是增强。** 微信开放 API（`draft/add`、素材上传、freepublish）与 X API 是仅有的两条例行官方通道。
 
@@ -237,11 +240,11 @@ mp 后台首页「新的创作」四项与 tassello 内容类型一一对应，*
   再替换正文 `<img>`；图片想法上传后用 `media.medias[].image` 提交；视频打开官方上传页并注入文件，
   等待自动保存为想法视频草稿。签名头存在收紧风险。
 
-### 2.9 播客四平台（2026-10-02 真机接入：账号→频道两级，一律只存草稿/填好即停）
+### 2.9 播客平台（2026-10-02 真机接入；蜻蜓FM 已于 2026-10-05 移除）
 
-> 产品语义（四平台统一）：**绝不代点发布**——平台有草稿的就存草稿，没有草稿的就填好表单停住，
+> 产品语义（现存三平台统一）：**绝不代点发布**——平台有草稿的就存草稿，没有草稿的就填好表单停住，
 > `needsManualConfirm: true`，发布动作由用户在平台后台完成。
-> 账号模型：一个账号多个发布目标（小宇宙多个节目 / 喜马拉雅多个专辑 / 荔枝多个播单 / 蜻蜓多个专辑），
+> 账号模型：一个账号多个发布目标（小宇宙多个节目 / 喜马拉雅多个专辑 / 荔枝多个播单），
 > verify 统一回填 `profile.channels: [{id, name, …}]`。各自独立 Chrome profile
 > （`~/.local/share/tassello/probe-profiles/<平台>`），细节见各包 `NOTES.md`。
 
@@ -254,20 +257,17 @@ mp 后台首页「新的创作」四项与 tassello 内容类型一一对应，*
   （pageSize 上限 album 50 / track 20，超限返回 `200 + ret:-3 + 空 data`，极易误判无数据）。
   上传走 WebUploader 隐藏 input；表单是 React 受控（原生 setter 填充）；**专辑下拉浮层要分两次求值**
   （异步渲染，同步点选查不到项）。平台无「存草稿」按钮 → 停在「确认发布」前。
-- **蜻蜓FM**（`packages/platforms/qingting`）：业务主域 `papi.qingting.fm`（早期 NOTES 猜的 papi-go
-  只是边缘域）；verify 走 `/papi/podcasters/{uid}/info` + `channels_for_page`。上传入口
-  `upload_program?channel_id=<id>` URL 参数直选专辑；条目行内名称/导语是纯展示 div，
-  唯一编辑入口是 `qt-clickable-div` 图标弹层。平台无草稿按钮 → 停在「发 布」前，页面 keepOpen 留给用户。
+- **蜻蜓FM（已移除）**：曾实现业务主域 `papi.qingting.fm`、专辑列表、上传与表单填充。
+  但主播后台登录态在应用专用 profile 重启后不可持久，2026-10-05 从平台矩阵移除。
 - **荔枝播客**（`packages/platforms/lizhi`）：**登录态过期（服务端 `200 + rcode:403`），阻塞于人工登录**
   ——verify fail 分支真机验证通过（判据是 rcode 不是 HTTP 码/页面落点），已登录分支与存草稿链路
   代码就位但未验证；上传通道线索 `voice/getHuaWeiCloudUploadToken`（华为云，可能可接口化）。
   用户在日常 Chrome 重新登录 nj.lizhi.fm 后跑 `sync-profile.ts` 按 NOTES §5 续探。
 
-**共性遗留（记入各 NOTES，待排期）**：① `PostDraft` 缺目标频道字段（账号→频道两级平台都需要，
-现各用环境变量/单频道默认过渡）；② `evaluateScalar` 的 per-call timeoutMs 未透传 `cdp.send`；
+**共性遗留（记入各 NOTES，待排期）**：① `evaluateScalar` 的 per-call timeoutMs 未透传 `cdp.send`；
 ③ `withPage` 缺 waitForSelector 语义、缺 onNavigatedAway 回调（重定向销毁 target 时 evaluate 抛错）；
 ④ attachFiles / 真实鼠标点击 helper 在 xhs 与音频包各写了一遍，可下沉共享；
-⑤ 「账号→频道 channels」结构四个包已对齐，可抽公共类型进 platform-core。
+⑤ 「账号→频道 channels」结构已由 `ChannelDTO` 与发布目标选择承接。
 
 ### 2.10 X（2026-10-04 代码接入：普通帖 / 4 图 / 单视频，待真机发布验证）
 
@@ -296,7 +296,11 @@ mp 后台首页「新的创作」四项与 tassello 内容类型一一对应，*
 2. **verify 两派**：JSON 接口派（微博/知乎/xhs-creator，页面上下文 fetch 即可）与 DOM 派（公众号）。差异收在平台包内部，接口层统一为「返回 profile 片段」。
 3. **profile 非只读**：session token（公众号）、capabilities（xhs permissions）都会变，verify 必须把刷新写回 `PlatformAccount.profile`。
 4. **Chrome 136+ 限制**：默认 user-data-dir 禁止远程调试端口；专用 profile 是硬前提，不是偏好。
-5. **素材上传去重只信稳定远端引用**：`PlatformAssetUpload` 以
+5. **浏览器生命周期按用途区分**：日常 Chrome 和 Tassello 专用 profile 的 Chrome 必须用完整命令行
+   `user-data-dir` 区分；不能只看进程名。导入前会只关闭专用 Chrome，再检测日常 Chrome。
+   专用 headless Chrome 在最后一个 lease 结束后空闲关闭；visible 人工确认页面保留到用户完成。
+   启动 verify 只处理过期或 `profileGeneration` 变化的账号，fresh 账号不启动浏览器。
+6. **素材上传去重只信稳定远端引用**：`PlatformAssetUpload` 以
    `platform + account + scope + kind + sha256 + byteSize + mime` 为指纹，缓存素材库 ID、对象存储 key
    或图床 photo id；发送失败/草稿保存失败会失效引用。公众号 filetransfer content id、即刻 picture key
    与豆瓣 photo id 均已接入中心缓存。X / 小红书 / 播客平台当前通过 DOM file input 上传且拿不到稳定引用，
@@ -315,4 +319,4 @@ mp 后台首页「新的创作」四项与 tassello 内容类型一一对应，*
 - [x] X 普通帖 CDP 代码接入（2026-10-04，待真机发布验证；见 §2.10）
 - [ ] X API 付费档成本、真机自动发布验证与 X Article 的 CDP 流
 - [ ] 抖音 Open Platform 企业资质可行性
-- [x] 播客四平台接入（2026-10-02：小宇宙/喜马拉雅/蜻蜓真机存草稿语义通过，荔枝待人工登录续探，见 §2.9）
+- [x] 播客平台接入（2026-10-02：小宇宙/喜马拉雅真机语义通过；荔枝已于 2026-10-05 接入手动向导；蜻蜓已移除）

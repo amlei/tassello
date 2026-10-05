@@ -1,4 +1,5 @@
 /* settings —— app 设置：per 类型默认发布名单 + 登录态导入浏览器 */
+import { randomUUID } from "node:crypto";
 import { getPrisma } from "@tassello/db";
 import {
   DEFAULT_SETTINGS,
@@ -10,6 +11,28 @@ import {
 } from "@tassello/shared";
 
 const KEY = "app";
+const PROFILE_GENERATION_KEY = "profileGeneration";
+
+export async function getProfileGeneration(): Promise<string> {
+  const row = await getPrisma().setting.findUnique({ where: { key: PROFILE_GENERATION_KEY } });
+  if (row) {
+    try {
+      const value = JSON.parse(row.valueJson) as unknown;
+      if (typeof value === "string" && value) return value;
+    } catch {}
+  }
+  return "legacy";
+}
+
+export async function rotateProfileGeneration(): Promise<string> {
+  const next = crypto.randomUUID();
+  await getPrisma().setting.upsert({
+    where: { key: PROFILE_GENERATION_KEY },
+    create: { key: PROFILE_GENERATION_KEY, valueJson: JSON.stringify(next) },
+    update: { valueJson: JSON.stringify(next) },
+  });
+  return next;
+}
 
 /** 非法值兜底回默认（手工改库、旧数据都可能带来脏值） */
 function normalizeBrowser(v: unknown): ImportBrowserId {

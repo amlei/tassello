@@ -1,0 +1,27 @@
+{
+  "name": "@tassello/ui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./platform-icons": "./src/platform-icons.tsx"
+  },
+  "typesVersions": {
+    "*": {
+      "platform-icons": [
+        "./src/platform-icons.tsx"
+      ]
+    }
+  },
+  "files": [
+    "src",
+    "assets"
+  ],
+  "peerDependencies": {
+    "react": "^19"
+  },
+  "devDependencies": {
+    "@types/react": "^19",
+    "react": "^19"
+  }
+}

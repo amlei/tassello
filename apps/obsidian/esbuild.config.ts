@@ -7,6 +7,8 @@ const options: BuildOptions = {
   entryPoints: ["src/main.ts"],
   outfile: "dist/main.js",
   bundle: true,
+  jsx: "automatic",
+  loader: { ".png": "dataurl" },
   external: [
     "obsidian",
     "electron",

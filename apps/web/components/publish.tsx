@@ -4,29 +4,37 @@
 import { TYPE_META, type PlatformDTO, type PostDTO } from "@tassello/shared";
 import { Button, Modal } from "@heroui/react";
 import { Check, Refresh, Send } from "reicon-react";
-import { PlatformMark } from "./platform-icons";
+import { PlatformMark } from "@tassello/ui/platform-icons";
 
 export function PublishSheet({
-  post, platforms, selectedIds, onToggle, onImport, onClose, onConfirm,
+  post, platforms, selectedIds, channelIds, onChannel, onToggle, onImport, onClose, onConfirm,
 }: {
   post: PostDTO;
   platforms: PlatformDTO[];
   selectedIds: string[];
+  channelIds: Record<string, string>;
+  onChannel: (platformId: string, channelId: string) => void;
   onToggle: (id: string) => void;
   /** 失效平台点击：走全局「导入登录态」确认（覆盖 + 全部重校验），不再有单平台重新获取 */
   onImport: () => void;
   onClose: () => void;
-  onConfirm: () => void;
+  onConfirm: (channelIds: Record<string, string>) => void;
 }) {
   const t = TYPE_META[post.type];
   const supported = platforms.filter((p) => p.supports.includes(post.type));
   const selected = supported.filter((p) => selectedIds.includes(p.id));
+  const needChannel = selected.filter((p) => (p.account?.channels?.length ?? 0) > 1);
+  const selectedChannelIds = Object.fromEntries(needChannel.map((p) => {
+    const list = p.account?.channels ?? [];
+    const id = channelIds[p.id] && list.some((c) => c.id === channelIds[p.id]) ? channelIds[p.id] : list[0]?.id ?? "";
+    return [p.id, id];
+  }));
   const failed = (p: PlatformDTO) => p.status !== "active" || !p.account || p.account.state !== "ok";
   /* 三态皮肤：选中 = 平台色实底；未选中 = 平台色 20% 淡底；未获取 = 中性灰 */
   const skinOf = (p: PlatformDTO) => {
     if (failed(p)) return { background: "var(--color-hover)", color: "var(--color-ink3)" };
     if (selectedIds.includes(p.id)) return { background: p.color, color: p.fg || "#fff" };
-    return { background: p.color + "2E", color: p.fg ? "var(--color-ink)" : p.color };
+    return { background: `color-mix(in srgb, ${p.color} 18%, transparent)`, color: p.fg ? "var(--color-ink)" : p.color };
   };
 
   return (
@@ -82,6 +90,40 @@ export function PublishSheet({
               })}
             </div>
 
+            {needChannel.length > 0 && (
+              <div className="mt-[22px] flex flex-col gap-2.5 border-t border-line pt-[22px]">
+                {needChannel.map((p) => {
+                  const list = p.account?.channels ?? [];
+                  const current = selectedChannelIds[p.id];
+                  return (
+                    <div key={p.id} className="flex min-h-[40px] items-center gap-3">
+                      <span
+                        className="flex h-7 w-7 flex-none items-center justify-center rounded-[8px] text-[12px] font-black"
+                        style={{ background: p.color, color: p.fg || "#fff" }}
+                        aria-hidden="true"
+                      >
+                        {p.char}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-sm font-bold text-ink">
+                        发到「{p.name}」的哪个{p.id === "xiaoyuzhou" ? "节目" : p.id === "lizhi" ? "播单" : "专辑"}
+                      </span>
+                      <span className="relative inline-flex flex-none items-center">
+                        <select
+                          value={current}
+                          onChange={(e) => onChannel(p.id, e.target.value)}
+                          aria-label={`${p.name} 发布频道`}
+                          className="cursor-pointer appearance-none rounded-full border border-line bg-card py-[7px] pl-4 pr-8 text-[12px] font-bold text-ink outline-none transition-[border-color] duration-150 hover:border-[#DEDCD8] focus-visible:border-accent"
+                        >
+                          {list.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        </select>
+                        <span className="pointer-events-none absolute right-3 text-ink2">▾</span>
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
             <div className="mt-[30px] flex items-center gap-3.5">
               <span className="font-mono text-[12px] text-ink2">
                 {selected.length ? `将创建 ${selected.length} 个发布任务 · 不阻塞当前操作` : "至少点亮一个平台"}
@@ -90,9 +132,9 @@ export function PublishSheet({
                 取消
               </Button>
               <Button
-                isDisabled={!selected.length}
+                isDisabled={!selected.length || needChannel.some((p) => !selectedChannelIds[p.id])}
                 className="gap-2 rounded-full bg-green px-[30px] py-[13px] text-base font-black tracking-[1px] text-white data-[hovered=true]:brightness-105 data-[disabled=true]:opacity-35"
-                onPress={onConfirm}
+                onPress={() => onConfirm(selectedChannelIds)}
               >
                 <Send className="m-0 h-[15px] w-[15px]" /> 确认发布
               </Button>

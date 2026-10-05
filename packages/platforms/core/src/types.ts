@@ -11,6 +11,8 @@ export type PostDraft = {
   bodyHtml: string;
   durationSec: number | null;
   assets: { id: string; kind: string; path: string; color?: string | null }[];
+  /** 播客等多频道平台的用户选择；adapter 不应再回退到环境变量优先于用户选择 */
+  targetChannel?: { id: string; name: string };
 };
 
 /* ---------- 账号引用（服务层从 PlatformAccount 组装） ---------- */

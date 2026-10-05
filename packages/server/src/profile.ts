@@ -4,8 +4,8 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
-import { getDefaultChromeUserDataDirs, hasBrowserLease, resolveChromeProfileDir, resetConnection } from "@tassello/cdp";
+import { spawn, spawnSync } from "node:child_process";
+import { getDefaultChromeUserDataDirs, beginBrowserMaintenance, endBrowserMaintenance, hasBrowserLease, resolveChromeProfileDir, shutdownBrowser } from "@tassello/cdp";
 import { IMPORT_BROWSERS, type ImportBrowserDTO, type ImportBrowserId } from "@tassello/shared";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -40,17 +40,103 @@ export function listImportBrowsers(): ImportBrowserDTO[] {
   }));
 }
 
-/** 应用专用 profile（CDP 发布用的那个）里跑着的 Chrome 必须先停：
- *  Cookie 是 SQLite 文件锁着的，且 Chrome 退出时会回写，覆盖结果会被冲掉 */
-async function stopAppChrome(): Promise<void> {
-  resetConnection();
-  spawnSync("pkill", ["-f", `--user-data-dir=${resolveChromeProfileDir()}`]);
-  // 等进程真正退出、文件锁释放
-  for (let i = 0; i < 10; i += 1) {
-    const alive = spawnSync("pgrep", ["-f", `--user-data-dir=${resolveChromeProfileDir()}`]);
-    if (alive.status !== 0) return;
-    await sleep(200);
+type BrowserProcess = { pid: number; commandLine: string };
+
+function normalizeCommandLine(value: string): string {
+  return value.replace(/\\/g, "/").toLowerCase();
+}
+
+function isChildChromeProcess(commandLine: string): boolean {
+  return /(^|\s)--type=/.test(normalizeCommandLine(commandLine));
+}
+
+function isAppOwnedChromeProcess(commandLine: string): boolean {
+  return normalizeCommandLine(commandLine).includes(normalizeCommandLine(resolveChromeProfileDir()));
+}
+
+function matchesImportBrowser(commandLine: string, browser: ImportBrowserId): boolean {
+  const value = normalizeCommandLine(commandLine);
+  if (browser === "edge") {
+    return value.includes("microsoft edge") || value.includes("msedge.exe") || value.includes("/microsoft edge");
   }
+  return value.includes("google chrome") || value.includes("chrome.exe") || value.includes("google-chrome");
+}
+
+async function listBrowserProcesses(): Promise<BrowserProcess[]> {
+  if (process.platform === "win32") {
+    const script = [
+      "$OutputEncoding = [Console]::OutputEncoding = [Text.Encoding]::UTF8;",
+      "Get-CimInstance -Query \"SELECT ProcessId, CommandLine FROM Win32_Process WHERE Name='chrome.exe' OR Name='msedge.exe'\" |",
+      "Select-Object ProcessId,CommandLine | ConvertTo-Json -Compress",
+    ].join(" ");
+    const output = await new Promise<string>((resolve, reject) => {
+      const child = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], { stdio: ["ignore", "pipe", "pipe"] });
+      let stdout = "";
+      let stderr = "";
+      child.stdout?.on("data", (chunk) => { stdout += String(chunk); });
+      child.stderr?.on("data", (chunk) => { stderr += String(chunk); });
+      child.on("error", reject);
+      child.on("close", (code) => code === 0 ? resolve(stdout) : reject(new Error(stderr || `PowerShell exited ${code}`)));
+    });
+    if (!output.trim()) return [];
+    type RawProcess = { ProcessId?: number | string; CommandLine?: string | null };
+    const parsed = JSON.parse(output) as RawProcess[] | RawProcess;
+    const items = Array.isArray(parsed) ? parsed : [parsed];
+    return items.flatMap((item) => {
+      const pid = Number(item.ProcessId);
+      return Number.isSafeInteger(pid) && pid > 0 && typeof item.CommandLine === "string"
+        ? [{ pid, commandLine: item.CommandLine }]
+        : [];
+    });
+  }
+
+  const output = await new Promise<string>((resolve, reject) => {
+    const child = spawn("ps", process.platform === "darwin" ? ["-axo", "pid=", "-o", "command="] : ["-axo", "pid=", "-o", "args="], { stdio: ["ignore", "pipe", "pipe"] });
+    let stdout = "";
+    let stderr = "";
+    child.stdout?.on("data", (chunk) => { stdout += String(chunk); });
+    child.stderr?.on("data", (chunk) => { stderr += String(chunk); });
+    child.on("error", reject);
+    child.on("close", (code) => code === 0 ? resolve(stdout) : reject(new Error(stderr || `ps exited ${code}`)));
+  });
+  return output.split(/\r?\n/).flatMap((line) => {
+    const match = line.match(/^\s*(\d+)\s+(.+)$/);
+    return match ? [{ pid: Number(match[1]), commandLine: match[2]! }] : [];
+  });
+}
+
+function isMainBrowserProcess(process: BrowserProcess): boolean {
+  return !isChildChromeProcess(process.commandLine);
+}
+
+async function terminateProcess(pid: number, forceAfterMs = 3000): Promise<void> {
+  try { process.kill(pid, "SIGTERM"); } catch { return; }
+  const deadline = Date.now() + forceAfterMs;
+  for (;;) {
+    await sleep(150);
+    try { process.kill(pid, 0); } catch { return; }
+    if (Date.now() >= deadline) {
+      try { process.kill(pid, "SIGKILL"); } catch {}
+      return;
+    }
+  }
+}
+
+/** 只结束 Tassello 专用 Chrome；绝不按进程名误伤用户日常 Chrome。 */
+async function stopDedicatedChromeProcesses(): Promise<void> {
+  shutdownBrowser();
+  const processes = (await listBrowserProcesses()).filter((p) =>
+    isMainBrowserProcess(p) && isAppOwnedChromeProcess(p.commandLine),
+  );
+  await Promise.all(processes.map((p) => terminateProcess(p.pid)));
+  // 给 SQLite/LevelDB 一点句柄释放时间。
+  if (processes.length) await sleep(200);
+}
+
+/** 只判断用户选择的日常浏览器主进程；专用 profile 和 Helper 子进程不算。 */
+async function sourceBrowserRunning(browser: ImportBrowserId): Promise<boolean> {
+  const processes = await listBrowserProcesses();
+  return processes.some((p) => isMainBrowserProcess(p) && matchesImportBrowser(p.commandLine, browser) && !isAppOwnedChromeProcess(p.commandLine));
 }
 
 /** 拷贝 Default/ 时跳过的体积/状态目录（缓存可重建，且与登录态无关） */
@@ -78,7 +164,7 @@ export async function refreshAppProfileFromDefault(browser: ImportBrowserId): Pr
   const dstProfile = path.join(dstRoot, "Default");
   fs.mkdirSync(dstProfile, { recursive: true });
 
-  await stopAppChrome();
+  await stopDedicatedChromeProcesses();
 
   const copied: string[] = [];
   // Local State：os_crypt 的密钥绑定（macOS 走 Keychain，同机同用户可解）
@@ -107,38 +193,35 @@ export async function refreshAppProfileFromDefault(browser: ImportBrowserId): Pr
   return { copied };
 }
 
-/** 检测日常浏览器是否正在运行（profile 被 leveldb/SQLite 锁着的唯一信号）。
- *  运行中导入会拿到不完整的登录态（即刻的 localStorage token 实测就是这么丢的），
- *  所以导入前必须拦截，让用户退出浏览器后重试——不做带锁拷贝的回退，保证执行确定 */
-export function sourceBrowserRunning(browser: ImportBrowserId): boolean {
-  const find = (cmd: string, args: string[]) => spawnSync(cmd, args, { stdio: "ignore" }).status === 0;
-  if (process.platform === "win32") {
-    const exe = browser === "edge" ? "msedge.exe" : "chrome.exe";
-    // tasklist 找不到进程时输出「信息: 没有运行的任务…」，有进程时 CSV 行里带 exe 名
-    const out = spawnSync("tasklist", ["/FI", `IMAGENAME eq ${exe}`, "/FO", "csv"], { encoding: "utf8" }).stdout ?? "";
-    return out.includes(exe);
-  }
-  // macOS / Linux：主进程名（macOS 的 Helper 子进程同名校不准，-x 精确匹配主程序名即可）
-  const names = browser === "edge"
-    ? (process.platform === "darwin" ? ["Microsoft Edge"] : ["msedge", "microsoft-edge"])
-    : (process.platform === "darwin" ? ["Google Chrome"] : ["chrome", "google-chrome"]);
-  return names.some((n) => find("pgrep", ["-x", n]));
-}
-
 /** 导入登录态用的入口：把结果折叠成 {ok, message}，失败原因直接给 UI 展示 */
-export async function syncBrowserProfile(browser: ImportBrowserId): Promise<{ ok: boolean; message?: string; code?: "browser_running" }> {
+export async function syncBrowserProfile(
+  browser: ImportBrowserId,
+  options: { keepMaintenance?: boolean } = {},
+): Promise<{ ok: boolean; message?: string; code?: "browser_running" }> {
+  let maintenanceHeld = false;
+  if (!beginBrowserMaintenance()) {
+    return { ok: false, code: "browser_running", message: "应用浏览器还有登录页或人工发布批次未完成，无法导入" };
+  }
+  maintenanceHeld = true;
   try {
-    // 日常浏览器运行中 → 直接阻断，让用户退出后重试；不带锁拷贝，保证导入要么完整要么不发生
-    if (sourceBrowserRunning(browser)) {
+    // 先只关闭 Tassello 专用 Chrome；这不会影响用户日常 Chrome。
+    await stopDedicatedChromeProcesses();
+    // 再检查用户日常浏览器；它运行中时仍必须阻断，禁止绕过锁强行复制。
+    if (await sourceBrowserRunning(browser)) {
+      endBrowserMaintenance();
+      maintenanceHeld = false;
       const b = IMPORT_BROWSERS.find((x) => x.id === browser);
       return { ok: false, code: "browser_running", message: `${b?.name ?? "日常浏览器"}正在运行，无法导入` };
     }
-    if (hasBrowserLease()) {
-      return { ok: false, code: "browser_running", message: "应用浏览器还有登录页或人工发布批次未完成，无法导入" };
-    }
     const { copied } = await refreshAppProfileFromDefault(browser);
+    // 调用方要用 maintenance 串住导入后的批量 verify；失败/提前返回时必须释放。
+    if (!options.keepMaintenance) {
+      endBrowserMaintenance();
+      maintenanceHeld = false;
+    }
     return { ok: true, message: copied.join("、") };
   } catch (e) {
+    if (maintenanceHeld) endBrowserMaintenance();
     return { ok: false, message: e instanceof Error ? e.message : String(e) };
   }
 }

@@ -233,7 +233,24 @@
   .platform-options::-webkit-scrollbar{display:none}
   .platform-option{position:relative;flex:0 0 auto;width:27px;height:27px;border:1px solid transparent;border-radius:8px;display:grid;place-items:center;color:#fff;font-size:10px;font-weight:900;opacity:.46}
   .platform-option:hover{opacity:.76}
-  .platform-option.active{opacity:1;box-shadow:0 0 0 1px var(--card),0 0 0 3px var(--accent)}
+  .platform-option.active,.platform-option.selected{opacity:1;box-shadow:0 0 0 2px var(--card),0 0 0 4px var(--ink)}
+  .platform-option.selected{border-color:transparent}
+  .platform-option.muted{background:var(--hover)!important;color:var(--ink3)!important;box-shadow:none!important;border-color:transparent}
+  .selector-summary{
+    min-height:27px;padding:0 5px 0 7px;border-top:1px solid var(--line);
+    display:flex;align-items:center;gap:8px;color:var(--ink2);font-size:10.5px;
+  }
+  .selector-summary .count{display:inline-flex;align-items:baseline;gap:3px}
+  .selector-summary .count strong{color:var(--ink);font-family:var(--mono);font-size:11px;font-weight:700}
+  .selector-summary .count .total{color:var(--ink3);font-family:var(--mono);font-size:10px}
+  .selector-summary .divider{width:1px;height:14px;background:var(--line)}
+  .selector-summary .summary-link{
+    margin-left:auto;min-height:21px;padding:0 7px;border-radius:999px;background:transparent;
+    display:inline-flex;align-items:center;gap:4px;color:var(--ink2);font-size:10px;font-weight:650;
+    transition:.15s ease;
+  }
+  .selector-summary .summary-link:hover{background:var(--hover);color:var(--ink)}
+  .selector-summary .summary-link .arrow{font-family:var(--mono);font-size:10px;line-height:1;transform:translateY(.5px)}
   .findings-panel{border:1px solid var(--line);border-radius:9px;background:var(--card);overflow:hidden}
   .findings-panel summary{
     list-style:none;cursor:pointer;padding:6px 8px;color:var(--ink2);font-size:10px;font-weight:800;
@@ -316,15 +333,6 @@
     background:linear-gradient(0deg,color-mix(in srgb,var(--orange) 8%,transparent),color-mix(in srgb,var(--orange) 8%,transparent)),var(--card);
   }
 
-  .platform-wall{display:flex;flex-wrap:wrap;gap:8px}
-  .platform-icon{position:relative;width:42px;height:42px;border-radius:12px;display:grid;place-items:center;color:var(--ink2);font-size:14px;font-weight:800;transition:transform .16s ease,opacity .16s ease}
-  .platform-icon:hover{transform:translateY(-2px)}
-  .platform-icon.active{color:var(--ink)}
-  .platform-icon.selected{box-shadow:0 0 0 2px var(--paper),0 0 0 4px var(--accent)}
-  .platform-icon.fail,.platform-icon.muted{background:var(--hover)!important;color:var(--ink3)!important;box-shadow:none}
-  .platform-icon.fail:hover,.platform-icon.muted:hover{transform:none}
-  .platform-icon .check{position:absolute;top:-5px;right:-5px;width:16px;height:16px;border-radius:6px;background:var(--accent);color:#fff;display:grid;place-items:center;font-size:9px;font-weight:900}
-  .platform-icon .retry{position:absolute;bottom:-5px;right:-5px;width:16px;height:16px;border-radius:6px;background:var(--card);border:1px solid var(--line);color:var(--ink2);display:grid;place-items:center;font-size:9px}
   .config-list{display:flex;flex-direction:column;gap:7px}
   .config-item{display:grid;grid-template-columns:20px minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 11px;border:1px solid var(--line);border-radius:12px;background:var(--card)}
   .config-item.on{border-color:color-mix(in srgb,var(--accent) 40%,transparent)}
@@ -341,8 +349,6 @@
   .primary-cta:hover{background:color-mix(in srgb,var(--accent) 90%,#000)}
   .primary-cta:disabled{background:var(--selected);color:var(--ink3);cursor:not-allowed}
   .foot-note{margin-top:6px;text-align:center;font-size:10px;color:var(--ink3)}
-  .ledger-link{margin-left:auto;display:inline-flex;align-items:center;gap:4px;min-height:20px;padding:0 7px;border:1px solid var(--line);border-radius:99px;background:var(--card);color:var(--ink2);font-size:10px;font-weight:600;text-transform:none;letter-spacing:0}
-  .ledger-link:hover{background:var(--hover);color:var(--ink)}
   .modal-backdrop{position:fixed;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(15,15,15,.34)}
   .modal{width:min(380px,100%);padding:16px;border:1px solid var(--line);border-radius:16px;background:var(--card);box-shadow:var(--shadow-pop)}
   .modal h3{font-size:14px;letter-spacing:-.2px}
@@ -385,21 +391,16 @@ const TYPE_META = {
 const TYPE_ORDER = ["article", "image", "video", "audio"];
 
 const PLATFORMS = [
-  {id:"wechat", name:"微信公众号", short:"微", color:"#07C160", state:"ok", supports:["article","image","video","audio"], kind:"文章 / 图片 / 视频 / 音频"},
-  {id:"xhs", name:"小红书", short:"红", color:"#D52088", state:"ok", supports:["article","image","video"], kind:"长文 / 图文 / 视频"},
-  {id:"weibo", name:"微博", short:"微", color:"#FD8D11", state:"ok", supports:["article","image","video"], kind:"头条文章 / 微博 / 视频"},
-  {id:"jike", name:"即刻", short:"即", color:"#FFD400", state:"ok", supports:["image","video"], kind:"动态 / 视频"},
-  {id:"bili", name:"B站", short:"B", color:"#00A1D6", state:"fail", supports:["article","image","video"], kind:"专栏 / 动态 / 视频"},
-  {id:"x", name:"X", short:"X", color:"var(--plat-x)", state:"fail", supports:["article","image","video"], kind:"Article / 帖子 / 视频"},
-  {id:"zhihu", name:"知乎", short:"知", color:"#2383E2", state:"ok", supports:["article","image","video"], kind:"文章 / 想法 / 视频"},
-  {id:"douban", name:"豆瓣", short:"豆", color:"#2E963D", state:"ok", supports:["article","image"], kind:"日记 / 广告图文"},
-  {id:"toutiao", name:"头条号", short:"头", color:"#F04142", state:"ok", supports:["article","image","video"], kind:"文章 / 微头条 / 视频"},
-  {id:"baijiahao", name:"百家号", short:"百", color:"#2932E1", state:"ok", supports:["article","image","video"], kind:"图文 / 图集 / 视频"},
-  {id:"douyin", name:"抖音", short:"抖", color:"#25F4EE", state:"ok", supports:["article","image","video"], kind:"长图文 / 图文 / 视频"},
-  {id:"xiaoyuzhou", name:"小宇宙", short:"宇", color:"#6E4AFF", state:"ok", supports:["audio"], kind:"播客节目"},
-  {id:"ximalaya", name:"喜马拉雅", short:"喜", color:"#F86442", state:"ok", supports:["audio"], kind:"播客专辑"},
-  {id:"lizhi", name:"荔枝播客", short:"荔", color:"#D6336C", state:"ok", supports:["audio"], kind:"播客播单"},
-  {id:"qingting", name:"蜻蜓FM", short:"蜻", color:"#1FA2E0", state:"ok", supports:["audio"], kind:"播客专辑"},
+  {id:"wechat", name:"微信公众号", short:"微", color:"#07C160", supports:["article","image","video","audio"], kind:"文章 / 图片 / 视频 / 音频"},
+  {id:"weibo", name:"微博", short:"博", color:"#FF8200", supports:["image","video"], kind:"贴图 / 视频"},
+  {id:"xhs", name:"小红书", short:"红", color:"#FF2442", supports:["article","image","video","audio"], kind:"长文 / 图文 / 视频 / 音频"},
+  {id:"jike", name:"即刻", short:"即", color:"#FFD400", fg:"#16130E", supports:["image","video"], kind:"图文 / 视频"},
+  {id:"x", name:"X", short:"X", color:"var(--plat-x)", fg:"var(--plat-x-fg)", supports:["article","image","video"], kind:"帖子 / 图片 / 视频"},
+  {id:"zhihu", name:"知乎", short:"知", color:"#0084FF", supports:["article","image","video"], kind:"文章 / 想法 / 视频"},
+  {id:"douban", name:"豆瓣", short:"豆", color:"#2E963D", supports:["article","image"], kind:"日记 / 图文"},
+  {id:"xiaoyuzhou", name:"小宇宙", short:"宇", color:"#6E4AFF", supports:["audio"], kind:"播客节目"},
+  {id:"ximalaya", name:"喜马拉雅", short:"喜", color:"#F86442", supports:["audio"], kind:"播客专辑"},
+  {id:"lizhi", name:"荔枝播客", short:"荔", color:"#D6336C", supports:["audio"], kind:"播客播单"},
 ];
 
 
@@ -486,8 +487,8 @@ function App(){
   const [defaultTargets, setDefaultTargets] = useState({
     article:["wechat","xhs","zhihu"],
     image:["xhs","weibo","jike","douban"],
-    video:["bili","douyin"],
-    audio:["xiaoyuzhou","ximalaya","lizhi","qingting"],
+    video:["weibo","jike"],
+    audio:["xiaoyuzhou","ximalaya","lizhi"],
   });
   const [browser, setBrowser] = useState("disconnected");
   const [tasks, setTasks] = useState(initialTasks);
@@ -764,51 +765,57 @@ function App(){
                 </React.Fragment>
               ) : mode === "publish" ? (
                 <React.Fragment>
-                  <div className="source-type">
-                    {TYPE_ORDER.map(type => {
-                      const meta = TYPE_META[type];
-                      return (
-                        <button
-                          key={type}
-                          className={sourceType === type ? "active" : ""}
-                          onClick={() => selectSourceType(type)}
-                        >
-                          <span className="dot" style={{background:meta.color}}></span>
-                          {meta.zh}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <div className="section-title">
-                    发布平台
-                    <span className="hint">{selectedCount} / {supportedCount}</span>
-                    <button className="ledger-link" onClick={() => window.open("publishments-base.html", "_blank")}>发布库</button>
-                  </div>
-                  <div className="platform-wall">
-                    {supportedPlatforms.map(p => {
-                      const failed = p.state !== "ok";
-                      const isSelected = selected[p.id];
-                      const skin = failed
-                        ? { background:"var(--hover)", color:"var(--ink3)" }
-                        : isSelected
-                          ? { background:p.color, color:p.fg || "#fff" }
-                          : { background:`color-mix(in srgb, ${p.color} 20%, transparent)`, color:p.fg || p.color };
-                      return (
-                        <button
-                          key={p.id}
-                          className={`platform-icon ${isSelected ? "selected" : ""} ${failed ? "fail" : ""}`}
-                          style={skin}
-                          onClick={() => setSelected(prev => ({...prev, [p.id]:!prev[p.id]}))}
-                          title={p.name}
-                          aria-pressed={isSelected}
-                          aria-label={`选择 ${p.name}`}
-                        >
-                          {p.short}
-                          {isSelected && !failed && <span className="check">✓</span>}
-                          {failed && <span className="retry">↻</span>}
-                        </button>
-                      );
-                    })}
+                  <div className="selector-card">
+                    <div className="selector-row">
+                      <span className="selector-label">类型</span>
+                      <div className="type-options">
+                        {TYPE_ORDER.map(type => {
+                          const meta = TYPE_META[type];
+                          return (
+                            <button
+                              key={type}
+                              className={`type-option ${sourceType === type ? "active" : ""}`}
+                              onClick={() => selectSourceType(type)}
+                            >
+                              {meta.zh}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    <div className="selector-row">
+                      <span className="selector-label">平台</span>
+                      <div className="platform-options">
+                        {supportedPlatforms.map(p => (
+                          <button
+                            key={p.id}
+                            className={`platform-option ${selected[p.id] ? "active selected" : ""}`}
+                            style={{background:p.color, color:p.fg || "#fff"}}
+                            title={p.name}
+                            aria-label={`选择 ${p.name}`}
+                            aria-pressed={selected[p.id]}
+                            onClick={() => setSelected(prev => ({...prev, [p.id]:!prev[p.id]}))}
+                          >
+                            {p.short}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="selector-summary">
+                      <span className="count">
+                        已选
+                        <strong>{selectedCount}</strong>
+                        <span className="total">/ {supportedCount}</span>
+                      </span>
+                      <span className="divider"></span>
+                      <button
+                        className="summary-link"
+                        onClick={() => window.open("publishments-base.html", "_blank")}
+                      >
+                        发布库
+                        <span className="arrow">↗</span>
+                      </button>
+                    </div>
                   </div>
 
                   {browser !== "connected" && (
@@ -820,51 +827,45 @@ function App(){
                 </React.Fragment>
               ) : mode === "defaults" ? (
                 <React.Fragment>
-                    <div className="source-type">
-                      {TYPE_ORDER.map(type => {
-                        const meta = TYPE_META[type];
-                        return (
-                          <button
-                            key={type}
-                            className={sourceType === type ? "active" : ""}
-                            onClick={() => selectSourceType(type)}
-                          >
-                            <span className="dot" style={{background:meta.color}}></span>
-                            {meta.zh}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <div className="section-title">
-                      默认平台配置
-                      <span className="hint">{defaultTargets[sourceType]?.length ?? 0} / {supportedCount} 已保存</span>
-                    </div>
-                    <div className="platform-wall">
-                      {supportedPlatforms.map(p => {
-                        const on = (defaultTargets[sourceType] ?? []).includes(p.id);
-                        const off = p.state !== "ok";
-                        const skin = off
-                          ? { background:"var(--hover)", color:"var(--ink3)" }
-                          : on
-                            ? { background:p.color, color:p.fg || "#fff" }
-                            : { background:`color-mix(in srgb, ${p.color} 20%, transparent)`, color:p.fg || p.color };
-                        return (
-                          <button
-                            key={p.id}
-                            className={`platform-icon ${on ? "selected" : ""} ${off ? "muted" : ""}`}
-                            style={skin}
-                            disabled={off}
-                            onClick={() => toggleDefault(sourceType, p.id)}
-                            title={p.name}
-                            aria-pressed={on}
-                            aria-label={`${on ? "移除" : "保存"} ${p.name} 为默认平台`}
-                          >
-                            {p.short}
-                            {on && !off && <span className="check">✓</span>}
-                            {off && <span className="retry">↻</span>}
-                          </button>
-                        );
-                      })}
+                    <div className="selector-card">
+                      <div className="selector-row">
+                        <span className="selector-label">类型</span>
+                        <div className="type-options">
+                          {TYPE_ORDER.map(type => {
+                            const meta = TYPE_META[type];
+                            return (
+                              <button
+                                key={type}
+                                className={`type-option ${sourceType === type ? "active" : ""}`}
+                                onClick={() => selectSourceType(type)}
+                              >
+                                {meta.zh}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      <div className="selector-row">
+                        <span className="selector-label">平台</span>
+                        <div className="platform-options">
+                          {supportedPlatforms.map(p => {
+                            const on = (defaultTargets[sourceType] ?? []).includes(p.id);
+                            return (
+                              <button
+                                key={p.id}
+                                className={`platform-option ${on ? "active selected" : ""}`}
+                                style={{background:p.color, color:p.fg || "#fff"}}
+                                title={p.name}
+                                aria-label={`${on ? "移除" : "保存"} ${p.name} 为默认平台`}
+                                aria-pressed={on}
+                                onClick={() => toggleDefault(sourceType, p.id)}
+                              >
+                                {p.short}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
                     </div>
                     <div className="notice">
                       这里只保存各稿件类型的默认勾选，不创建发布任务。

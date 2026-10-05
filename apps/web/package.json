@@ -13,6 +13,7 @@
     "@heroui/styles": "^3.2.6",
     "@tassello/server": "workspace:*",
     "@tassello/shared": "workspace:*",
+    "@tassello/ui": "workspace:*",
     "@tiptap/core": "^3.31.3",
     "@tiptap/extension-highlight": "^3.31.3",
     "@tiptap/extensions": "^3.31.3",
