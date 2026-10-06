@@ -8,6 +8,10 @@
 
 [![平台矩阵](https://img.shields.io/badge/平台矩阵-15_个平台位-2563EB)](#) [![已接入](https://img.shields.io/badge/已接入-10_个平台-16A34A)](#) [![规划中](https://img.shields.io/badge/规划中-5_个平台-94A3B8)](#) [![内容类型](https://img.shields.io/badge/内容类型-文章·贴图·视频·音频-7C3AED)](#) [![Next.js](https://img.shields.io/badge/Next.js-16-black)](#) [![TypeScript](https://img.shields.io/badge/TypeScript-7-blue)](#) [![License](https://img.shields.io/badge/License-MIT-green)](#license)
 
+<p align="center">
+  <video src="https://github.com/amlei/tassello/releases/download/v0.1.0/tassello-intro-share.mp4" controls muted loop playsinline preload="metadata" width="100%"></video>
+</p>
+
 ## 它解决什么问题？
 
 如果你同时在公众号、小红书、知乎、微博、播客平台等内容渠道发布，你需要：
