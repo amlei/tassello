@@ -4,6 +4,7 @@ import { $ } from "bun";
 const targets = [
   "packages/shared",
   "packages/ui",
+  "packages/site-ui",
   "packages/db",
   "packages/render",
   "packages/cdp",
@@ -17,6 +18,7 @@ const targets = [
   "packages/platforms/ximalaya",
   "packages/platforms/lizhi",
   "packages/server",
+  "apps/site",
   "apps/web",
   "apps/obsidian",
 ];

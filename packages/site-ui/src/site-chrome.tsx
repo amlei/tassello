@@ -4,7 +4,8 @@ import Link from "next/link";
 import { Button } from "@heroui/react";
 import { Moon, Sun } from "reicon-react";
 import React from "react";
-import { setThemePref } from "@/components/theme";
+import { setThemePref } from "./theme";
+import { assetUrl } from "./site-paths";
 
 const NAV_ITEMS = [
   { href: "/changelog", label: "更新日志" },
@@ -33,7 +34,7 @@ export function SiteHeader() {
     <header className="header">
       <div className="shell header-shell">
         <Link className="brand" href="/" aria-label="九漾 Onda 首页">
-          <img className="brand-logo" src="/logo.svg" alt="" width={30} height={30} />
+          <img className="brand-logo" src={assetUrl("/logo.svg")} alt="" width={30} height={30} />
           <span>
             九漾 Onda<small>tassello</small>
           </span>

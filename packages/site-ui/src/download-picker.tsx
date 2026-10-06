@@ -4,8 +4,9 @@ import { Accordion, Button, Link } from "@heroui/react";
 import { Download } from "reicon-react";
 import NextLink from "next/link";
 import React from "react";
-import { ChromeIcon, EdgeIcon } from "@/components/browser-icons";
-import { useLatestRelease } from "@/components/site/use-latest-release";
+import { ChromeIcon, EdgeIcon } from "./browser-icons";
+import { useLatestRelease } from "./use-latest-release";
+import { assetUrl } from "./site-paths";
 
 type DownloadKey = "macos-arm" | "macos-intel" | "windows-x64" | "linux-x64" | "github";
 type DownloadTarget = { platform: string; format: string; href: string | null };
@@ -153,12 +154,12 @@ export function DownloadPicker() {
         <div className="download-visual" aria-hidden="true">
           <div className="download-desktop-shot">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/assets/screenshots/01-editor-preview.png" alt="" width={3840} height={2400} />
+            <img src={assetUrl("/assets/screenshots/01-editor-preview.png")} alt="" width={3840} height={2400} />
           </div>
           <span className="download-surface-chip">Desktop</span>
           <div className="download-obsidian-shot">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/assets/screenshots/obsidian-publisher-4k.png" alt="" width={3840} height={2400} />
+            <img src={assetUrl("/assets/screenshots/obsidian-publisher-4k.png")} alt="" width={3840} height={2400} />
           </div>
           <span className="download-surface-chip obsidian">Obsidian</span>
         </div>
@@ -264,7 +265,7 @@ export function DownloadPicker() {
                     </div>
                     <figure className="download-chrome-shot">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src="/assets/screenshots/chrome-remote-debugging.png" alt="Chrome Remote debugging 页面，Allow remote debugging for this browser instance 已勾选" width={1472} height={802} decoding="async" />
+                      <img src={assetUrl("/assets/screenshots/chrome-remote-debugging.png")} alt="Chrome Remote debugging 页面，Allow remote debugging for this browser instance 已勾选" width={1472} height={802} decoding="async" />
                       <figcaption>在 Chrome 中勾选 Allow remote debugging，随后回到 Obsidian 完成连接。Edge 使用相同地址。</figcaption>
                     </figure>
                   </Accordion.Body>

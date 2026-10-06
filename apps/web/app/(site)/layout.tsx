@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { SiteChrome } from "@/components/site/site-chrome";
+import { SiteChrome } from "@tassello/site-ui/site-chrome";
 import "./site.css";
 
 export const metadata = {

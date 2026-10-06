@@ -1,0 +1,51 @@
+name: Deploy marketing site
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/deploy-site.yml"
+      - "apps/site/**"
+      - "apps/web/components/site/**"
+      - "apps/web/components/browser-icons.tsx"
+      - "apps/web/components/theme.tsx"
+      - "apps/web/components/desktop-chrome.tsx"
+      - "apps/web/content/changelog.md"
+      - "apps/web/app/(site)/site.css"
+      - "apps/web/public/logo.svg"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - run: cd apps/site && bun run build
+        env:
+          NEXT_PUBLIC_BASE_PATH: /tassello
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: apps/site/out
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

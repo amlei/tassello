@@ -3,8 +3,9 @@
 import { Spinner, Tabs } from "@heroui/react";
 import Link from "next/link";
 import React from "react";
-import { PlatformPhysics } from "@/components/site/platform-physics";
-import { useLatestRelease } from "@/components/site/use-latest-release";
+import { PlatformPhysics } from "./platform-physics";
+import { useLatestRelease } from "./use-latest-release";
+import { assetUrl } from "./site-paths";
 
 const SURFACES = [
   {
@@ -27,13 +28,13 @@ const OBSIDIAN_SHOTS = [
   {
     key: "preview",
     title: "Payload 预览",
-    image: "/assets/screenshots/obsidian-publisher-4k.png",
+    image: assetUrl("/assets/screenshots/obsidian-publisher-4k.png"),
     alt: "Obsidian 插件在当前笔记右侧展示 Publisher payload 预览",
   },
   {
     key: "publish",
     title: "发布目标",
-    image: "/assets/screenshots/obsidian-publisher-publish-4k.png",
+    image: assetUrl("/assets/screenshots/obsidian-publisher-publish-4k.png"),
     alt: "Obsidian 插件展示发布目标选择与 Chrome 授权提示",
   },
 ];
@@ -42,19 +43,19 @@ const WORKFLOW_STEPS = [
   {
     title: "创作与手机预览",
     detail: "写作、素材和移动端观感在同一内容项里完成。",
-    image: "/assets/screenshots/01-editor-preview.png",
+    image: assetUrl("/assets/screenshots/01-editor-preview.png"),
     alt: "Onda 编辑器界面，左侧编辑内容，右侧实时显示手机预览效果",
   },
   {
     title: "多平台适配",
     detail: "选择平台后自动处理排版、素材上传和字段填写。",
-    image: "/assets/screenshots/02-multi-platform-publish.png",
+    image: assetUrl("/assets/screenshots/02-multi-platform-publish.png"),
     alt: "Onda 多平台发布设置界面，正在为一条内容选择多个目标平台",
   },
   {
     title: "发布队列",
     detail: "阶段、进度和需要人工确认的平台集中呈现。",
-    image: "/assets/screenshots/03-publish-queue.png",
+    image: assetUrl("/assets/screenshots/03-publish-queue.png"),
     alt: "Onda 发布队列界面，展示多个发布任务的阶段、进度和状态",
   },
 ];
@@ -242,7 +243,7 @@ export function SiteHome() {
                     className={`workflow-panel${index === activeStep ? " current" : ""}`}
                     aria-hidden={index !== activeStep}
                   >
-                    <img src={step.image} width={3840} height={2400} alt={step.alt} decoding="async" />
+                    <img src={assetUrl(step.image)} width={3840} height={2400} alt={step.alt} decoding="async" />
                   </figure>
                 ))}
               </Tabs.Panel>
@@ -282,7 +283,7 @@ export function SiteHome() {
                   className={`gallery-shot-frame${index === activeObsidianShot ? " current" : ""}`}
                   aria-hidden={index !== activeObsidianShot}
                 >
-                  <img src={shot.image} width={3840} height={2400} alt={shot.alt} decoding="async" />
+                  <img src={assetUrl(shot.image)} width={3840} height={2400} alt={shot.alt} decoding="async" />
                 </figure>
               ))}
             </Tabs.Panel>
@@ -294,10 +295,10 @@ export function SiteHome() {
         <div className="shell theme-compact">
           <div className="theme-stage" ref={themeStageRef}>
             <figure className="stage-layer light">
-              <img src="/assets/screenshots/04-platform-settings-light.png" width={3840} height={2400} alt="Onda 浅色主题的平台设置界面" />
+              <img src={assetUrl("/assets/screenshots/04-platform-settings-light.png")} width={3840} height={2400} alt="Onda 浅色主题的平台设置界面" />
             </figure>
             <figure className="stage-layer dark" aria-hidden="true">
-              <img src="/assets/screenshots/05-platform-settings-dark.png" width={3840} height={2400} alt="Onda 深色主题的平台设置界面" />
+              <img src={assetUrl("/assets/screenshots/05-platform-settings-dark.png")} width={3840} height={2400} alt="Onda 深色主题的平台设置界面" />
             </figure>
             <svg className="stage-edge" viewBox="0 0 100 62.5" preserveAspectRatio="none" aria-hidden="true">
               <line ref={edgeLineRef} x1="42" y1="0" x2="58" y2="62.5" />

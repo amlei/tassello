@@ -7,7 +7,7 @@ import { Button, ListBox, ListBoxItem, Modal, Popover, Select } from "@heroui/re
 import { Alert, Check, Refresh, X } from "reicon-react";
 import { ChevronDown, ChevronLeft, ChevronRight } from "reicon-react";
 import { PLATFORM_IMAGE_MARKS, PLATFORM_MARKS, PlatformMark } from "@tassello/ui/platform-icons";
-import { ChromeIcon, EdgeIcon } from "./browser-icons";
+import { ChromeIcon, EdgeIcon } from "@tassello/site-ui/browser-icons";
 import { ThemeSwitcher } from "./theme";
 
 /* 账号行的平台标记：有品牌图标（SVG 或图片）用品牌图标，都没有则回退色块 */

@@ -20,6 +20,7 @@
     "@swc/helpers": "0.5.23",
     "@tassello/server": "workspace:*",
     "@tassello/shared": "workspace:*",
+    "@tassello/site-ui": "workspace:*",
     "@tassello/ui": "workspace:*",
     "@tiptap/core": "^3.31.3",
     "@tiptap/extension-highlight": "^3.31.3",

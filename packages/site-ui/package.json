@@ -1,0 +1,96 @@
+{
+  "name": "@tassello/site-ui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./site-home": {
+      "types": "./src/site-home.tsx",
+      "default": "./src/site-home.tsx"
+    },
+    "./download-picker": {
+      "types": "./src/download-picker.tsx",
+      "default": "./src/download-picker.tsx"
+    },
+    "./site-chrome": {
+      "types": "./src/site-chrome.tsx",
+      "default": "./src/site-chrome.tsx"
+    },
+    "./platform-physics": {
+      "types": "./src/platform-physics.tsx",
+      "default": "./src/platform-physics.tsx"
+    },
+    "./use-latest-release": {
+      "types": "./src/use-latest-release.ts",
+      "default": "./src/use-latest-release.ts"
+    },
+    "./site-paths": {
+      "types": "./src/site-paths.ts",
+      "default": "./src/site-paths.ts"
+    },
+    "./browser-icons": {
+      "types": "./src/browser-icons.tsx",
+      "default": "./src/browser-icons.tsx"
+    },
+    "./theme": {
+      "types": "./src/theme.tsx",
+      "default": "./src/theme.tsx"
+    }
+  },
+  "dependencies": {
+    "@tassello/ui": "workspace:*"
+  },
+  "peerDependencies": {
+    "@heroui/react": "^3.2.6",
+    "next": "^16.3.5",
+    "react": "^19.2.8",
+    "reicon-react": "^1.2.5"
+  },
+  "typesVersions": {
+    "./site-home": {
+      "*": [
+        "./src/site-home.tsx"
+      ]
+    },
+    "./download-picker": {
+      "*": [
+        "./src/download-picker.tsx"
+      ]
+    },
+    "./site-chrome": {
+      "*": [
+        "./src/site-chrome.tsx"
+      ]
+    },
+    "./platform-physics": {
+      "*": [
+        "./src/platform-physics.tsx"
+      ]
+    },
+    "./use-latest-release": {
+      "*": [
+        "./src/use-latest-release.ts"
+      ]
+    },
+    "./site-paths": {
+      "*": [
+        "./src/site-paths.ts"
+      ]
+    },
+    "./browser-icons": {
+      "*": [
+        "./src/browser-icons.tsx"
+      ]
+    },
+    "./theme": {
+      "*": [
+        "./src/theme.tsx"
+      ]
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19"
+  }
+}
