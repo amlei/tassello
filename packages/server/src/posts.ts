@@ -217,6 +217,49 @@ export async function setPostMedia(
   return getPost(postId);
 }
 
+/** 读素材元信息；HTTP Range 解析必须先拿到文件总大小，避免为了响应一个区间加载整片 */
+export async function readAssetMetadata(
+  assetId: string,
+): Promise<{ ext: string; totalSize: number } | null> {
+  const asset = await getPrisma().asset.findUnique({ where: { id: assetId } });
+  if (!asset || !asset.path) return null;
+  try {
+    const stat = await fs.stat(asset.path);
+    if (!stat.isFile() || stat.size === 0) return null;
+    return {
+      ext: asset.path.slice(asset.path.lastIndexOf(".")).toLowerCase(),
+      totalSize: stat.size,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** 读素材指定字节区间；视频悬停 seek 需要 HTTP Range，否则浏览器要等整片下载 */
+export async function readAssetFileRange(
+  assetId: string,
+  start: number,
+  end: number,
+): Promise<{ bytes: Buffer; ext: string; totalSize: number } | null> {
+  const asset = await getPrisma().asset.findUnique({ where: { id: assetId } });
+  if (!asset || !asset.path) return null;
+  const stat = await fs.stat(asset.path);
+  if (!stat.isFile() || stat.size === 0) return null;
+  const safeStart = Math.max(0, Math.min(start, stat.size - 1));
+  const safeEnd = Math.max(safeStart, Math.min(end, stat.size - 1));
+  const length = safeEnd - safeStart + 1;
+  if (length <= 0) return null;
+
+  const handle = await fs.open(asset.path, "r");
+  try {
+    const bytes = Buffer.allocUnsafe(length);
+    await handle.read(bytes, 0, length, safeStart);
+    return { bytes, ext: asset.path.slice(asset.path.lastIndexOf(".")).toLowerCase(), totalSize: stat.size };
+  } finally {
+    await handle.close();
+  }
+}
+
 /** 读素材原文件字节（供路由回传缩略图/预览；空路径 = 占位色块，返回 null） */
 export async function readAssetFile(assetId: string): Promise<{ bytes: Buffer; ext: string } | null> {
   const asset = await getPrisma().asset.findUnique({ where: { id: assetId } });

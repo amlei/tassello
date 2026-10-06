@@ -4,7 +4,7 @@
 import React from "react";
 import ReactDOM from "react-dom";
 import { STAGE_LABELS, TYPE_META, type PlatformDTO, type TaskDTO } from "@tassello/shared";
-import { Button, Link as OndaLink, Modal } from "@heroui/react";
+import { Button, Checkbox, Input, Link as OndaLink, Modal } from "@heroui/react";
 import { PlatformMark } from "@tassello/ui/platform-icons";
 import { Alert, Check, Refresh, X } from "reicon-react";
 
@@ -22,6 +22,25 @@ const FAIL_TAG: Record<"dead" | "fix", string> = { dead: "无法重试", fix: "�
 
 function isAwaiting(task: TaskDTO): boolean {
   return task.status === "running" && task.stage === 3 && task.progress >= 100;
+}
+
+/* 队列展示相对时间；悬停处保留绝对时间兜底 */
+function relativeTaskTime(value: string | null): string {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  const seconds = Math.max(0, Math.round((Date.now() - date.getTime()) / 1000));
+  if (seconds < 10) return "刚刚";
+  if (seconds < 60) return `${seconds} 秒前`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} 分钟前`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} 小时前`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days} 天前`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months} 个月前`;
+  return `${Math.floor(months / 12)} 年前`;
 }
 
 function PlatformTile({
@@ -79,6 +98,8 @@ function PlatformTile({
         className={TILE}
         style={{ background: pc, color: fg }}
         href={task.url}
+        target="_blank"
+        rel="noopener noreferrer"
         aria-label={`${p.name}${task.channelName ? ` · ${task.channelName}` : ""} 已发布，点击访问`}
       >
         {body}
@@ -129,7 +150,8 @@ function FailedTile({
   onDelete: (id: string) => void;
 }) {
   const kind = failKind(task.failReason);
-  const when = (task.finishedAt || "").slice(11, 16);
+  const finishedAt = task.finishedAt || "";
+  const when = relativeTaskTime(finishedAt);
   const p = platform ?? { id: task.platformId, name: task.platformId, char: "?", color: "#2C6FF0", fg: undefined };
   const label = p.name;
   const wrapRef = React.useRef<HTMLSpanElement | null>(null);
@@ -165,14 +187,14 @@ function FailedTile({
         </span>
         <span className="absolute right-[-6px] top-[-6px] z-[3] flex h-[19px] w-[19px] items-center justify-center rounded-[7px] border-2 border-white text-white" style={{ background: "var(--color-error)" }}><Alert size={10} strokeWidth={4} /></span>
         {kind === "retry" && (
-          <button
-            className="q-tile-retry"
-            onClick={() => onRetry(task.id)}
+          <Button
+            variant="ghost"
+            className="q-tile-retry rounded-[14px] p-0"
+            onPress={() => onRetry(task.id)}
             aria-label={`重试发布到 ${label}`}
-            title="重试"
           >
             <Refresh size={13} strokeWidth={3.3} />
-          </button>
+          </Button>
         )}
       </span>
       {open && ReactDOM.createPortal(
@@ -180,7 +202,14 @@ function FailedTile({
           <span className="q-tiptxt">{task.failReason}</span>
           <span className="q-tipmeta">
             <span>{when}{kind !== "retry" ? " · " + FAIL_TAG[kind] : ""}</span>
-            <button className="q-tipx" onClick={() => onDelete(task.id)} aria-label="移除这条记录" title="移除记录">移除</button>
+            <Button
+              variant="ghost"
+              className="q-tipx rounded-none bg-transparent p-0"
+              onPress={() => onDelete(task.id)}
+              aria-label="移除这条记录"
+            >
+              移除
+            </Button>
           </span>
         </span>,
         document.body
@@ -202,18 +231,19 @@ export function TasksView({
   onDelete: (ids: string[]) => void;
 }) {
   const [confirmTask, setConfirmTask] = React.useState<TaskDTO | null>(null);
+  /* 轮询本身会让相对时间随时间刷新 */
   const running = tasks.filter((t) => t.status === "running" && !isAwaiting(t));
   const awaiting = tasks.filter(isAwaiting);
   const onDeleteOne = (id: string) => onDelete([id]);
   const failed = tasks.filter((t) => t.status === "failed");
   const ok = tasks.filter((t) => t.status === "success");
 
-  const order: { postId: string; tasks: TaskDTO[]; post?: (typeof posts)[number]; running: number; busy: boolean; bad: number; latest: string }[] = [];
-  const byPost = new Map<string, { postId: string; tasks: TaskDTO[]; post?: (typeof posts)[number]; running: number; busy: boolean; bad: number; latest: string }>();
+  const order: { postId: string; tasks: TaskDTO[]; post?: (typeof posts)[number]; running: number; busy: boolean; bad: number; latest: string; latestRaw: string }[] = [];
+  const byPost = new Map<string, { postId: string; tasks: TaskDTO[]; post?: (typeof posts)[number]; running: number; busy: boolean; bad: number; latest: string; latestRaw: string }>();
   tasks.forEach((t) => {
     let g = byPost.get(t.postId);
     if (!g) {
-      g = { postId: t.postId, tasks: [], running: 0, busy: false, bad: 0, latest: "" };
+      g = { postId: t.postId, tasks: [], running: 0, busy: false, bad: 0, latest: "", latestRaw: "" };
       byPost.set(t.postId, g);
       order.push(g);
     }
@@ -225,10 +255,11 @@ export function TasksView({
     /* 忙 = 排队或真正执行中；等待确认（stage3+100%）不算，可删 */
     g.busy = g.tasks.some((t) => t.status === "queued" || (t.status === "running" && !(t.stage === 3 && t.progress >= 100)));
     g.bad = g.tasks.filter((t) => t.status === "failed").length;
-    g.latest = g.tasks.reduce((acc, t) => {
-      const s = (t.finishedAt || t.createdAt || "").replace("T", " ").slice(5, 16);
+    g.latestRaw = g.tasks.reduce((acc, t) => {
+      const s = t.finishedAt || t.createdAt || "";
       return s > acc ? s : acc;
     }, "");
+    g.latest = relativeTaskTime(g.latestRaw);
   });
   order.sort((a, b) => (b.running > 0 ? 1 : 0) - (a.running > 0 ? 1 : 0));
 
@@ -276,7 +307,7 @@ export function TasksView({
                 </div>
                 <div className="ml-auto flex flex-none items-center gap-3.5 font-mono text-[11px] text-ink2">
                   <span>{g.tasks.length} 个平台</span>
-                  <span>{g.latest}</span>
+                  <span title={g.latestRaw}>{g.latest}</span>
                   {/* 删除这条队列记录（该稿子的全部发布记录）：只删记录，不动稿子与平台；进行中不可删 */}
                   <span title={g.busy ? "发布进行中，结束后才能删除" : "删除这条队列记录"}>
                     <Button
@@ -362,7 +393,7 @@ function ConfirmPublishDialog({
               className="mt-4 inline-flex text-sm font-bold text-accent hover:underline"
               href={inspectUrl}
               target="_blank"
-              rel="noreferrer"
+              rel="noopener noreferrer"
             >
               打开 {p.name} 页面检查
             </OndaLink>
@@ -374,16 +405,20 @@ function ConfirmPublishDialog({
             }}>
               <label className="mt-5 block">
                 <span className="block text-[12.5px] font-bold text-ink">回填发布链接</span>
-                <input
+                <Input
                   type="url"
                   inputMode="url"
+                  variant="secondary"
                   placeholder="https://..."
                   value={url}
                   onChange={(e) => setUrl(e.target.value)}
                   aria-invalid={urlInvalid}
                   className={
-                    "mt-2 w-full rounded-[10px] border bg-card px-3 py-2.5 text-[13px] text-ink outline-none transition-colors " +
-                    (urlInvalid ? "border-error" : "border-line focus:border-accent")
+                    "mt-2 w-full rounded-[10px] border bg-card px-3 py-2.5 text-[13px] text-ink shadow-none outline-none transition-colors " +
+                    (urlInvalid
+                      ? "border-error focus:border-error focus-visible:border-error"
+                      : "border-line focus:border-accent focus-visible:border-accent") +
+                    " data-[focus-visible=true]:ring-0"
                   }
                 />
                 {urlInvalid && (
@@ -391,15 +426,20 @@ function ConfirmPublishDialog({
                 )}
               </label>
 
-              <label className="mt-3.5 flex items-start gap-2.5 text-[12.5px] leading-relaxed text-ink2">
-                <input
-                  type="checkbox"
-                  checked={noPublicUrl}
-                  onChange={(e) => setNoPublicUrl(e.target.checked)}
-                  className="mt-0.5 h-[15px] w-[15px] accent-accent"
-                />
-                <span>该结果没有公开链接，我已在平台确认完成</span>
-              </label>
+              <Checkbox
+                isSelected={noPublicUrl}
+                onChange={setNoPublicUrl}
+                className="mt-3.5"
+              >
+                <Checkbox.Content className="items-start gap-2.5 text-[12.5px] font-medium leading-relaxed text-ink2">
+                  <Checkbox.Control className="mt-0.5 h-[15px] w-[15px] rounded-[5px]">
+                    <Checkbox.Indicator>
+                      <Check className="h-2.5 w-2.5" strokeWidth={3.2} />
+                    </Checkbox.Indicator>
+                  </Checkbox.Control>
+                  <span>该结果没有公开链接，我已在平台确认完成</span>
+                </Checkbox.Content>
+              </Checkbox>
 
               <div className="mt-6 flex items-center justify-end gap-2.5">
                 <Button variant="ghost" className="rounded-full bg-transparent px-3.5 py-2 text-[13.5px] font-bold text-ink2 data-[hovered=true]:bg-hover" onPress={onClose}>

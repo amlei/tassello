@@ -33,6 +33,7 @@ export function bootstrap(): void {
 export * from "./secrets";
 export * from "./settings";
 export * from "./posts";
+export { readAssetFileRange, readAssetMetadata } from "./posts";
 export * from "./accounts";
 export * from "./tasks";
 export * from "./profile";

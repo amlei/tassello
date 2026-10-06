@@ -8,7 +8,7 @@ import React from "react";
 import { TYPE_META, type PostDTO } from "@tassello/shared";
 import { useLongPressReorder } from "./dnd";
 import { AudioBar, fmtTime } from "./bits";
-import { Button, Dropdown, Popover } from "@heroui/react";
+import { Button, Dropdown, Input, Popover } from "@heroui/react";
 import { PreviewColumn } from "./phone";
 import {
   Add, ArrowLeft, ChevronDown, ChevronUp, Send, X,
@@ -649,7 +649,7 @@ function ImageAssets({
             aria-label={expanded ? "收起素材" : "展开全部素材"}
             aria-expanded={expanded}
           >
-            expanded ? <ChevronUp size={14} strokeWidth={3.3} /> : <ChevronDown size={14} strokeWidth={3.3} />
+            {expanded ? <ChevronUp size={14} strokeWidth={3.3} /> : <ChevronDown size={14} strokeWidth={3.3} />}
           </Button>
         )}
       </div>
@@ -733,14 +733,14 @@ function MediaAssetSection({
             </div>
           </div>
         ) : (
-          <button
-            type="button"
-            className="flex aspect-video w-full max-w-[560px] flex-col items-center justify-center gap-1.5 rounded-xl border-[1.5px] border-dashed border-ink3 bg-card text-[13.5px] font-bold text-ink2 transition-colors hover:border-ink hover:text-ink"
-            onClick={() => inputRef.current?.click()}
+          <Button
+            variant="ghost"
+            className="min-w-0 flex aspect-video w-full max-w-[560px] flex-col items-center justify-center gap-1.5 rounded-xl border-[1.5px] border-dashed border-ink3 bg-card text-[13.5px] font-bold text-ink2 transition-colors data-[hovered=true]:border-ink data-[hovered=true]:bg-card data-[hovered=true]:text-ink"
+            onPress={() => inputRef.current?.click()}
             aria-label="上传视频"
           >
             <Add size={16} strokeWidth={3.3} /> 上传视频
-          </button>
+          </Button>
         )
       ) : media ? (
         /* 音频：整条播放条 + 行内删除（原型 m-audiowrap，删除钮常驻不悬浮） */
@@ -757,14 +757,14 @@ function MediaAssetSection({
           </Button>
         </div>
       ) : (
-        <button
-          type="button"
-          className="flex w-full max-w-[560px] items-center gap-2.5 rounded-xl border-[1.5px] border-dashed border-ink3 bg-card px-4 py-[14px] text-[13.5px] font-bold text-ink2 transition-colors hover:border-ink hover:text-ink"
-          onClick={() => inputRef.current?.click()}
+        <Button
+          variant="ghost"
+          className="min-w-0 flex w-full max-w-[560px] items-center gap-2.5 rounded-xl border-[1.5px] border-dashed border-ink3 bg-card px-4 py-[14px] text-[13.5px] font-bold text-ink2 transition-colors data-[hovered=true]:border-ink data-[hovered=true]:bg-card data-[hovered=true]:text-ink"
+          onPress={() => inputRef.current?.click()}
           aria-label="上传音频"
         >
           <Add size={16} strokeWidth={3.3} /> 上传音频
-        </button>
+        </Button>
       )}
     </div>
   );
@@ -939,10 +939,11 @@ function EditToolbar({ editor, onImage }: { editor: Editor | null; onImage: () =
         </Popover.Trigger>
         <Popover.Content placement="bottom right">
           <div className="flex items-center gap-1.5 rounded-xl border border-line bg-card p-1.5 shadow-[0_14px_40px_rgba(15,15,15,0.14)]">
-            <input
+            <Input
               ref={linkInputRef}
               autoFocus
-              className="w-[220px] rounded-lg bg-hover px-2.5 py-1.5 text-[13px] text-ink outline-none placeholder:text-ink3"
+              aria-label="链接地址"
+              className="h-auto min-h-0 w-[220px] rounded-lg border-0 bg-hover px-2.5 py-1.5 text-[13px] text-ink shadow-none outline-none placeholder:text-ink3 data-[focused=true]:bg-hover data-[focus-visible=true]:bg-hover data-[focus-visible=true]:shadow-none"
               value={linkUrl}
               placeholder="https://…"
               onChange={(e) => setLinkUrl(e.target.value)}
@@ -1097,10 +1098,10 @@ export function EditorView({
         <span className="font-mono text-xs text-ink2">{wordCount} 字</span>
         <Button className="ml-auto flex items-center gap-2 rounded-full bg-green px-[26px] py-[11px] text-[15px] font-black tracking-[1px] text-white transition-[translate,background-color] duration-150 data-[hovered=true]:-translate-y-0.5 data-[hovered=true]:bg-[#069e62]" onPress={onPublish}><Send size={15} strokeWidth={2.9} /> 发布</Button>
       </div>
-      <div className="grid min-h-0 flex-1 grid-cols-[1fr_460px]">
-        <div className="relative flex min-h-0 overflow-hidden">
+      <div className="grid min-h-0 flex-1 grid-cols-[1fr_460px] bg-card">
+        <div className="relative flex min-h-0 overflow-hidden bg-card">
           {/* 顶距放在首子元素上而不是容器 padding：工具栏 sticky 时才能贴到滚动区最顶 */}
-          <div className="scroll-thin min-h-0 flex-1 overflow-auto border-r border-line px-10 pb-[34px] [&>*:first-child]:mt-[34px]" ref={writeRef} onScroll={syncMore}>
+          <div className="scroll-thin min-h-0 flex-1 overflow-auto px-10 pb-[34px] [&>*:first-child]:mt-[34px]" ref={writeRef} onScroll={syncMore}>
             <AssetSection
               post={post}
               color={t.color}
@@ -1136,8 +1137,10 @@ export function EditorView({
                 if (im && editor) insertFigureAt(editor.view, im);
               }}
             />
-            <input
-              className="w-full border-b-2 border-transparent bg-transparent pb-3 pt-1 text-[28px] font-bold leading-[1.35] tracking-[-0.4px] text-ink outline-none transition-colors placeholder:text-ink3 focus:border-accent"
+            <Input
+              aria-label="稿子标题"
+              fullWidth
+              className="h-auto min-h-0 w-full border-0 border-b-2 border-transparent bg-transparent pb-3 pt-1 text-[28px] font-bold leading-[1.35] tracking-[-0.4px] text-ink shadow-none outline-none transition-colors placeholder:text-ink3 focus:bg-transparent focus:border-accent focus:shadow-none data-[focused=true]:bg-transparent data-[focused=true]:border-accent data-[focused=true]:shadow-none data-[focus-visible=true]:bg-transparent data-[focus-visible=true]:border-accent data-[focus-visible=true]:shadow-none"
               value={post.title}
               placeholder="给这篇稿子起个标题"
               onChange={(e) => onChangeField("title", e.target.value)}

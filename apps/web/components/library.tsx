@@ -5,103 +5,18 @@
 import React from "react";
 import { useRouter } from "next/navigation";
 import { TYPE_META, type ContentType, type PlatformDTO, type PostDTO, type TaskDTO } from "@tassello/shared";
-import { AlertDialog, Button, Dropdown, SearchField } from "@heroui/react";
+import { AlertDialog, Button } from "@heroui/react";
 import { fmtDate, fmtTime } from "./bits";
 import { FloatingPill } from "./bits";
 import { api } from "./api";
 import { WorkspaceShell } from "./workspace-shell";
 import { useLongPressReorder } from "./dnd";
-import { Add, Check, Sort, X } from "reicon-react";
-
-export const SORTS = [
-  { id: "recent", label: "最近更新" },
-  { id: "oldest", label: "最早更新" },
-  { id: "title", label: "按标题" },
-  { id: "manual", label: "自定义顺序" },
-] as const;
-export type SortKey = (typeof SORTS)[number]["id"];
+import { Check, X } from "reicon-react";
 
 /* 列表摘要：跳过插图记号和空行，取第一段真正的文字 */
 export function plainSummary(body: string): string {
   const lines = (body || "").split("\n").map((s) => s.trim()).filter(Boolean);
   return lines.find((l) => !/^!\[([^\]]*)\]\(asset:\/\/([^)]+)\)$/.test(l)) || "";
-}
-
-/* ---------- 主区头部：标题 + 搜索 + 排序 + 新建（scope 恒为某一类型，新建直达） ---------- */
-function ViewHead({
-  query, onQuery, sort, onSort, scope, onNew,
-}: {
-  query: string;
-  onQuery: (q: string) => void;
-  sort: SortKey;
-  onSort: (s: SortKey) => void;
-  scope: string;
-  onNew: (type: string) => void;
-}) {
-  const searchRef = React.useRef<HTMLInputElement | null>(null);
-  const cur = SORTS.find((s) => s.id === sort) || SORTS[0];
-  const t = TYPE_META[scope as ContentType];
-
-  React.useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        searchRef.current?.focus();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
-
-  return (
-    <header className="flex flex-none flex-wrap items-center justify-end gap-2.5 px-[34px] py-3">
-      <div className="flex min-w-0 max-w-full flex-wrap items-center justify-end gap-2.5 gap-y-2">
-        <SearchField
-          aria-label="搜索稿子"
-          value={query}
-          onChange={onQuery}
-          className="[&_.heroui-input]:bg-card"
-        >
-          <SearchField.Group className="w-[210px] min-w-[120px] max-w-full rounded-full border border-line bg-card px-3.5 py-2 transition-[width] focus-within:w-[290px] focus-within:border-accent">
-            <SearchField.SearchIcon className="text-ink3" />
-            <SearchField.Input
-              ref={searchRef}
-              placeholder="搜索标题与正文"
-              className="text-sm text-ink"
-            />
-            <SearchField.ClearButton />
-          </SearchField.Group>
-        </SearchField>
-
-        <Dropdown>
-          <Button variant="ghost" className="gap-[7px] rounded-full border border-line bg-card px-[15px] py-2 text-[13.5px] font-bold text-ink data-[hovered=true]:bg-hover">
-            <Sort size={13} strokeWidth={3.3} /> {cur.label}
-          </Button>
-          <Dropdown.Popover placement="bottom right">
-            <Dropdown.Menu
-              aria-label="排序方式"
-              selectedKeys={[sort]}
-              selectionMode="single"
-              disallowEmptySelection
-              onAction={(k) => onSort(k as SortKey)}
-            >
-              {SORTS.map((s) => (
-                <Dropdown.Item key={s.id} textValue={s.label}>{s.label}</Dropdown.Item>
-              ))}
-            </Dropdown.Menu>
-          </Dropdown.Popover>
-        </Dropdown>
-
-        <Button
-          className="gap-2 whitespace-nowrap rounded-full px-[18px] py-[9px] text-sm font-black text-white transition-[translate,filter] duration-150 data-[hovered=true]:-translate-y-0.5 data-[hovered=true]:brightness-105"
-          style={{ background: t.color }}
-          onPress={() => onNew(scope)}
-        >
-          <Add size={14} strokeWidth={3.3} /> 新建{t.zh}
-        </Button>
-      </div>
-    </header>
-  );
 }
 
 /* ---------- 行内动作：删除只负责发起，确认走弹窗（原型 RowActions 同构） ---------- */
@@ -114,20 +29,20 @@ function RowActions({ post, onAskDelete, solid }: { post: PostDTO; onAskDelete: 
       }
       onClick={(e) => e.stopPropagation()}
     >
-      <button
-        type="button"
+      <Button
+        isIconOnly
+        variant="ghost"
         className={
-          "flex items-center justify-center border border-line text-ink2 transition-colors " +
+          "min-w-0 flex items-center justify-center border border-line text-ink2 transition-colors " +
           (solid
-            ? "h-[27px] w-[27px] rounded-[9px] media-x bg-white/95 shadow-[0_1px_4px_rgba(15,15,15,0.12)] hover:bg-hover hover:text-ink"
-            : "h-[30px] w-[30px] rounded-lg media-x bg-card hover:bg-hover hover:text-ink")
+            ? "h-[27px] w-[27px] rounded-[9px] media-x bg-white/95 shadow-[0_1px_4px_rgba(15,15,15,0.12)] data-[hovered=true]:bg-hover data-[hovered=true]:text-ink"
+            : "h-[30px] w-[30px] rounded-lg media-x bg-card data-[hovered=true]:bg-hover data-[hovered=true]:text-ink")
         }
-        title="删除这篇稿子"
         aria-label={`删除 ${post.title || "未命名"}`}
-        onClick={() => onAskDelete(post)}
+        onPress={() => onAskDelete(post)}
       >
         <X size={11} strokeWidth={4} />
-      </button>
+      </Button>
     </div>
   );
 }
@@ -304,13 +219,86 @@ function VideoTile({
   onOpen: (id: string) => void;
   onAskDelete: (post: PostDTO) => void;
 }) {
+  const video = post.assets.find((asset) => asset.kind === "video" && asset.path);
+  const [previewRatio, setPreviewRatio] = React.useState<number | null>(null);
+  const [videoDuration, setVideoDuration] = React.useState(post.durationSec ?? 0);
+  const previewRatioRef = React.useRef<number>(0);
+  const previewVideoRef = React.useRef<HTMLVideoElement | null>(null);
+  const duration = post.durationSec || videoDuration;
+
+  const seekPreview = (ratio: number) => {
+    const clamped = Math.min(1, Math.max(0, ratio));
+    previewRatioRef.current = clamped;
+    setPreviewRatio(clamped);
+    if (previewVideoRef.current) {
+      previewVideoRef.current.currentTime = clamped * duration;
+    }
+  };
+
+  const resetPreview = () => {
+    previewRatioRef.current = 0;
+    setPreviewRatio(null);
+    if (previewVideoRef.current) {
+      previewVideoRef.current.currentTime = 0.001;
+    }
+  };
+
+  const seekFromPointer = (event: React.MouseEvent<HTMLElement>) => {
+    if (!video || !duration) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    seekPreview((event.clientX - rect.left) / rect.width);
+  };
+
   return (
     <div className={"group relative " + TILE_HOVER}>
       <Button variant="ghost" className={TILE_CLS + " text-left"} style={TILE_STYLE} onPress={() => onOpen(post.id)} aria-label={post.title || "未命名稿子"}>
         <span className="relative block w-full">
-          <span className="relative flex aspect-video items-center justify-center overflow-hidden rounded-[10px] bg-hover" aria-hidden="true">
-            <span className="ml-1 h-0 w-0 border-y-[9px] border-l-[14px] border-l-ink border-y-transparent opacity-[.92]" />
-            <span className="absolute bottom-[7px] right-2 font-mono text-[10px] text-ink2">{post.durationSec ? fmtTime(post.durationSec) : "00:00"}</span>
+          <span
+            className="relative flex aspect-video items-center justify-center overflow-hidden rounded-[14px] bg-hover"
+            onMouseEnter={() => video && seekPreview(previewRatioRef.current)}
+            onMouseMove={seekFromPointer}
+            onMouseLeave={resetPreview}
+          >
+            {video && (
+              <video
+                ref={previewVideoRef}
+                src={`/api/assets/${video.id}/raw`}
+                className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+                muted
+                playsInline
+                preload="metadata"
+                onLoadedData={(event) => {
+                  if (previewRatioRef.current === 0) {
+                    event.currentTarget.currentTime = 0.001;
+                  }
+                }}
+                onLoadedMetadata={(event) => {
+                  setVideoDuration(event.currentTarget.duration || duration);
+                  const ratio = previewRatioRef.current;
+                  if (ratio > 0) {
+                    event.currentTarget.currentTime = ratio * (event.currentTarget.duration || duration);
+                  }
+                }}
+              />
+            )}
+
+            {previewRatio != null ? (
+              <span className="absolute inset-x-0 bottom-0">
+                <span className="absolute inset-x-0 bottom-0 h-[3px] overflow-hidden rounded-full bg-black/25" aria-hidden="true">
+                  <span
+                    className="absolute inset-y-0 left-0 rounded-full bg-error"
+                    style={{ width: `${Math.round(previewRatio * 100)}%` }}
+                  />
+                </span>
+                <span className="absolute bottom-[7px] right-2 rounded-[4px] bg-black/72 px-[5px] py-[1px] font-mono text-[10px] text-white">
+                  {fmtTime(Math.floor((previewRatio || 0) * duration))}
+                </span>
+              </span>
+            ) : (
+              <span className="absolute bottom-[7px] right-2 font-mono text-[10px] text-ink2">
+                {duration ? fmtTime(duration) : "00:00"}
+              </span>
+            )}
             <CoverLive live={live} />
           </span>
         </span>
@@ -334,8 +322,7 @@ export function LibraryScreen({
 }) {
   const router = useRouter();
   const [posts, setPosts] = React.useState(initialPosts);
-  const [query, setQuery] = React.useState("");
-  const [sort, setSort] = React.useState<SortKey>("recent");
+  const [sort, setSort] = React.useState<"recent" | "manual">("recent");
   const [tasks, setTasks] = React.useState(initialTasks);
   /* 轮询任务：仅取轻量任务列表，驱动「发布中 / 已发布」徽标与浮动条 */
   React.useEffect(() => {
@@ -356,6 +343,13 @@ export function LibraryScreen({
   const avgProgress = runningCount
     ? Math.round(tasks.filter((x) => x.status === "running").reduce((sum, x) => sum + x.progress, 0) / runningCount)
     : 0;
+  /* 侧栏数字以内容项为准：一篇稿子发到多个平台仍算一项 */
+  const activeRunningCount = new Set(
+    tasks
+      .filter((x) => x.status === "running" && !(x.stage === 3 && x.progress >= 100))
+      .map((x) => x.postId),
+  ).size;
+  const queueItemCount = new Set(tasks.map((x) => x.postId)).size;
 
   /* 删除确认：行内 × 只负责发起，确认走弹窗（Esc / 点背景取消） */
   const [deleteTarget, setDeleteTarget] = React.useState<PostDTO | null>(null);
@@ -372,26 +366,18 @@ export function LibraryScreen({
     router.push(`/editor/${post.id}`);
   };
 
-  const list = React.useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (q) return posts.filter((p) => (p.title + " " + p.body).toLowerCase().includes(q));
-    return posts;
-  }, [posts, query]);
-
   const sorted = React.useMemo(() => {
-    const out = list.slice();
+    const out = posts.slice();
     out.sort((a, b) => {
       if (sort === "manual") return a.manualOrder - b.manualOrder;
-      if (sort === "title") return (a.title || "").localeCompare(b.title || "", "zh");
-      const d = Date.parse(a.updatedAt) - Date.parse(b.updatedAt);
-      return sort === "oldest" ? d : -d;
+      return Date.parse(b.updatedAt) - Date.parse(a.updatedAt);
     });
     return out;
-  }, [list, sort]);
+  }, [posts, sort]);
 
   /* 长按拖动排序只开在贴图上：其它类型的顺序由时间决定，手动排没有意义。
      搜索中、或按标题排的时候也先关掉 —— 那时顺序不是用户排的。 */
-  const orderable = type === "image" && sort !== "title" && !query.trim();
+  const orderable = type === "image" && sort !== "manual";
   const dnd = useLongPressReorder({
     ids: orderable ? sorted.map((p) => p.id) : [],
     onCommit: (ids) => {
@@ -417,12 +403,6 @@ export function LibraryScreen({
     return reordered.length === sorted.length ? reordered : sorted;
   })();
 
-  const meta = [
-    `${sorted.length} 篇`,
-    t.en,
-    query.trim() ? `筛选「${query.trim()}」` : null,
-  ].filter(Boolean).join(" · ");
-
   const renderTile = (p: PostDTO) => {
     const live = runningIds.includes(p.id);
     const published = publishedIds.has(p.id);
@@ -436,25 +416,19 @@ export function LibraryScreen({
     <WorkspaceShell
       active={type}
       counts={counts}
-      runningCount={runningCount}
-      queueCount={tasks.length}
+      runningCount={activeRunningCount}
+      queueCount={queueItemCount}
       platforms={platforms}
+      newScope={type as ContentType}
+      onNew={(newType) => void newPost(newType)}
       screenLabel={`内容库 · ${t.zh}`}
-      context={{ title: t.zh, meta }}
+      context={{ title: t.zh }}
     >
       <div className="mx-auto flex w-full max-w-[1560px] min-h-0 flex-1 flex-col">
-        <ViewHead
-          query={query}
-          onQuery={setQuery}
-          sort={sort}
-          onSort={setSort}
-          scope={type}
-          onNew={(newType) => void newPost(newType)}
-        />
-        <div className="scroll-thin min-h-0 flex-1 overflow-auto px-[34px] pb-[120px]">
+        <div className="scroll-thin min-h-0 flex-1 overflow-auto px-[34px] pt-3 pb-[120px]">
           {sorted.length === 0 && (
             <div className="rounded-[14px] border border-dashed border-ink3 p-11 text-center font-mono text-[13px] text-ink2">
-              {query.trim() ? `没有匹配「${query.trim()}」的稿子 — 换个词，或清空搜索` : "这里还没有内容 — 点右上角新建一篇"}
+              这里还没有内容 — 用顶部按钮新建一篇
             </div>
           )}
           <div className={"relative grid grid-cols-[repeat(auto-fill,minmax(212px,1fr))] gap-3.5" + (dnd.dragId ? " cursor-grabbing" : "")} ref={orderable ? dnd.gridRef : undefined}>

@@ -45,6 +45,8 @@ next-env.d.ts
 shots/
 
 # tassello
+release/
+apps/desktop/release/
 apps/desktop/dist/
 packages/db/src/generated/
 apps/desktop/build/
@@ -52,3 +54,5 @@ apps/desktop/build/
 # obsidian plugin
 apps/obsidian/dist/
 apps/obsidian/release/
+
+.workbuddy/

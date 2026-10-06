@@ -38,7 +38,10 @@ export function QueueScreen({
     try { await Promise.all(ids.map((id) => api.deleteTask(id))); } catch {}
     void api.listTasks().then(setTasks).catch(() => {});
   };
-  const runningCount = tasks.filter((t) => t.status === "running").length;
+  const activeRunningTasks = tasks.filter((t) => t.status === "running" && !(t.stage === 3 && t.progress >= 100));
+  const runningCount = activeRunningTasks.length;
+  const queueItemCount = new Set(tasks.map((t) => t.postId)).size;
+  const activeRunningItemCount = new Set(activeRunningTasks.map((t) => t.postId)).size;
   const avgProgress = runningCount
     ? Math.round(tasks.filter((t) => t.status === "running").reduce((sum, t) => sum + t.progress, 0) / runningCount)
     : 0;
@@ -47,11 +50,11 @@ export function QueueScreen({
     <WorkspaceShell
       active="queue"
       counts={counts}
-      runningCount={runningCount}
-      queueCount={tasks.length}
+      runningCount={activeRunningItemCount}
+      queueCount={queueItemCount}
       platforms={platforms}
       screenLabel="发布队列"
-      context={{ title: "发布队列", meta: `${tasks.length} 条发布` }}
+      context={{ title: "发布队列" }}
     >
       <div className="mx-auto flex min-h-0 w-full max-w-[1560px] flex-1 flex-col">
         <div className="scroll-thin min-h-0 flex-1 overflow-auto px-[34px] pt-3 pb-[120px]">

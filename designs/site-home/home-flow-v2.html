@@ -1,0 +1,742 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>主页结构 V2 · 九漾 Onda</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --paper: #FFFFFF; --card: #FFFFFF; --rail: #FBFBFA; --line: #EDECE9; --hover: #F4F3F1;
+      --ink: #37352F; --ink2: #787672; --ink3: #ABA9A4; --accent: #2383E2; --accent-tint: #E9F3FB;
+      --on-accent: #fff;
+      --shadow-card: 0 1px 2px rgba(15,15,15,.04);
+      --shadow-panel: 0 24px 70px rgba(15,15,15,.10);
+      --font: -apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+      --mono: ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    }
+    [data-theme="dark"] {
+      color-scheme: dark;
+      --paper: #191919; --card: #252525; --rail: #202020; --line: #2F2F2F; --hover: #2A2A2A;
+      --ink: #E6E5E3; --ink2: #9B9A97; --ink3: #6F6E69; --accent: #4A9EE8; --accent-tint: #20304A;
+      --shadow-card: 0 1px 2px rgba(0,0,0,.30);
+      --shadow-panel: 0 24px 80px rgba(0,0,0,.48);
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--font); -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+    a { color: inherit; text-decoration: none; }
+    button { font: inherit; color: inherit; cursor: pointer; }
+    img { display: block; max-width: 100%; }
+    .shell { width: min(1240px, calc(100% - 48px)); margin: auto; }
+    .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 6px; }
+
+    .review-note { position: sticky; top: 0; z-index: 200; padding: 8px 0; background: #191919; color: rgba(255,255,255,.72); font-size: 12px; }
+    .review-note b { color: #fff; font-weight: 700; }
+
+    .header { position: sticky; top: 31px; z-index: 100; background: color-mix(in srgb, var(--paper) 88%, transparent); backdrop-filter: blur(20px); border-bottom: 1px solid var(--line); }
+    .header-shell { display: flex; align-items: center; justify-content: space-between; gap: 20px; min-height: 68px; }
+    .brand { display: flex; align-items: center; gap: 10px; font-weight: 780; letter-spacing: -.04em; }
+    .brand i { width: 30px; height: 30px; border-radius: 9px; background: var(--accent); color: #fff; display: grid; place-items: center; font-style: normal; font-size: 14px; }
+    .brand small { display: block; margin-top: 2px; color: var(--ink3); font-family: var(--mono); font-size: 9px; letter-spacing: .12em; }
+    .header-right { display: flex; align-items: center; gap: 10px; }
+    .nav { display: flex; align-items: center; gap: 4px; }
+    .nav a { padding: 9px 12px; border-radius: 999px; color: var(--ink2); font-size: 14px; transition: .18s ease; }
+    .nav a:hover { color: var(--ink); background: var(--hover); }
+    .cta { display: inline-flex; align-items: center; justify-content: center; min-height: 40px; padding: 0 17px; border: 0; border-radius: 11px; background: var(--accent); color: var(--on-accent); font-size: 14px; font-weight: 730; box-shadow: var(--shadow-card); transition: .18s ease; }
+    .cta:hover { filter: brightness(.97); transform: translateY(-1px); }
+    .theme-toggle { width: 40px; height: 40px; border: 1px solid var(--line); border-radius: 999px; background: var(--card); color: var(--ink2); display: grid; place-items: center; }
+    .theme-toggle:hover { color: var(--ink); background: var(--hover); }
+    .theme-toggle svg { width: 19px; height: 19px; }
+
+    main { padding-bottom: 30px; }
+    .section { position: relative; padding: 62px 0; border-top: 1px solid var(--line); }
+    .section-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 26px; }
+    h2 { margin: 0; font-size: clamp(28px,3.4vw,42px); line-height: 1.08; letter-spacing: -.045em; font-weight: 770; }
+    .section-copy { max-width: 560px; margin: 10px 0 0; color: var(--ink2); font-size: 16px; line-height: 1.65; }
+    .microcopy { color: var(--ink3); font-size: 13px; }
+
+    .hero { position: relative; padding: 64px 0 38px; border-top: 0; }
+    .hero:before { content: ""; position: absolute; right: -16vw; top: -190px; width: 62vw; height: 62vw; background: radial-gradient(circle, var(--accent-tint) 0, transparent 64%); opacity: .58; z-index: -1; }
+    .eyebrow { display: inline-flex; align-items: center; gap: 8px; padding: 7px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--rail); color: var(--ink2); font-size: 12.5px; }
+    .eyebrow:before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+    h1 { margin: 20px 0 16px; font-size: clamp(42px,6.1vw,76px); line-height: 1.02; letter-spacing: -.058em; font-weight: 790; }
+    h1 em { font-style: normal; color: var(--accent); }
+    .subtitle { max-width: 640px; margin: 0 0 24px; color: var(--ink2); font-size: clamp(17px,1.6vw,21px); line-height: 1.62; }
+    .cta-row { display: flex; flex-wrap: wrap; gap: 12px; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 20px; border: 1px solid transparent; border-radius: 11px; font-size: 15px; font-weight: 720; transition: .18s ease; }
+    .btn-primary { background: var(--accent); color: #fff; box-shadow: var(--shadow-card); }
+    .btn-ghost { background: var(--card); border-color: var(--line); color: var(--ink); }
+    .btn-ghost:hover { background: var(--hover); }
+    .value-strip { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 26px; }
+    .value-pill { display: inline-flex; align-items: center; gap: 7px; padding: 8px 12px; border-radius: 999px; background: color-mix(in srgb, var(--card) 88%, transparent); color: var(--ink2); font-size: 13px; box-shadow: var(--shadow-card); }
+    .value-pill i { width: 7px; height: 7px; border-radius: 2px; background: var(--dot, var(--accent)); }
+
+    .stage { position: relative; border: 1px solid var(--line); border-radius: 26px; overflow: hidden; background: var(--rail); box-shadow: var(--shadow-panel); }
+    .stage iframe { display: block; width: 100%; height: min(68vh,700px); min-height: 480px; border: 0; background: var(--paper); }
+    .motion-stage { background: #0B1017; }
+    .motion-stage iframe { height: min(74vh,760px); }
+    .floating-hint { position: absolute; right: 16px; top: 16px; z-index: 3; padding: 8px 11px; border-radius: 999px; background: rgba(10,15,22,.64); color: rgba(255,255,255,.82); font-family: var(--mono); font-size: 11px; letter-spacing: .06em; backdrop-filter: blur(10px); }
+    .loading { position: absolute; inset: 0; z-index: 2; display: grid; place-items: center; background: color-mix(in srgb, var(--paper) 92%, transparent); color: var(--ink2); font-size: 13px; }
+    .loading[hidden] { display: none; }
+    .spinner { width: 22px; height: 22px; margin: 0 auto 10px; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .workflow-grid { display: grid; grid-template-columns: minmax(0,380px) minmax(0,1fr); gap: 24px; align-items: center; }
+    .steps { display: grid; gap: 8px; }
+    .step { padding: 16px 17px; border: 1px solid transparent; border-radius: 18px; background: transparent; color: var(--ink2); text-align: left; transition: .22s ease; }
+    .step:hover { color: var(--ink); background: var(--hover); }
+    .step-top { display: flex; align-items: center; gap: 10px; }
+    .step-num { display: inline-grid; place-items: center; min-width: 30px; height: 24px; border-radius: 8px; background: var(--accent-tint); color: var(--accent); font-family: var(--mono); font-size: 11px; font-weight: 760; }
+    .step-title { font-size: 15px; font-weight: 740; }
+    .step-copy { display: grid; grid-template-rows: 0fr; opacity: 0; margin-top: 0; font-size: 13px; line-height: 1.6; transition: .26s ease; }
+    .step-copy span { display: block; overflow: hidden; }
+    .step[aria-selected="true"] { background: #191919; color: #fff; box-shadow: 0 20px 50px -24px rgba(15,15,15,.55); transform: translateY(-2px); }
+    [data-theme="dark"] .step[aria-selected="true"] { background: #F5F5F3; color: #151515; }
+    .step[aria-selected="true"] .step-num { background: rgba(255,255,255,.16); color: #fff; }
+    [data-theme="dark"] .step[aria-selected="true"] .step-num { background: rgba(15,15,15,.1); color: #151515; }
+    .step[aria-selected="true"] .step-copy { grid-template-rows: 1fr; margin-top: 10px; opacity: .82; }
+    .shot-stage { position: relative; aspect-ratio: 16/10; border-radius: 24px; overflow: hidden; background: linear-gradient(145deg,var(--card),var(--rail)); box-shadow: var(--shadow-panel); }
+    .shot { position: absolute; inset: 0; margin: 0; opacity: 0; transition: opacity .42s ease; }
+    .shot.current { opacity: 1; }
+    .shot img { width: 100%; height: 100%; object-fit: cover; object-position: center top; }
+
+    .theme-compact { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,.38fr); gap: 24px; align-items: center; }
+    .theme-stage { position: relative; aspect-ratio: 16/9; border-radius: 24px; overflow: hidden; cursor: crosshair; box-shadow: var(--shadow-panel); --top: 42%; --bottom: 58%; }
+    .theme-layer { position: absolute; inset: 0; margin: 0; }
+    .theme-layer img { width: 100%; height: 100%; object-fit: cover; }
+    .theme-dark { clip-path: polygon(0 0, var(--top) 0, var(--bottom) 100%, 0 100%); }
+    .theme-edge { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+    .theme-edge line { stroke: rgba(255,255,255,.92); stroke-width: 2; vector-effect: non-scaling-stroke; filter: drop-shadow(0 3px 10px rgba(0,0,0,.38)); }
+    .theme-aside h2 { font-size: clamp(23px,2.4vw,31px); }
+
+    .platform-section { padding-bottom: 58px; }
+    .platform-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 20px; }
+    .platform-canvas-wrap { position: relative; height: clamp(480px,62vh,640px); border-radius: 30px; overflow: hidden; background: radial-gradient(circle at 20% 10%, color-mix(in srgb,var(--accent-tint) 70%,transparent), transparent 34%), radial-gradient(circle at 82% 80%, color-mix(in srgb,var(--accent-tint) 48%,transparent), transparent 36%), var(--paper); box-shadow: var(--shadow-panel); }
+    #platformCanvas { display: block; width: 100%; height: 100%; touch-action: pan-y; cursor: grab; }
+    #platformCanvas.dragging { cursor: grabbing; }
+    .canvas-hint { position: absolute; left: 18px; top: 18px; padding: 8px 12px; border-radius: 999px; background: color-mix(in srgb,var(--card) 78%,transparent); color: var(--ink2); font-size: 12px; box-shadow: var(--shadow-card); backdrop-filter: blur(12px); pointer-events: none; }
+    .platform-lists { display: grid; grid-template-columns: 1.2fr .8fr; gap: 24px; margin-top: 18px; }
+    .platform-list { color: var(--ink2); font-size: 13.5px; line-height: 1.7; }
+    .platform-list strong { color: var(--ink); font-weight: 740; }
+    .platform-list span { color: var(--ink3); }
+
+    .control-card { display: grid; grid-template-columns: minmax(0,1.05fr) minmax(0,.95fr); gap: 34px; align-items: center; padding: clamp(28px,4vw,48px); border-radius: 30px; background: linear-gradient(135deg,var(--card),var(--rail)); box-shadow: var(--shadow-panel); }
+    .control-card h2 { font-size: clamp(30px,3.7vw,47px); }
+    .control-points { display: grid; gap: 12px; }
+    .point { display: flex; gap: 12px; align-items: flex-start; padding: 15px 16px; border-radius: 18px; background: color-mix(in srgb,var(--paper) 74%,transparent); }
+    .point i { flex: 0 0 auto; width: 24px; height: 24px; border-radius: 8px; background: var(--accent-tint); color: var(--accent); display: grid; place-items: center; font-style: normal; font-weight: 800; }
+    .point strong { display: block; font-size: 15px; }
+    .point span { display: block; margin-top: 3px; color: var(--ink2); font-size: 13.5px; line-height: 1.55; }
+    .final-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 24px; }
+
+    .footer { padding: 34px 0 44px; border-top: 1px solid var(--line); background: color-mix(in srgb,var(--rail) 72%,transparent); }
+    .footer-shell { display: flex; justify-content: space-between; align-items: center; gap: 24px; color: var(--ink2); font-size: 13px; }
+    .footer-nav { display: flex; flex-wrap: wrap; gap: 16px; }
+    .footer-nav a:hover { color: var(--ink); }
+
+    @media (max-width:900px) {
+      .shell { width: min(1240px, calc(100% - 36px)); }
+      .nav { display: none; }
+      .header { top: 30px; }
+      .workflow-grid, .theme-compact, .platform-lists, .control-card { grid-template-columns: 1fr; }
+      .steps { grid-template-columns: 1fr; }
+      .shot-stage { aspect-ratio: 4/3.2; }
+      .stage iframe { min-height: 520px; }
+      .platform-canvas-wrap { height: min(68vh,540px); }
+      .footer-shell { align-items: flex-start; flex-direction: column; }
+    }
+    @media (prefers-reduced-motion:reduce) {
+      html { scroll-behavior: auto; }
+      *,*::before,*::after { transition: none !important; animation: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="review-note">
+    <div class="shell"><b>结构原型 V2</b> · 页面顺序：价值 → 动线 → 自己试 → 工作流 → 观感 → 平台 → 信任/行动。平台区可拖拽，移动端保留上下滚动。</div>
+  </div>
+
+  <header class="header">
+    <div class="shell header-shell">
+      <a class="brand" href="#top" aria-label="九漾 Onda 首页">
+        <i>O</i>
+        <span>九漾 Onda<small>TASSELLO</small></span>
+      </a>
+      <div class="header-right">
+        <nav class="nav" aria-label="页面导航">
+          <a href="#changelog">更新日志</a>
+        </nav>
+        <a class="cta" href="#download">下载桌面版</a>
+        <button class="theme-toggle" id="themeToggle" type="button" aria-label="切换到深色主题">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20.5 14.2A8.7 8.7 0 0 1 9.8 3.5A8.75 8.75 0 1 0 20.5 14.2Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main id="top">
+    <section class="hero shell" aria-labelledby="hero-title">
+      <p class="eyebrow">面向创作者与运营人员</p>
+      <h1 id="hero-title">一次整理，<br><em>多平台发布</em>。</h1>
+      <p class="subtitle">Onda 把文章、贴图、视频和音频放进同一个内容库，帮你完成排版、上传和表单填充；关键发布动作仍由你确认。</p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="#download">下载桌面版</a>
+        <a class="btn btn-ghost" href="#demo">自己试一下</a>
+      </div>
+      <div class="value-strip" aria-label="核心能力">
+        <span class="value-pill" style="--dot:#2383E2"><i></i>统一内容库</span>
+        <span class="value-pill" style="--dot:#D52088"><i></i>平台化适配</span>
+        <span class="value-pill" style="--dot:#0EC3D4"><i></i>手机预览</span>
+        <span class="value-pill" style="--dot:#07B56F"><i></i>进度集中可见</span>
+      </div>
+    </section>
+
+    <section class="section" id="motion" aria-label="产品动线演示">
+      <div class="shell">
+        <div class="stage motion-stage">
+          <iframe src="../../apps/web/public/experience/intro-canvas/index.html" title="Onda 双端产品操作动画，展示内容准备、平台分发和发布确认" loading="lazy"></iframe>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="demo" aria-label="可交互产品演示">
+      <div class="shell">
+        <div class="stage">
+          <iframe id="demoFrame" src="../../apps/web/public/experience/mosaic/index.html" title="Onda 编辑器可交互演示，可切换导航、编辑内容和查看手机预览" loading="lazy"></iframe>
+          <div class="loading" id="demoLoading"><div><div class="spinner"></div>可交互演示加载中</div></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="workflow" aria-labelledby="workflow-title">
+      <div class="shell">
+        <div class="section-head">
+          <div>
+            <h2 id="workflow-title">三步完成发布</h2>
+            <p class="section-copy">先确认观感，再完成平台适配，最后在同一个队列里掌握进度。</p>
+          </div>
+          <p class="microcopy">点击左侧步骤查看对应界面</p>
+        </div>
+        <div class="workflow-grid">
+          <div class="steps" role="tablist" aria-label="工作台使用步骤">
+            <button class="step" id="step-0" role="tab" aria-selected="true" aria-controls="shot-0">
+              <span class="step-top"><span class="step-num">01</span><span class="step-title">创作与手机预览</span></span>
+              <span class="step-copy"><span>写作、素材和移动端观感在同一内容项里完成。</span></span>
+            </button>
+            <button class="step" id="step-1" role="tab" aria-selected="false" aria-controls="shot-1" tabindex="-1">
+              <span class="step-top"><span class="step-num">02</span><span class="step-title">多平台适配</span></span>
+              <span class="step-copy"><span>选择平台后自动处理排版、素材上传和字段填写。</span></span>
+            </button>
+            <button class="step" id="step-2" role="tab" aria-selected="false" aria-controls="shot-2" tabindex="-1">
+              <span class="step-top"><span class="step-num">03</span><span class="step-title">发布队列</span></span>
+              <span class="step-copy"><span>阶段、进度和需要人工确认的平台集中呈现。</span></span>
+            </button>
+          </div>
+          <div class="shot-stage">
+            <figure class="shot current" id="shot-0" role="tabpanel" aria-labelledby="step-0"><img src="assets/screenshots/01-editor-preview.png" alt="Onda 编辑器界面，左侧编辑内容，右侧实时显示手机预览效果"></figure>
+            <figure class="shot" id="shot-1" role="tabpanel" aria-labelledby="step-1"><img src="assets/screenshots/02-multi-platform-publish.png" alt="Onda 多平台发布设置界面"></figure>
+            <figure class="shot" id="shot-2" role="tabpanel" aria-labelledby="step-2"><img src="assets/screenshots/03-publish-queue.png" alt="Onda 发布队列界面"></figure>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="appearance" aria-label="主题观感对比">
+      <div class="shell theme-compact">
+        <div class="theme-stage" id="themeStage">
+          <figure class="theme-layer"><img src="assets/screenshots/04-platform-settings-light.png" alt="Onda 浅色主题的平台设置界面"></figure>
+          <figure class="theme-layer theme-dark"><img src="assets/screenshots/05-platform-settings-dark.png" alt="Onda 深色主题的平台设置界面" aria-hidden="true"></figure>
+          <svg class="theme-edge" viewBox="0 0 100 56.25" preserveAspectRatio="none" aria-hidden="true"><line id="themeEdge" x1="42" y1="0" x2="58" y2="56.25"/></svg>
+        </div>
+        <div class="theme-aside">
+          <h2>界面跟随你的工作光线。</h2>
+          <p class="section-copy">移动左侧画面，检查同一设置页在浅色和深色下的层级、对比和焦点状态。</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section platform-section" id="platforms" aria-labelledby="platform-title">
+      <div class="shell">
+        <div class="platform-head">
+          <div>
+            <h2 id="platform-title">覆盖你实际在用的平台</h2>
+            <p class="section-copy">已接入的渠道直接可用，规划中渠道也会进入同一条发布流程。</p>
+          </div>
+        </div>
+        <div class="platform-canvas-wrap" id="platformWrap">
+          <canvas id="platformCanvas" aria-hidden="true"></canvas>
+        </div>
+        <div class="platform-lists">
+          <p class="platform-list"><strong>已支持：</strong>微信公众号、微博、小红书、知乎、X、即刻、豆瓣、小宇宙、喜马拉雅、荔枝播客。</p>
+          <p class="platform-list"><span>规划中：抖音、B站、头条号、百家号。具体能力以设置页显示为准。</span></p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="control" aria-labelledby="control-title">
+      <div class="shell">
+        <div class="control-card">
+          <div>
+            <h2 id="control-title">系统搬运，<br>你确认关键动作。</h2>
+            <p class="section-copy">Onda 不追求完全无人值守。它减少重复上传和复制粘贴，同时把发布责任留在你手里。</p>
+            <div class="final-actions">
+              <a class="btn btn-primary" href="#download">下载桌面版</a>
+              <a class="btn btn-ghost" href="#changelog">查看更新日志</a>
+            </div>
+          </div>
+          <div class="control-points">
+            <article class="point"><i>✓</i><div><strong>内容与账号先确认</strong><span>发布前检查内容、素材和目标账号，降低误发风险。</span></div></article>
+            <article class="point"><i>✓</i><div><strong>等待不是故障</strong><span>扫码、验证或人工点击发布时，任务会停在明确确认位。</span></div></article>
+            <article class="point"><i>✓</i><div><strong>进度集中可见</strong><span>不用逐个平台打开后台，也能知道每条内容走到哪里。</span></div></article>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer" id="download">
+    <div class="shell footer-shell">
+      <div><strong>九漾 Onda</strong><br>让多平台发布更有序。</div>
+      <nav class="footer-nav" aria-label="页脚链接" id="changelog">
+        <a href="https://github.com/amlei/tassello">GitHub</a>
+        <a href="mailto:lixiang.altr@qq.com">lixiang.altr@qq.com</a>
+        <a href="#top">返回顶部</a>
+      </nav>
+    </div>
+  </footer>
+
+  <script src="assets/platform-marks.js"></script>
+  <script>
+    (() => {
+      const root = document.documentElement;
+      const toggle = document.getElementById("themeToggle");
+      const moon = '<path d="M20.5 14.2A8.7 8.7 0 0 1 9.8 3.5A8.75 8.75 0 1 0 20.5 14.2Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>';
+      const sun = '<circle cx="12" cy="12" r="4.25" stroke="currentColor" stroke-width="1.7"/><path d="M12 2.75v2.5M12 18.75v2.5M2.75 12h2.5M18.75 12h2.5M5.35 5.35l1.75 1.75M16.9 16.9l1.75 1.75M18.65 5.35 16.9 7.1M7.1 16.9l-1.75 1.75" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>';
+      let theme = "light";
+      const renderTheme = () => {
+        root.dataset.theme = theme;
+        const next = theme === "light" ? "dark" : "light";
+        toggle.setAttribute("aria-label", `切换到${next === "light" ? "浅色" : "深色"}主题`);
+        toggle.firstElementChild.innerHTML = theme === "light" ? moon : sun;
+        if (window.__platformTheme) window.__platformTheme();
+      };
+      toggle.addEventListener("click", () => { theme = theme === "light" ? "dark" : "light"; renderTheme(); });
+      renderTheme();
+
+      const demo = document.getElementById("demoFrame");
+      const demoLoading = document.getElementById("demoLoading");
+      demo.addEventListener("load", () => { demoLoading.hidden = true; });
+
+      const steps = [...document.querySelectorAll(".step")];
+      const shots = [...document.querySelectorAll(".shot")];
+      const activate = (next) => {
+        steps.forEach((step, index) => {
+          const on = index === next;
+          step.setAttribute("aria-selected", String(on));
+          step.tabIndex = on ? 0 : -1;
+          shots[index].classList.toggle("current", on);
+        });
+      };
+      steps.forEach((step, index) => step.addEventListener("click", () => activate(index)));
+
+      const themeStage = document.getElementById("themeStage");
+      const themeEdge = document.getElementById("themeEdge");
+      const moveTheme = (event) => {
+        const rect = themeStage.getBoundingClientRect();
+        const x = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
+        const y = Math.min(1, Math.max(0, (event.clientY - rect.top) / rect.height));
+        const slope = .16 * Math.sin(Math.PI * x);
+        const top = x - slope * (1 - y);
+        const bottom = x + slope * y;
+        themeStage.style.setProperty("--top", `${top * 100}%`);
+        themeStage.style.setProperty("--bottom", `${bottom * 100}%`);
+        themeEdge.setAttribute("x1", top * 100);
+        themeEdge.setAttribute("x2", bottom * 100);
+      };
+      themeStage.addEventListener("pointermove", moveTheme);
+      moveTheme({ clientX: themeStage.getBoundingClientRect().left + themeStage.offsetWidth * .47, clientY: themeStage.getBoundingClientRect().top + themeStage.offsetHeight * .5 });
+    })();
+  </script>
+
+  <script>
+    (() => {
+      const canvas = document.getElementById("platformCanvas");
+      const wrap = document.getElementById("platformWrap");
+      const ctx = canvas.getContext("2d");
+      const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const marks = window.PLATFORM_SVG_MARKS || {};
+      const platformList = [
+        { id: "wechat", name: "微信公众号", color: "#07C160", shape: "blob", status: "active" },
+        { id: "weibo", name: "微博", color: "#E6162D", shape: "shard", status: "active" },
+        { id: "xhs", name: "小红书", color: "#FF2442", shape: "star", status: "active" },
+        { id: "zhihu", name: "知乎", color: "#0084FF", shape: "hex", status: "active" },
+        { id: "x", name: "X", color: "#0F1419", shape: "burst", status: "active" },
+        { id: "jike", name: "即刻", color: "#3E7BFA", shape: "wave", status: "active", image: "assets/platforms/jike.png" },
+        { id: "douban", name: "豆瓣", color: "#007722", shape: "pebble", status: "active" },
+        { id: "xiaoyuzhou", name: "小宇宙", color: "#5B6CFF", shape: "blob", status: "active", image: "assets/platforms/xiaoyuzhou.png" },
+        { id: "ximalaya", name: "喜马拉雅", color: "#F86442", shape: "shard", status: "active", image: "assets/platforms/ximalaya.png" },
+        { id: "lizhi", name: "荔枝播客", color: "#FF5E7E", shape: "wave", status: "active", image: "assets/platforms/lizhi.png" },
+        { id: "douyin", name: "抖音", color: "#161823", shape: "triangle", status: "planned" },
+        { id: "bili", name: "B站", color: "#00A1D6", shape: "hex", status: "planned" },
+        { id: "toutiao", name: "头条号", color: "#FF0000", shape: "shard", status: "planned" },
+        { id: "baijiahao", name: "百家号", color: "#2932E1", shape: "triangle", status: "planned" }
+      ];
+
+      const rand = (min, max) => min + Math.random() * (max - min);
+      const polygon = (sides, spin = 0, irregular = 0) => {
+        const path = new Path2D();
+        for (let i = 0; i < sides; i++) {
+          const angle = spin + (i / sides) * Math.PI * 2;
+          const radius = 1 - (irregular ? (i % 2) * irregular : 0);
+          const x = Math.cos(angle) * radius;
+          const y = Math.sin(angle) * radius;
+          if (i === 0) path.moveTo(x, y); else path.lineTo(x, y);
+        }
+        path.closePath();
+        return path;
+      };
+      const star = (points, inner) => {
+        const path = new Path2D();
+        for (let i = 0; i < points * 2; i++) {
+          const angle = -Math.PI / 2 + (i / (points * 2)) * Math.PI * 2;
+          const radius = i % 2 ? inner : 1;
+          const x = Math.cos(angle) * radius;
+          const y = Math.sin(angle) * radius;
+          if (!i) path.moveTo(x, y); else path.lineTo(x, y);
+        }
+        path.closePath();
+        return path;
+      };
+      const SHAPES = {
+        blob: (() => {
+          const path = new Path2D();
+          path.moveTo(0, -.98);
+          path.bezierCurveTo(.66, -1.04, 1.05, -.58, .96, -.02);
+          path.bezierCurveTo(.88, .53, .48, 1.03, -.06, .95);
+          path.bezierCurveTo(-.60, .88, -1.06, .42, -.98, -.10);
+          path.bezierCurveTo(-.91, -.62, -.55, -.93, 0, -.98);
+          path.closePath();
+          return path;
+        })(),
+        pebble: (() => {
+          const path = new Path2D();
+          path.moveTo(-.92, -.18);
+          path.bezierCurveTo(-.74, -.86, .18, -1.08, .72, -.72);
+          path.bezierCurveTo(1.12, -.38, 1.00, .36, .58, .76);
+          path.bezierCurveTo(.14, 1.08, -.62, .98, -.88, .48);
+          path.closePath();
+          return path;
+        })(),
+        shard: (() => {
+          const path = new Path2D();
+          path.moveTo(-.18, -1.02);
+          path.lineTo(.86, -.60);
+          path.lineTo(1.04, .28);
+          path.lineTo(.18, 1.02);
+          path.lineTo(-.82, .64);
+          path.lineTo(-1.04, -.28);
+          path.closePath();
+          return path;
+        })(),
+        triangle: polygon(3, -Math.PI / 2),
+        hex: polygon(6, Math.PI / 6),
+        star: star(5, .46),
+        burst: star(8, .74),
+        wave: (() => {
+          const path = new Path2D();
+          path.moveTo(-1, -.42);
+          path.bezierCurveTo(-.56, -.86, -.10, .02, .38, -.44);
+          path.bezierCurveTo(.64, -.68, .86, -.72, 1, -.52);
+          path.lineTo(.88, .64);
+          path.bezierCurveTo(.44, 1.04, -.06, .18, -.46, .60);
+          path.bezierCurveTo(-.70, .82, -.90, .78, -.88, .56);
+          path.closePath();
+          return path;
+        })()
+      };
+
+      let width = 0, height = 0, dpr = 1, running = false, started = false, visible = false;
+      let last = 0, drag = null, hover = null, pointer = { x: 0, y: 0 };
+      const bodies = [];
+      const shapeNames = Object.keys(SHAPES);
+      let shapeCursor = 0;
+      const nextShape = () => shapeNames[(shapeCursor++) % shapeNames.length];
+
+      const makeBodies = () => {
+        bodies.length = 0;
+        shapeCursor = 0;
+        const base = width < 720 ? Math.min(width / 8.6, 55) : Math.min(width / 15.5, 68);
+        platformList.forEach((item, index) => {
+          const radius = base * rand(.90, 1.14);
+          const column = (index + .5) / platformList.length;
+          bodies.push({
+            ...item,
+            path: SHAPES[nextShape()],
+            radius,
+            homeX: column * width,
+            x: column * width + rand(-radius, radius),
+            y: reduced ? height - radius - rand(0, 48) : -radius - rand(40, 300),
+            vx: rand(-30, 30),
+            vy: reduced ? 0 : rand(-20, 30),
+            angle: rand(-.32, .32),
+            va: rand(-.9, .9),
+            rest: false
+          });
+        });
+      };
+
+      const resize = () => {
+        const rect = wrap.getBoundingClientRect();
+        width = Math.max(320, rect.width);
+        height = Math.max(380, rect.height);
+        dpr = Math.min(devicePixelRatio || 1, 2);
+        canvas.width = Math.round(width * dpr);
+        canvas.height = Math.round(height * dpr);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        if (!started) makeBodies();
+        else bodies.forEach((body) => {
+          body.x = Math.min(Math.max(body.x, body.radius), width - body.radius);
+          body.y = Math.min(body.y, height - body.radius);
+        });
+        render();
+      };
+
+      const iconSize = (body) => body.radius * 1.16;
+      const drawShape = (body, isDark) => {
+        const base = isDark ? "#2A2A2A" : "#FFFFFF";
+        const tint = body.status === "planned" ? "rgba(120,118,114,.06)" : `${body.color}14`;
+        ctx.save();
+        ctx.translate(body.x, body.y);
+        ctx.rotate(body.angle);
+        ctx.scale(body.radius, body.radius);
+        ctx.globalAlpha = body.status === "planned" ? .68 : .98;
+        ctx.fillStyle = base;
+        ctx.fill(body.path);
+        ctx.globalAlpha = body.status === "planned" ? .20 : .30;
+        ctx.fillStyle = tint;
+        ctx.fill(body.path);
+        ctx.restore();
+      };
+
+      const drawIcon = (body) => {
+        const isDark = document.documentElement.dataset.theme === "dark";
+        const size = body.radius * 1.00;
+        ctx.save();
+        ctx.translate(body.x, body.y);
+        ctx.rotate(body.angle);
+        if (body.status === "planned") ctx.globalAlpha = .42;
+        if (body.image) {
+          const image = body.imageElement;
+          if (image?.complete && image.naturalWidth) {
+            if (body.status === "planned") ctx.filter = "grayscale(1)";
+            ctx.drawImage(image, -size / 2, -size / 2, size, size);
+            ctx.filter = "none";
+          } else {
+            ctx.fillStyle = isDark ? "#E6E5E3" : "#37352F";
+            ctx.font = `600 ${size * .38}px ${getComputedStyle(document.body).fontFamily}`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText(body.name.slice(0, 2), 0, 0);
+          }
+        } else {
+          const mark = marks[body.id];
+          if (mark) {
+            const values = mark.viewBox.split(/\s+/).map(Number);
+            const vw = values[2] || 24;
+            const vh = values[3] || 24;
+            const scale = size / Math.max(vw, vh);
+            ctx.scale(scale, scale);
+            ctx.translate(-vw / 2, -vh / 2);
+            const ink = body.status === "planned" ? (isDark ? "#9B9A97" : "#787672") : (body.id === "x" ? (isDark ? "#F5F5F3" : "#0F1419") : body.color);
+            ctx.fillStyle = ink;
+            mark.paths.forEach((item) => {
+              const path = new Path2D(item.d);
+              if (item.evenodd) ctx.fill(path, "evenodd"); else ctx.fill(path);
+            });
+          }
+        }
+        ctx.restore();
+      };
+
+      const roundRect = (x, y, w, h, r) => {
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.arcTo(x + w, y, x + w, y + h, r);
+        ctx.arcTo(x + w, y + h, x, y + h, r);
+        ctx.arcTo(x, y + h, x, y, r);
+        ctx.arcTo(x, y, x + w, y, r);
+        ctx.closePath();
+      };
+
+      const drawTooltip = (body) => {
+        if (!body) return;
+        ctx.save();
+        ctx.globalAlpha = .94;
+        ctx.fillStyle = "#191919";
+        ctx.strokeStyle = "rgba(255,255,255,.12)";
+        ctx.font = `650 12px ${getComputedStyle(document.body).fontFamily}`;
+        const label = `${body.name}${body.status === "planned" ? " · 规划中" : ""}`;
+        const textWidth = ctx.measureText(label).width;
+        const boxWidth = textWidth + 22;
+        const x = Math.min(Math.max(body.x - boxWidth / 2, 10), width - boxWidth - 10);
+        const y = Math.max(10, body.y - body.radius - 38);
+        roundRect(x, y, boxWidth, 28, 14);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = "#fff";
+        ctx.textAlign = "left";
+        ctx.textBaseline = "middle";
+        ctx.fillText(label, x + 11, y + 15);
+        ctx.restore();
+      };
+
+      const render = () => {
+        const isDark = document.documentElement.dataset.theme === "dark";
+        ctx.clearRect(0, 0, width, height);
+        bodies.forEach((body) => {
+          ctx.save();
+          ctx.shadowColor = isDark ? "rgba(0,0,0,.36)" : "rgba(15,15,15,.16)";
+          ctx.shadowBlur = body === hover ? 30 : 20;
+          ctx.shadowOffsetY = 10;
+          drawShape(body, isDark);
+          ctx.restore();
+          drawIcon(body);
+        });
+        drawTooltip(hover || drag);
+      };
+
+      const hitBody = (x, y) => [...bodies].reverse().find((body) => {
+        const dx = x - body.x, dy = y - body.y;
+        return dx * dx + dy * dy <= body.radius * body.radius;
+      });
+
+      const pointFromEvent = (event) => {
+        const rect = canvas.getBoundingClientRect();
+        return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+      };
+
+      const physicalStep = (dt) => {
+        const gravity = 1900;
+        for (const body of bodies) {
+          if (body === drag) continue;
+          body.vy += gravity * dt;
+          body.vx *= .996;
+          body.x += body.vx * dt;
+          body.y += body.vy * dt;
+          if (!body.rest) body.angle += body.va * dt;
+          const left = body.radius, right = width - body.radius, floor = height - body.radius;
+          if (body.x < left) { body.x = left; body.vx *= -.42; }
+          if (body.x > right) { body.x = right; body.vx *= -.42; }
+          if (body.y > floor) {
+            body.y = floor;
+            if (Math.abs(body.vy) > 90) {
+              body.vy *= -.26;
+              body.va *= .58;
+            } else {
+              body.vy = 0;
+              body.vx *= .86;
+              body.va *= .82;
+              if (Math.abs(body.vx) < 3 && Math.abs(body.va) < .04) body.rest = true;
+            }
+          }
+        }
+        for (let i = 0; i < bodies.length; i++) {
+          for (let j = i + 1; j < bodies.length; j++) {
+            const a = bodies[i], b = bodies[j];
+            const dx = b.x - a.x, dy = b.y - a.y;
+            const min = a.radius + b.radius;
+            const distance = Math.hypot(dx, dy);
+            if (distance >= min || distance === 0) continue;
+            const nx = dx / distance, ny = dy / distance;
+            const overlap = (min - distance) / 2;
+            if (a !== drag) { a.x -= nx * overlap; a.y -= ny * overlap; }
+            if (b !== drag) { b.x += nx * overlap; b.y += ny * overlap; }
+            const rvx = b.vx - a.vx, rvy = b.vy - a.vy;
+            const impact = rvx * nx + rvy * ny;
+            if (impact > 0) continue;
+            const impulse = impact * .38;
+            if (a !== drag) { a.vx += impulse * nx; a.vy += impulse * ny; a.rest = false; }
+            if (b !== drag) { b.vx -= impulse * nx; b.vy -= impulse * ny; b.rest = false; }
+          }
+        }
+        if (drag) {
+          const targetX = pointer.x - drag.offsetX;
+          const targetY = pointer.y - drag.offsetY;
+          drag.vx = (targetX - drag.x) / Math.max(dt, .001) * .22;
+          drag.vy = (targetY - drag.y) / Math.max(dt, .001) * .22;
+          drag.x += (targetX - drag.x) * Math.min(1, dt * 18);
+          drag.y += (targetY - drag.y) * Math.min(1, dt * 18);
+          drag.x = Math.min(Math.max(drag.x, drag.radius), width - drag.radius);
+          drag.y = Math.min(Math.max(drag.y, drag.radius), height - drag.radius);
+        }
+      };
+
+      const frame = (now) => {
+        if (!running) return;
+        const dt = Math.min(.032, (now - last) / 1000 || .016);
+        last = now;
+        physicalStep(dt);
+        render();
+        requestAnimationFrame(frame);
+      };
+      const start = () => {
+        if (running) return;
+        running = true;
+        last = performance.now();
+        requestAnimationFrame(frame);
+      };
+      const stop = () => { running = false; };
+
+      canvas.addEventListener("pointerdown", (event) => {
+        const point = pointFromEvent(event);
+        const body = hitBody(point.x, point.y);
+        if (!body) return;
+        drag = body;
+        drag.offsetX = point.x - body.x;
+        drag.offsetY = point.y - body.y;
+        drag.rest = false;
+        hover = body;
+        canvas.classList.add("dragging");
+        canvas.setPointerCapture(event.pointerId);
+        start();
+      });
+      canvas.addEventListener("pointermove", (event) => {
+        pointer = pointFromEvent(event);
+        if (!drag) {
+          hover = hitBody(pointer.x, pointer.y);
+          canvas.style.cursor = hover ? "grab" : "default";
+          if (!running) render();
+        }
+      });
+      canvas.addEventListener("pointerup", (event) => {
+        if (!drag) return;
+        drag.rest = false;
+        drag = null;
+        canvas.classList.remove("dragging");
+        canvas.releasePointerCapture(event.pointerId);
+      });
+      canvas.addEventListener("pointerleave", () => { hover = null; if (!drag) render(); });
+
+      platformList.forEach((item) => {
+        if (!item.image) return;
+        const image = new Image();
+        image.src = item.image;
+        item.imageElement = image;
+      });
+
+      window.__platformTheme = () => { if (!running) render(); };
+      new ResizeObserver(resize).observe(wrap);
+      new IntersectionObserver((entries) => {
+        visible = entries[0].isIntersecting;
+        if (!visible) { stop(); return; }
+        if (!started) { started = true; makeBodies(); }
+        if (!reduced || drag) start();
+      }, { threshold: .18 }).observe(wrap);
+      resize();
+      if (reduced) render();
+    })();
+  </script>
+</body>
+</html>

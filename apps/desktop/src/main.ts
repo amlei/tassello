@@ -1,30 +1,77 @@
 /* Electron 主进程：拉起 Next.js server（网页模式同一套），就绪后开窗加载 */
 import { spawn, type ChildProcess } from "node:child_process";
 import http from "node:http";
+import { existsSync } from "node:fs";
 import path from "node:path";
-import { app, BrowserWindow, Menu, type MenuItemConstructorOptions } from "electron";
+import { app, BrowserWindow, Menu, ipcMain, shell, type MenuItemConstructorOptions } from "electron";
 
-// __dirname = apps/desktop/dist → 仓库根在三层之上
+// 开发时 __dirname = apps/desktop/dist → 仓库根在三层之上；打包时定位 resources/web。
 const ROOT = path.resolve(__dirname, "..", "..", "..");
-const WEB_DIR = path.join(ROOT, "apps", "web");
+const DEV_WEB_DIR = path.join(ROOT, "apps", "web");
+const PACKAGED_WEB_CANDIDATES = [
+  path.join(process.resourcesPath ?? "", "web", "apps", "web"),
+  path.join(process.resourcesPath ?? "", "web"),
+];
+const WEB_DIR = app.isPackaged
+  ? PACKAGED_WEB_CANDIDATES.find((candidate) => existsSync(path.join(candidate, "server.js"))) ?? PACKAGED_WEB_CANDIDATES[0]
+  : DEV_WEB_DIR;
 const PORT = Number(process.env.TASSELLO_PORT ?? 4311);
 const URL_BASE = `http://127.0.0.1:${PORT}`;
 /* 页面必须走 localhost：Next dev 的 allowedDevOrigins 默认只信任 localhost，
  * 用 127.0.0.1 加载会让 dev 资源/HMR 被降级，React 不水合，页面全是“死”按钮 */
-const WINDOW_URL = `http://localhost:${PORT}`;
+const WINDOW_URL = `http://localhost:${PORT}/library/article`;
 
 let server: ChildProcess | null = null;
 
 /* dev 模式下菜单栏应用名取自 app.name（而非 Electron 二进制的 Info.plist），需显式设置 */
 app.setName("九漾 Onda");
 
+function isWebUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+/** 发布结果是给用户在平台里看的：始终交给系统默认浏览器，避免占用/替换应用窗口 */
+async function openExternalUrl(value: string): Promise<void> {
+  if (!isWebUrl(value)) return;
+  await shell.openExternal(value);
+}
+
+ipcMain.handle("tassello:open-external", (_event, value: unknown) => {
+  if (typeof value !== "string" || !isWebUrl(value)) {
+    throw new Error("invalid external url");
+  }
+  return openExternalUrl(value);
+});
+
 function startServer(): void {
-  const bin = process.env.TASSELLO_BUN ?? "bun";
-  server = spawn(bin, ["run", "dev", "--", "-p", String(PORT)], {
-    cwd: WEB_DIR,
-    stdio: "inherit",
-    env: { ...process.env, TASSELLO_DESKTOP: "1" },
-  });
+  if (app.isPackaged) {
+    /* Electron 二进制以 ELECTRON_RUN_AS_NODE=1 复用为 Node runtime，用户无需安装 Bun/Node。 */
+    const entry = path.join(WEB_DIR, "server.js");
+    server = spawn(process.execPath, [entry], {
+      cwd: WEB_DIR,
+      stdio: "inherit",
+      env: {
+        ...process.env,
+        ELECTRON_RUN_AS_NODE: "1",
+        NODE_ENV: "production",
+        HOSTNAME: "127.0.0.1",
+        PORT: String(PORT),
+        TASSELLO_DESKTOP: "1",
+      },
+    });
+  } else {
+    const bin = process.env.TASSELLO_BUN ?? "bun";
+    server = spawn(bin, ["run", "dev", "--", "-p", String(PORT)], {
+      cwd: WEB_DIR,
+      stdio: "inherit",
+      env: { ...process.env, TASSELLO_DESKTOP: "1" },
+    });
+  }
   server.on("exit", (code) => {
     console.log(`[tassello] web server exited (${code})`);
   });
@@ -67,6 +114,31 @@ async function createWindow(): Promise<void> {
       icon: path.join(__dirname, "..", "icon.png"),
       webPreferences: { preload: path.join(__dirname, "preload.js") },
     });
+  const appOrigin = new URL(WINDOW_URL).origin;
+
+  /* target=_blank / window.open 全部拒绝创建 Electron 子窗口；HTTP(S) 外链交给系统浏览器 */
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    try {
+      if (new URL(url, WINDOW_URL).origin === appOrigin) return { action: "deny" };
+    } catch {
+      return { action: "deny" };
+    }
+    void openExternalUrl(url);
+    return { action: "deny" };
+  });
+
+  /* 兜住不带 target 的外链 <a>：应用内同源导航保留，其它导航不允许替换主窗口 */
+  win.webContents.on("will-navigate", (event, url) => {
+    try {
+      if (new URL(url, WINDOW_URL).origin === appOrigin) return;
+    } catch {
+      event.preventDefault();
+      return;
+    }
+    event.preventDefault();
+    void openExternalUrl(url);
+  });
+
   await win.loadURL(WINDOW_URL);
 }
 

@@ -2,8 +2,8 @@
 "use client";
 
 import { TYPE_META, type PlatformDTO, type PostDTO } from "@tassello/shared";
-import { Button, Modal } from "@heroui/react";
-import { Check, Refresh, Send } from "reicon-react";
+import { Button, ListBox, ListBoxItem, Modal, Select } from "@heroui/react";
+import { Check, ChevronDown, Refresh, Send } from "reicon-react";
 import { PlatformMark } from "@tassello/ui/platform-icons";
 
 export function PublishSheet({
@@ -108,15 +108,33 @@ export function PublishSheet({
                         发到「{p.name}」的哪个{p.id === "xiaoyuzhou" ? "节目" : p.id === "lizhi" ? "播单" : "专辑"}
                       </span>
                       <span className="relative inline-flex flex-none items-center">
-                        <select
-                          value={current}
-                          onChange={(e) => onChannel(p.id, e.target.value)}
+                        <Select
+                          className="inline-flex flex-none"
                           aria-label={`${p.name} 发布频道`}
-                          className="cursor-pointer appearance-none rounded-full border border-line bg-card py-[7px] pl-4 pr-8 text-[12px] font-bold text-ink outline-none transition-[border-color] duration-150 hover:border-[#DEDCD8] focus-visible:border-accent"
+                          selectedKey={current}
+                          onSelectionChange={(key) => { if (typeof key === "string") onChannel(p.id, key); }}
                         >
-                          {list.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                        </select>
-                        <span className="pointer-events-none absolute right-3 text-ink2">▾</span>
+                          <Select.Trigger className="h-auto cursor-pointer rounded-full border border-line bg-card py-[7px] pl-4 pr-8 text-[12px] font-bold text-ink shadow-none outline-none transition-[border-color] duration-150 hover:border-[#DEDCD8] focus-visible:border-accent data-[focus-visible=true]:border-accent">
+                            <Select.Value className="truncate" />
+                          </Select.Trigger>
+                          <Select.Popover className="min-w-[160px] rounded-[12px] border border-line bg-card p-1 shadow-[0_14px_40px_rgba(15,15,15,0.16)]">
+                            <ListBox className="outline-none">
+                              {list.map((c) => (
+                                <ListBoxItem
+                                  key={c.id}
+                                  id={c.id}
+                                  textValue={c.name}
+                                  className="cursor-pointer rounded-[8px] px-3 py-2 text-[12px] font-bold text-ink outline-none data-[focused=true]:bg-hover data-[hovered=true]:bg-hover data-[selected=true]:bg-hover"
+                                >
+                                  {c.name}
+                                </ListBoxItem>
+                              ))}
+                            </ListBox>
+                          </Select.Popover>
+                        </Select>
+                        <span className="pointer-events-none absolute right-3 flex text-ink2">
+                          <ChevronDown size={10} strokeWidth={2.4} />
+                        </span>
                       </span>
                     </div>
                   );

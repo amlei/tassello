@@ -1,0 +1,485 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>桌面 + Obsidian 下载页 V3 · 九漾 Onda</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --paper:#FFFFFF; --card:#FFFFFF; --rail:#FBFBFA; --line:#EDECE9; --hover:#F4F3F1;
+      --ink:#37352F; --ink2:#787672; --ink3:#ABA9A4; --accent:#2383E2; --accent-tint:#E9F3FB;
+      --shadow-card:0 1px 2px rgba(15,15,15,.04); --shadow-panel:0 24px 70px rgba(15,15,15,.1);
+      --font:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+      --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    }
+    [data-theme="dark"] {
+      color-scheme: dark;
+      --paper:#191919; --card:#252525; --rail:#202020; --line:#2F2F2F; --hover:#2A2A2A;
+      --ink:#E6E5E3; --ink2:#9B9A97; --ink3:#6F6E69; --accent:#4A9EE8; --accent-tint:#20304A;
+      --shadow-card:0 1px 2px rgba(0,0,0,.3); --shadow-panel:0 24px 80px rgba(0,0,0,.48);
+    }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--paper); color:var(--ink); font-family:var(--font); -webkit-font-smoothing:antialiased; }
+    a { color:inherit; text-decoration:none; }
+    button { font:inherit; color:inherit; cursor:pointer; }
+    img { display:block; max-width:100%; }
+    :focus-visible { outline:2px solid var(--accent); outline-offset:3px; border-radius:8px; }
+    .shell { width:min(1200px,calc(100% - 48px)); margin:auto; }
+    .sr-only { position:absolute; width:1px; height:1px; clip:rect(0 0 0 0); overflow:hidden; white-space:nowrap; }
+
+    .header { position:sticky; top:0; z-index:20; background:color-mix(in srgb,var(--paper) 88%,transparent); backdrop-filter:blur(20px); border-bottom:1px solid var(--line); }
+    .header-shell { display:flex; align-items:center; justify-content:space-between; min-height:68px; gap:16px; }
+    .brand { display:flex; align-items:center; gap:10px; font-weight:770; letter-spacing:-.04em; }
+    .brand-logo { width:30px; height:30px; object-fit:contain; }
+    .brand small { display:block; color:var(--ink3); font-family:var(--mono); font-size:9px; letter-spacing:.12em; }
+    .header-actions { display:flex; align-items:center; gap:10px; }
+    .header-link { padding:9px 12px; border-radius:999px; color:var(--ink2); font-size:14px; }
+    .header-link:hover { color:var(--ink); background:var(--hover); }
+    .cta { display:inline-flex; align-items:center; min-height:40px; padding:0 18px; border-radius:11px; background:var(--accent); color:#fff; font-size:14px; font-weight:730; }
+    .theme-toggle { width:40px; height:40px; display:grid; place-items:center; border:1px solid var(--line); border-radius:999px; background:var(--card); color:var(--ink2); }
+    .theme-toggle:hover { color:var(--ink); background:var(--hover); }
+
+    main { padding:58px 0 80px; }
+    .section { padding:58px 0; border-top:1px solid var(--line); }
+    .section-head { display:flex; align-items:flex-end; justify-content:space-between; gap:24px; margin-bottom:28px; }
+    h2 { margin:0; font-size:clamp(27px,3.2vw,41px); letter-spacing:-.045em; line-height:1.08; }
+    .section-copy { max-width:620px; margin:10px 0 0; color:var(--ink2); font-size:16px; line-height:1.65; }
+
+    .hero { display:grid; grid-template-columns:minmax(0,.94fr) minmax(0,1fr); gap:54px; align-items:center; }
+    .eyebrow { display:inline-flex; align-items:center; gap:8px; padding:7px 12px; border:1px solid var(--line); border-radius:999px; background:var(--rail); color:var(--ink2); font-size:12.5px; }
+    .eyebrow:before { content:""; width:7px; height:7px; border-radius:50%; background:var(--accent); }
+    h1 { margin:18px 0 16px; font-size:clamp(40px,5.4vw,70px); line-height:1.03; letter-spacing:-.055em; font-weight:790; }
+    h1 em { font-style:normal; color:var(--accent); }
+    .subtitle { max-width:540px; margin:0 0 28px; color:var(--ink2); font-size:17px; line-height:1.68; }
+    .action-row { display:flex; flex-wrap:wrap; gap:12px; align-items:center; }
+    .primary-download {
+      display:inline-flex; align-items:center; gap:15px; min-height:68px; padding:9px 26px 9px 10px; border:0; border-radius:999px;
+      background:#191919; color:#fff; font-size:18px; font-weight:770; letter-spacing:-.02em; text-align:left;
+      box-shadow:0 20px 50px -24px rgba(15,15,15,.72); transition:transform .2s ease,filter .2s ease;
+    }
+    .primary-download:hover { transform:translateY(-2px); filter:brightness(1.08); }
+    .primary-icon { flex:0 0 auto; width:48px; height:48px; display:grid; place-items:center; border-radius:50%; background:var(--accent); color:#fff; }
+    .primary-label small { display:block; margin-top:3px; color:rgba(255,255,255,.64); font-size:12px; font-weight:550; }
+    [data-theme="dark"] .primary-download { background:#F5F5F3; color:#151515; }
+    [data-theme="dark"] .primary-label small { color:rgba(21,21,21,.62); }
+    .secondary-download { display:inline-flex; align-items:center; gap:9px; min-height:52px; padding:0 20px; border:1px solid var(--line); border-radius:14px; background:var(--card); font-size:15px; font-weight:730; }
+    .secondary-download:hover { background:var(--hover); }
+    .meta-row { display:flex; flex-wrap:wrap; gap:14px; margin-top:22px; color:var(--ink2); font-size:13.5px; }
+    .meta-row a { border-bottom:1px solid color-mix(in srgb,var(--accent) 38%,transparent); padding-bottom:2px; }
+    .version-pill { padding:4px 8px; border:1px solid var(--line); border-radius:999px; font-family:var(--mono); font-size:11px; }
+
+    .visual { position:relative; min-height:520px; }
+    .desktop-shot { position:absolute; z-index:2; top:0; right:0; width:min(78%,500px); border:0; border-radius:22px; overflow:hidden; box-shadow:var(--shadow-panel); }
+    .obsidian-shot { position:absolute; z-index:1; bottom:0; left:0; width:min(62%,360px); max-height:470px; overflow:hidden; border-radius:24px; border:8px solid var(--paper); box-shadow:0 28px 90px -30px rgba(15,15,15,.44); background:#fff; }
+    .obsidian-shot img { width:100%; height:100%; object-fit:cover; object-position:72% 18%; }
+    .surface-chip { position:absolute; z-index:3; left:18px; top:18px; padding:8px 11px; border-radius:999px; background:#191919; color:#fff; font-size:11px; font-weight:740; }
+    .surface-chip.obsidian { left:auto; right:18px; top:auto; bottom:18px; background:var(--accent); }
+
+    .surface-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px; }
+    .surface-card { padding:26px; border:1px solid var(--line); border-radius:24px; background:linear-gradient(145deg,var(--card),var(--rail)); box-shadow:var(--shadow-card); }
+    .surface-top { display:flex; align-items:center; justify-content:space-between; gap:14px; }
+    .surface-icon { width:48px; height:48px; display:grid; place-items:center; border-radius:15px; background:var(--accent-tint); color:var(--accent); }
+    .surface-version { padding:5px 9px; border-radius:999px; background:var(--rail); color:var(--ink2); font-family:var(--mono); font-size:11px; }
+    .surface-card h3 { margin:20px 0 8px; font-size:24px; letter-spacing:-.04em; }
+    .surface-card > p { color:var(--ink2); font-size:14.5px; line-height:1.65; }
+    .feature-list { display:grid; gap:9px; margin:18px 0 24px; }
+    .feature-list div { display:flex; gap:9px; color:var(--ink2); font-size:13.5px; line-height:1.55; }
+    .feature-list i { flex:0 0 auto; width:6px; height:6px; margin-top:7px; border-radius:50%; background:var(--accent); }
+    .surface-action { display:inline-flex; align-items:center; gap:8px; min-height:44px; padding:0 18px; border-radius:12px; background:var(--accent); color:#fff; font-size:14px; font-weight:730; }
+    .surface-action.ghost { background:var(--card); color:var(--ink); border:1px solid var(--line); }
+    .surface-action:hover { filter:brightness(.98); }
+
+    .shared-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; }
+    .shared-card { padding:24px; border:1px solid var(--line); border-radius:20px; background:var(--card); }
+    .shared-card h3 { margin:16px 0 8px; font-size:18px; letter-spacing:-.03em; }
+    .shared-card p { color:var(--ink2); font-size:13.5px; line-height:1.65; }
+    .shared-badge { display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px; background:var(--accent-tint); color:var(--accent); font-size:11.5px; font-weight:750; }
+
+    .gallery-tabs { display:flex; gap:8px; margin-bottom:18px; }
+    .gallery-tab { padding:10px 15px; border:1px solid var(--line); border-radius:999px; background:var(--card); color:var(--ink2); font-size:13.5px; font-weight:700; }
+    .gallery-tab.selected { border-color:var(--ink); color:var(--ink); box-shadow:0 0 0 1px var(--ink); }
+    .gallery-panel { display:none; }
+    .gallery-panel.selected { display:block; }
+    .shot-frame { max-height:min(72vh,660px); overflow:hidden; border-radius:26px; background:var(--rail); box-shadow:var(--shadow-panel); }
+    .shot-frame img { width:100%; height:auto; }
+    .shot-caption { display:flex; justify-content:space-between; gap:16px; margin-top:12px; color:var(--ink3); font-size:12.5px; }
+
+    .download-grid { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:18px; }
+    .download-surface { padding:24px; border:1px solid var(--line); border-radius:24px; background:var(--card); box-shadow:var(--shadow-card); }
+    .download-surface h3 { margin:18px 0 6px; font-size:22px; letter-spacing:-.04em; }
+    .download-surface > p { color:var(--ink2); font-size:14px; line-height:1.6; }
+    .cards { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin-top:20px; }
+    .card { position:relative; display:flex; flex-direction:column; min-height:190px; padding:18px 16px 15px; border:1px solid var(--line); border-radius:18px; background:var(--paper); text-align:left; transition:border-color .2s,transform .2s; }
+    .card:hover { transform:translateY(-2px); border-color:color-mix(in srgb,var(--ink) 30%,var(--line)); }
+    .card.selected { border-color:var(--ink); box-shadow:0 0 0 1px var(--ink); }
+    .card-top { display:flex; justify-content:space-between; width:100%; }
+    .os-icon { width:36px; height:36px; display:grid; place-items:center; border-radius:11px; background:var(--rail); color:var(--ink); }
+    .badge { padding:5px 8px; border-radius:999px; background:var(--accent); color:#fff; font-size:11px; font-weight:750; }
+    .card-title { margin-top:18px; font-size:19px; font-weight:760; }
+    .card-detail { margin-top:4px; color:var(--ink2); font-size:13px; }
+    .card-divider { width:100%; height:1px; margin:15px 0 12px; background:var(--line); }
+    .download-line { display:flex; justify-content:space-between; width:100%; color:var(--ink); font-size:13.5px; font-weight:720; }
+    .availability { margin-top:7px; color:var(--ink3); font-size:11.5px; }
+    .obsidian-install { margin-top:20px; padding:15px; border:1px dashed var(--line); border-radius:14px; background:var(--rail); color:var(--ink2); font-size:12.5px; line-height:1.55; }
+    code { display:block; margin-top:8px; padding:9px 10px; border-radius:8px; background:var(--paper); color:var(--ink); font-family:var(--mono); font-size:11.5px; overflow-x:auto; }
+    .github-row { display:flex; align-items:center; justify-content:space-between; gap:18px; margin-top:14px; padding:16px 18px; border:1px dashed var(--line); border-radius:16px; color:var(--ink2); font-size:14px; }
+    .github-row a { color:var(--ink); font-weight:730; }
+    .github-row a:hover { color:var(--accent); }
+
+    footer { padding:32px 0 44px; border-top:1px solid var(--line); color:var(--ink2); font-size:13px; }
+    .footer-shell { display:flex; justify-content:space-between; gap:20px; }
+    .footer a:hover { color:var(--ink); }
+
+    @media (max-width:1020px) {
+      .hero { grid-template-columns:1fr; gap:40px; }
+      .visual { min-height:480px; }
+      .surface-grid,.download-grid { grid-template-columns:1fr; }
+      .shared-grid { grid-template-columns:1fr; }
+      .obsidian-shot { max-width:300px; max-height:420px; }
+    }
+    @media (max-width:620px) {
+      .shell { width:calc(100% - 36px); }
+      .visual { min-height:430px; }
+      .desktop-shot { width:88%; }
+      .obsidian-shot { width:64%; max-height:350px; }
+      .cards { grid-template-columns:1fr; }
+      .primary-download { width:100%; }
+      .footer-shell { flex-direction:column; }
+    }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <div class="shell header-shell">
+      <a class="brand" href="/" aria-label="九漾 Onda 首页">
+        <img class="brand-logo" src="../../apps/web/public/logo.svg" alt="">
+        <span>九漾 Onda<small>TASSELLO</small></span>
+      </a>
+      <div class="header-actions">
+        <a class="header-link" href="/changelog">更新日志</a>
+        <a class="cta" href="#download">获取</a>
+        <button class="theme-toggle" id="themeToggle" type="button" aria-label="切换到深色主题">
+          <svg viewBox="0 0 24 24" width="19" height="19" fill="none" aria-hidden="true"><path d="M20.5 14.2A8.7 8.7 0 0 1 9.8 3.5A8.75 8.75 0 1 0 20.5 14.2Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="shell hero" aria-labelledby="download-title">
+      <div>
+        <p class="eyebrow">桌面工作台 v0.1.0 · Obsidian 插件 v0.2.0</p>
+        <h1 id="download-title">写一次，<br><em>两端发布</em>。</h1>
+        <p class="subtitle">桌面工作台统一管理素材、预览和发布队列；Obsidian 插件直接读取当前笔记，转换成平台 payload。两条入口共享同一条发布链路。</p>
+        <div class="action-row">
+          <button class="primary-download" id="primaryDownload" type="button">
+            <span class="primary-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M12 1.25c.414 0 .75.336.75.75v10.973l1.68-1.961a.75.75 0 0 1 1.14.977l-3 3.5a.75.75 0 0 1-1.14 0l-3-3.5a.75.75 0 1 1 1.14-.977l1.68 1.96V2c0-.414.336-.75.75-.75ZM6.996 8.252a.75.75 0 0 1 .008 1.5c-1.093.006-1.868.034-2.456.142-.567.104-.895.271-1.139.515-.277.277-.457.665-.556 1.399-.101.755-.103 1.756-.103 3.192v1c0 1.435.002 2.436.103 3.192.099.733.279 1.122.556 1.399.276.277.665.457 1.399.556.755.101 1.756.103 3.191.103h8c1.435 0 2.437-.002 3.192-.103.734-.099 1.122-.279 1.399-.556.277-.276.457-.665.556-1.399.101-.755.103-1.756.103-3.191v-1c0-1.436-.002-2.437-.103-3.192-.099-.733-.279-1.122-.556-1.399-.244-.243-.572-.41-1.138-.514-.588-.108-1.363-.136-2.457-.142a.75.75 0 0 1 .009-1.5c1.082.006 1.984.032 2.724.171.736.139 1.387.404 1.912.929.58.58.846 1.338.968 2.247.119.886.119 2.022.119 3.43v1.11c0 1.368 0 2.47-.116 3.347-.117.899-.363 1.658-.948 2.243-.581.582-1.339.858-2.258.978-.877.116-1.98.116-3.347.116H7.945c-1.367 0-2.47 0-3.347-.116-.919-.12-1.677-.396-2.258-.978-.585-.585-.831-1.344-.948-2.243C1.276 18.525 1.25 17.423 1.25 16.055v-1.11c0-1.407 0-2.543.12-3.43.121-.909.386-1.667.967-2.247.525-.525 1.175-.79 1.911-.929.741-.139 1.643-.165 2.748-.171Z"/></svg>
+            </span>
+            <span class="primary-label">
+              免费下载 <span id="primaryPlatform">桌面版</span>
+              <small id="primaryFormat">正在识别系统芯片</small>
+            </span>
+          </button>
+          <a class="secondary-download" href="#obsidian-download">
+            安装 Obsidian 插件
+          </a>
+        </div>
+        <div class="meta-row">
+          <span class="version-pill">桌面 v0.1.0</span>
+          <span class="version-pill">插件 v0.2.0</span>
+          <a href="/changelog">更新日志</a>
+          <a href="https://github.com/amlei/tassello/releases" target="_blank" rel="noopener">GitHub Releases</a>
+        </div>
+      </div>
+
+      <div class="visual" aria-hidden="true">
+        <div class="desktop-shot">
+          <img src="assets/screenshots/01-editor-preview.png" alt="">
+        </div>
+        <span class="surface-chip">Desktop</span>
+        <div class="obsidian-shot">
+          <img src="assets/screenshots/obsidian-publisher-workspace-4k.png" alt="">
+        </div>
+        <span class="surface-chip obsidian">Obsidian</span>
+      </div>
+    </section>
+
+    <section class="section" id="surfaces" aria-labelledby="surfaces-title">
+      <div class="shell">
+        <div class="section-head">
+          <div>
+            <h2 id="surfaces-title">两个入口，一套秩序</h2>
+            <p class="section-copy">不需要在两套工具之间重复搬运内容。选择你现在的写作位置，其余适配工作交给同一条链路。</p>
+          </div>
+        </div>
+        <div class="surface-grid">
+          <article class="surface-card">
+            <div class="surface-top">
+              <span class="surface-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="24" height="24" fill="none"><rect x="2.75" y="4.75" width="18.5" height="12.5" rx="2.5" stroke="currentColor" stroke-width="1.7"/><path d="M9 20.25h6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+              </span>
+              <span class="surface-version">v0.1.0</span>
+            </div>
+            <h3>桌面工作台</h3>
+            <p>适合从零整理文章、贴图、视频和音频，并在发布前检查手机观感与平台适配。</p>
+            <div class="feature-list">
+              <div><i></i>统一内容库与素材管理</div>
+              <div><i></i>多平台发布设置与队列</div>
+              <div><i></i>手机实时预览</div>
+            </div>
+            <a class="surface-action" href="#download">下载桌面版</a>
+          </article>
+          <article class="surface-card">
+            <div class="surface-top">
+              <span class="surface-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="24" height="24" fill="none"><path d="M4.75 19.25V6.5c0-1.5 1-2.5 2.5-2.75L11 3v16.25l-4.5.75c-1 .16-1.75-.35-1.75-1.25Z" stroke="currentColor" stroke-width="1.7"/><path d="M11 19.25V3l5.75 1.4c1.1.28 1.75.98 1.75 2.1v11.6c0 1.05-.65 1.75-1.75 1.75L11 19.25Z" stroke="currentColor" stroke-width="1.7"/></svg>
+              </span>
+              <span class="surface-version">v0.2.0</span>
+            </div>
+            <h3>Obsidian 插件</h3>
+            <p>适合笔记已经留在 Obsidian 的创作者。当前 Markdown 直接变成平台 payload，不需要先导入桌面库。</p>
+            <div class="feature-list">
+              <div><i></i>读取当前笔记与 Frontmatter</div>
+              <div><i></i>实时预览平台 payload</div>
+              <div><i></i>发布状态写回源笔记</div>
+            </div>
+            <a class="surface-action ghost" href="#obsidian-download">查看安装方式</a>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="shared-title">
+      <div class="shell">
+        <div class="section-head">
+          <div>
+            <h2 id="shared-title">共享同一条发布链路</h2>
+            <p class="section-copy">两个入口不是两个产品逻辑。平台适配、预览和确认规则保持一致。</p>
+          </div>
+        </div>
+        <div class="shared-grid">
+          <article class="shared-card">
+            <span class="shared-badge">Shared</span>
+            <h3>同一平台适配层</h3>
+            <p>微博、知乎、小红书等通道使用同一套 adapter；入口不同，payload 规则一致。</p>
+          </article>
+          <article class="shared-card">
+            <span class="shared-badge">Preview</span>
+            <h3>先看真实 payload</h3>
+            <p>预览展示将要交给适配器的内容，而不是模仿平台官方 UI，减少“看着对、发出去变了”的偏差。</p>
+          </article>
+          <article class="shared-card">
+            <span class="shared-badge">Confirm</span>
+            <h3>关键动作不代点</h3>
+            <p>需要人工确认的平台会停在草稿或确认位；发布状态在队列或源笔记里可追踪。</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="demos-title">
+      <div class="shell">
+        <div class="section-head">
+          <div>
+            <h2 id="demos-title">看看两条入口</h2>
+            <p class="section-copy">桌面端负责整理与队列，Obsidian 端负责把当前笔记送进发布流程。</p>
+          </div>
+        </div>
+        <div class="gallery-tabs" role="tablist" aria-label="产品演示切换">
+          <button class="gallery-tab selected" id="tab-desktop" role="tab" aria-selected="true" aria-controls="panel-desktop">Desktop 工作台</button>
+          <button class="gallery-tab" id="tab-obsidian" role="tab" aria-selected="false" aria-controls="panel-obsidian" tabindex="-1">Obsidian 预览</button>
+          <button class="gallery-tab" id="tab-obsidian-publish" role="tab" aria-selected="false" aria-controls="panel-obsidian-publish" tabindex="-1">Obsidian 发布目标</button>
+        </div>
+        <div class="gallery-panel selected" id="panel-desktop" role="tabpanel" aria-labelledby="tab-desktop">
+          <div class="shot-frame">
+            <img src="assets/screenshots/03-publish-queue.png" alt="Onda 桌面工作台的发布队列，展示任务阶段、进度和状态">
+          </div>
+          <p class="shot-caption"><span>桌面端 · 发布队列</span><span>截图 3840 × 2400 · PNG</span></p>
+        </div>
+        <div class="gallery-panel" id="panel-obsidian" role="tabpanel" aria-labelledby="tab-obsidian">
+          <div class="shot-frame">
+            <img src="assets/screenshots/obsidian-publisher-workspace-4k.png" alt="Obsidian 插件在当前笔记右侧展示 Publisher 预览和发布通道">
+          </div>
+          <p class="shot-caption"><span>Obsidian · 当前笔记 payload 预览</span><span>截图 3840 × 3865 · PNG</span></p>
+        </div>
+        <div class="gallery-panel" id="panel-obsidian-publish" role="tabpanel" aria-labelledby="tab-obsidian-publish">
+          <div class="shot-frame">
+            <img src="assets/screenshots/obsidian-publisher-publish-4k.png" alt="Obsidian 插件展示多平台发布目标选择与 Chrome 授权提示">
+          </div>
+          <p class="shot-caption"><span>Obsidian · 发布目标与授权</span><span>截图 3840 × 3865 · PNG</span></p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="download" aria-labelledby="download-section-title">
+      <div class="shell">
+        <div class="section-head">
+          <div>
+            <h2 id="download-section-title">选择获取方式</h2>
+            <p class="section-copy">桌面安装包按系统架构区分；Obsidian 插件目前通过插件目录手动安装。</p>
+          </div>
+        </div>
+        <div class="download-grid">
+          <article class="download-surface">
+            <div class="surface-top">
+              <span class="surface-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="24" height="24" fill="none"><rect x="2.75" y="4.75" width="18.5" height="12.5" rx="2.5" stroke="currentColor" stroke-width="1.7"/><path d="M9 20.25h6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+              </span>
+              <span class="surface-version">v0.1.0</span>
+            </div>
+            <h3>桌面安装包</h3>
+            <p>上方按钮已按你的系统与芯片推荐。也可以在下面手动切换目标。</p>
+            <div class="cards" id="downloadCards" role="group" aria-label="桌面下载平台选择">
+              <button class="card" type="button" data-key="macos-arm" aria-pressed="false">
+                <span class="card-top"><span class="os-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M16.7 12.9c0-2.4 2-3.6 2.1-3.7-1.1-1.7-2.9-1.9-3.5-1.9-1.5-.1-2.9.9-3.7.9-.8 0-1.9-.9-3.2-.8-1.6 0-3.1 1-4 2.4-1.7 3-.4 7.3 1.2 9.7.8 1.2 1.8 2.5 3.1 2.4 1.2 0 1.7-.8 3.2-.8s1.9.8 3.2.8c1.3 0 2.2-1.2 3-2.4.9-1.4 1.3-2.7 1.3-2.8-.1 0-2.6-1-2.7-3.8zM14.4 5.3c.7-.8 1.1-1.9 1-3-1 0-2.2.7-2.9 1.5-.6.7-1.2 1.9-1 3 1.1.1 2.2-.6 2.9-1.5z"/></svg></span><span class="badge" data-badge hidden>推荐</span></span>
+                <span class="card-title">macOS</span>
+                <span class="card-detail">Apple Silicon · DMG</span>
+                <span class="card-divider"></span>
+                <span class="download-line">下载安装包 <span>DMG</span></span>
+                <span class="availability">安装包整理中</span>
+              </button>
+              <button class="card" type="button" data-key="windows-x64" aria-pressed="false">
+                <span class="card-top"><span class="os-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M3 5.5l7.6-1v7.1H3V5.5zm0 13l7.6 1v-7H3v6zm8.9 1.1L21 21v-8.4h-9.1v7zm0-15.2v7.1H21V3l-9.1 1.4z"/></svg></span><span class="badge" data-badge hidden>推荐</span></span>
+                <span class="card-title">Windows</span>
+                <span class="card-detail">x64 · 安装包</span>
+                <span class="card-divider"></span>
+                <span class="download-line">下载安装包 <span>EXE</span></span>
+                <span class="availability">安装包整理中</span>
+              </button>
+            </div>
+          </article>
+
+          <article class="download-surface" id="obsidian-download">
+            <div class="surface-top">
+              <span class="surface-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="24" height="24" fill="none"><path d="M4.75 19.25V6.5c0-1.5 1-2.5 2.5-2.75L11 3v16.25l-4.5.75c-1 .16-1.75-.35-1.75-1.25Z" stroke="currentColor" stroke-width="1.7"/><path d="M11 19.25V3l5.75 1.4c1.1.28 1.75.98 1.75 2.1v11.6c0 1.05-.65 1.75-1.75 1.75L11 19.25Z" stroke="currentColor" stroke-width="1.7"/></svg>
+              </span>
+              <span class="surface-version">v0.2.0</span>
+            </div>
+            <h3>Obsidian 插件</h3>
+            <p>插件目前是桌面端 Obsidian 插件，安装后从命令或侧栏打开 Publisher。</p>
+            <div class="obsidian-install">
+              将插件目录复制到你的 Vault：
+              <code>.obsidian/plugins/tassello-publisher/</code>
+              然后启用 <strong>Tassello Publisher</strong>，并按提示授权默认 Chrome 调试连接。
+            </div>
+            <div class="github-row">
+              <span>获取插件文件与安装说明</span>
+              <a href="https://github.com/amlei/tassello/releases" target="_blank" rel="noopener">GitHub Releases →</a>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="shell footer-shell">
+      <span>© 九漾 Onda</span>
+      <span><a href="/changelog">更新日志</a> · <a href="https://github.com/amlei/tassello" target="_blank" rel="noopener">GitHub</a></span>
+    </div>
+  </footer>
+
+  <script>
+    (() => {
+      const root = document.documentElement;
+      const toggle = document.getElementById("themeToggle");
+      const moon = '<path d="M20.5 14.2A8.7 8.7 0 0 1 9.8 3.5A8.75 8.75 0 1 0 20.5 14.2Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>';
+      const sun = '<circle cx="12" cy="12" r="4.25" stroke="currentColor" stroke-width="1.7"/><path d="M12 2.75v2.5M12 18.75v2.5M2.75 12h2.5M18.75 12h2.5M5.35 5.35l1.75 1.75M16.9 16.9l1.75 1.75M18.65 5.35 16.9 7.1M7.1 16.9l-1.75 1.75" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>';
+      let theme = "light";
+      const renderTheme = () => {
+        root.dataset.theme = theme;
+        toggle.setAttribute("aria-label", `切换到${theme === "light" ? "深色" : "浅色"}主题`);
+        toggle.firstElementChild.innerHTML = theme === "light" ? moon : sun;
+      };
+      toggle.addEventListener("click", () => { theme = theme === "light" ? "dark" : "light"; renderTheme(); });
+      renderTheme();
+
+      const tabs = [...document.querySelectorAll(".gallery-tab")];
+      const panels = [...document.querySelectorAll(".gallery-panel")];
+      const activate = (next) => {
+        tabs.forEach((tab, index) => {
+          const on = index === next;
+          tab.classList.toggle("selected", on);
+          tab.setAttribute("aria-selected", String(on));
+          tab.tabIndex = on ? 0 : -1;
+          panels[index].classList.toggle("selected", on);
+        });
+      };
+      tabs.forEach((tab, index) => tab.addEventListener("click", () => activate(index)));
+
+      const targets = {
+        "macos-arm": { platform: "macOS（Apple Silicon）", format: "DMG 安装包", href: null },
+        "macos-intel": { platform: "macOS（Intel）", format: "DMG 安装包", href: null },
+        "windows-x64": { platform: "Windows x64", format: "EXE 安装包", href: null },
+        "linux-x64": { platform: "Linux x64", format: "AppImage", href: null },
+        github: { platform: "GitHub Releases", format: "历史版本", href: "https://github.com/amlei/tassello/releases" }
+      };
+      const getWebGLRenderer = () => {
+        try {
+          const canvas = document.createElement("canvas");
+          const gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+          if (!gl) return "";
+          const info = gl.getExtension("WEBGL_debug_renderer_info");
+          return info ? String(gl.getParameter(info.UNMASKED_RENDERER_WEBGL)) : String(gl.getParameter(gl.RENDERER));
+        } catch { return ""; }
+      };
+      const detectKey = async () => {
+        const ua = navigator.userAgent || "";
+        const uaData = navigator.userAgentData;
+        let platform = uaData?.platform || navigator.platform || "";
+        let architecture = "";
+        if (uaData?.getHighEntropyValues) {
+          try {
+            const hints = await uaData.getHighEntropyValues(["architecture", "platform"]);
+            platform = hints.platform || platform;
+            architecture = hints.architecture || "";
+          } catch {}
+        }
+        if (platform === "Windows" || /Win/i.test(ua)) return "windows-x64";
+        if (platform === "macOS" || /Mac|iPhone|iPad|iPod/i.test(ua)) {
+          const renderer = getWebGLRenderer().toLowerCase();
+          const evidence = [architecture, platform, navigator.platform || "", renderer].join(" ").toLowerCase();
+          if (/\b(arm|aarch64)\b/.test(evidence) || renderer.includes("apple")) return "macos-arm";
+          if (/\b(x86|x86-64|x64|intel)\b/.test(evidence)) return "macos-intel";
+          return "macos-arm";
+        }
+        if (/Linux|X11/i.test(ua) && !/Android/i.test(ua)) return "linux-x64";
+        return "github";
+      };
+      const cards = [...document.querySelectorAll(".card")];
+      const primaryPlatform = document.getElementById("primaryPlatform");
+      const primaryFormat = document.getElementById("primaryFormat");
+      const primary = document.getElementById("primaryDownload");
+      let detectedKey = null;
+      let selectedKey = null;
+      const sync = () => {
+        const key = selectedKey || detectedKey;
+        const target = key ? targets[key] : null;
+        cards.forEach((card) => {
+          const on = card.dataset.key === key;
+          card.classList.toggle("selected", on);
+          card.setAttribute("aria-pressed", String(on));
+          card.querySelector("[data-badge]").hidden = card.dataset.key !== detectedKey;
+        });
+        primaryPlatform.textContent = target ? target.platform : "桌面版";
+        primaryFormat.textContent = target ? `${target.format} · 正在整理` : "正在识别系统芯片";
+      };
+      const applyDetection = async () => {
+        detectedKey = await detectKey();
+        sync();
+      };
+      cards.forEach((card) => card.addEventListener("click", () => { selectedKey = card.dataset.key; sync(); }));
+      primary.addEventListener("click", () => {
+        const key = selectedKey || detectedKey;
+        const href = key ? targets[key].href : null;
+        if (href) location.href = href;
+      });
+      sync();
+      applyDetection();
+    })();
+  </script>
+</body>
+</html>

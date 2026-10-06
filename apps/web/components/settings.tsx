@@ -3,7 +3,7 @@
 
 import React from "react";
 import { TYPE_META, TYPE_ORDER, type PlatformDTO, type ContentType, type AppSettings, IMPORT_BROWSERS, type ImportBrowserDTO, type ImportBrowserId } from "@tassello/shared";
-import { Button, Modal, Popover } from "@heroui/react";
+import { Button, ListBox, ListBoxItem, Modal, Popover, Select } from "@heroui/react";
 import { Alert, Check, Refresh, X } from "reicon-react";
 import { ChevronDown, ChevronLeft, ChevronRight } from "reicon-react";
 import { PLATFORM_IMAGE_MARKS, PLATFORM_MARKS, PlatformMark } from "@tassello/ui/platform-icons";
@@ -235,21 +235,34 @@ export function SettingsSheet({
                     <h4 className="text-[15px] font-bold tracking-[-0.2px]">浏览器选择</h4>
                     <span className="inline-flex items-center gap-2">
                       <span className="relative inline-flex items-center">
-                        <span className="pointer-events-none absolute left-3 flex">
+                        <span className="pointer-events-none absolute left-3 z-[1] flex">
                           <SelIcon size={14} />
                         </span>
-                        <select
-                          value={settings.importBrowser}
-                          onChange={(e) => onImportBrowser(e.target.value as ImportBrowserId)}
+                        <Select
+                          className="inline-flex flex-none"
                           aria-label="浏览器选择"
-                          className="cursor-pointer appearance-none rounded-full border border-line bg-card py-[6px] pl-[33px] pr-[30px] text-[12px] font-bold text-ink outline-none transition-[border-color] duration-150 hover:border-[#DEDCD8] focus-visible:border-accent"
+                          selectedKey={settings.importBrowser}
+                          onSelectionChange={(key) => { if (typeof key === "string") onImportBrowser(key as ImportBrowserId); }}
                         >
-                          {(browsers.length ? browsers : IMPORT_BROWSERS.map((b) => ({ ...b, detected: true }))).map((b) => (
-                            <option key={b.id} value={b.id} disabled={!b.detected}>
-                              {b.name}{b.detected ? "" : "（未安装）"}
-                            </option>
-                          ))}
-                        </select>
+                          <Select.Trigger className="h-auto cursor-pointer rounded-full border border-line bg-card py-[6px] pl-[33px] pr-[30px] text-[12px] font-bold text-ink shadow-none outline-none transition-[border-color] duration-150 hover:border-[#DEDCD8] focus-visible:border-accent data-[focus-visible=true]:border-accent">
+                            <Select.Value className="truncate" />
+                          </Select.Trigger>
+                          <Select.Popover className="min-w-[180px] rounded-[12px] border border-line bg-card p-1 shadow-[0_14px_40px_rgba(15,15,15,0.16)]">
+                            <ListBox className="outline-none">
+                              {(browsers.length ? browsers : IMPORT_BROWSERS.map((b) => ({ ...b, detected: true }))).map((b) => (
+                                <ListBoxItem
+                                  key={b.id}
+                                  id={b.id}
+                                  textValue={b.name}
+                                  isDisabled={!b.detected}
+                                  className="cursor-pointer rounded-[8px] px-3 py-2 text-[12px] font-bold text-ink outline-none data-[disabled=true]:opacity-40 data-[focused=true]:bg-hover data-[hovered=true]:bg-hover data-[selected=true]:bg-hover"
+                                >
+                                  {b.name}{b.detected ? "" : "（未安装）"}
+                                </ListBoxItem>
+                              ))}
+                            </ListBox>
+                          </Select.Popover>
+                        </Select>
                         <span className="pointer-events-none absolute right-3 flex text-ink2">
                           <ChevronDown size={10} strokeWidth={2.4} />
                         </span>

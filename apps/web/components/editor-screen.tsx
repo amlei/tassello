@@ -168,10 +168,13 @@ export function EditorScreen({
   };
 
   /* 发布 */
-  const runningCount = tasks.filter((t) => t.status === "running").length;
+  const activeRunningTasks = tasks.filter((t) => t.status === "running" && !(t.stage === 3 && t.progress >= 100));
+  const runningCount = activeRunningTasks.length;
   const avgProgress = runningCount
-    ? Math.round(tasks.filter((t) => t.status === "running").reduce((sum, t) => sum + t.progress, 0) / runningCount)
+    ? Math.round(activeRunningTasks.reduce((sum, t) => sum + t.progress, 0) / runningCount)
     : 0;
+  const activeRunningItemCount = new Set(activeRunningTasks.map((t) => t.postId)).size;
+  const queueItemCount = new Set(tasks.map((t) => t.postId)).size;
 
   const openPublishSheet = async () => {
     if (dirtyRef.current && !(await saveNow())) return;
@@ -199,12 +202,12 @@ export function EditorScreen({
     <WorkspaceShell
       active={post.type}
       counts={counts}
-      runningCount={runningCount}
-      queueCount={tasks.length}
+      runningCount={activeRunningItemCount}
+      queueCount={queueItemCount}
       platforms={platforms}
       guard={leaveGuard}
       screenLabel="编辑器"
-      context={{ title: post.title || "未命名稿子", meta: "编辑中" }}
+      context={{ title: post.title || "未命名稿子" }}
     >
       <div className="flex min-h-0 w-full flex-1 flex-col">
         <EditorView

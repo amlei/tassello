@@ -50,8 +50,8 @@ export function Rail({
   return (
     <aside
       id="workspace-rail"
-      className={`flex h-full min-h-0 flex-none flex-col overflow-hidden border-r bg-rail pt-[18px] pb-3.5 transition-[width] duration-200 ease-out ${
-        collapsed ? "w-0 border-r-0 border-r-transparent px-0" : "w-[236px] border-line px-3.5"
+      className={`flex h-full min-h-0 flex-none flex-col overflow-hidden bg-rail pt-[18px] pb-3.5 transition-[width] duration-200 ease-out ${
+        collapsed ? "w-0 px-0" : "w-[236px] px-3.5"
       }`}
       aria-label="工作台导航"
       aria-hidden={collapsed || undefined}
@@ -78,18 +78,26 @@ export function Rail({
             </Link>
           );
         })}
-        <div className="mt-0.5 flex flex-col gap-[3px] border-t border-line pt-3" aria-label="其他入口">
-          <Link href="/queue" className={navItem(active === "queue")} data-on={active === "queue"} onClick={guardedNav("/queue")} aria-current={active === "queue" ? "page" : undefined}>
+        <div className="mt-1.5 flex flex-col gap-[3px]" aria-label="其他入口">
+          <Link
+            href="/queue"
+            className={navItem(active === "queue")}
+            data-on={active === "queue"}
+            onClick={guardedNav("/queue")}
+            aria-current={active === "queue" ? "page" : undefined}
+            title={`${queueCount} 个内容项${runningCount > 0 ? `，${runningCount} 个内容项发布中` : ""}`}
+            aria-label={`发布队列，${queueCount} 个内容项${runningCount > 0 ? `，${runningCount} 个内容项发布中` : ""}`}
+          >
             <span className="block h-3.5 w-3.5 rounded bg-green" />
             <span>发布队列</span>
-            {runningCount > 0
-              ? <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-green px-1.5 font-mono text-[11px] font-bold text-white">{runningCount}</span>
-              : <span className="font-mono text-[11.5px] font-semibold text-ink2">{String(queueCount).padStart(2, "0")}</span>}
+            {runningCount > 0 && (
+              <span aria-hidden="true" className="h-[7px] w-[7px] animate-pulse rounded-full bg-green shadow-[0_0_0_3px_rgba(7,181,111,0.16)]" />
+            )}
           </Link>
         </div>
       </nav>
 
-      <div className="mt-auto border-t border-line pt-3">
+      <div className="mt-auto">
         <SettingsGate missing={missing} />
       </div>
       </div>
@@ -122,7 +130,6 @@ function NewContentDropdown({ guard }: { guard?: (nav: () => void) => void }) {
               <Dropdown.Item key={k} id={k} textValue={t.zh}>
                 <span className="mr-1 inline-block h-3 w-3 rounded" style={{ background: t.color }} />
                 {t.zh}
-                <span className="ml-auto pl-4 font-mono text-[9.5px] tracking-[0.6px] text-ink3">{t.en}</span>
               </Dropdown.Item>
             );
           })}

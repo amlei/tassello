@@ -3,23 +3,17 @@
 "use client";
 
 import React from "react";
-import type { PlatformDTO } from "@tassello/shared";
+import { useRouter } from "next/navigation";
+import { TYPE_META, type ContentType, type PlatformDTO } from "@tassello/shared";
+import { Button } from "@heroui/react";
 import { Rail } from "./rail";
+import { SearchModal } from "./search-modal";
+import { Add, Layout, Search } from "reicon-react";
 import { setSidebarCollapsed, toggleSidebar, useSidebarCollapsed } from "./sidebar-toggle";
 
 export type WorkspaceContext = {
   title: string;
-  meta?: string;
 };
-
-function PanelIcon() {
-  return (
-    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinejoin="round" aria-hidden="true">
-      <rect x="1.8" y="2.4" width="12.4" height="11.2" rx="2.2" />
-      <path d="M6.2 2.4v11.2" />
-    </svg>
-  );
-}
 
 export function WorkspaceShell({
   active,
@@ -31,6 +25,8 @@ export function WorkspaceShell({
   context,
   screenLabel,
   children,
+  newScope,
+  onNew,
 }: {
   active: string;
   counts: Record<string, number>;
@@ -42,15 +38,24 @@ export function WorkspaceShell({
   context: WorkspaceContext;
   screenLabel?: string;
   children: React.ReactNode;
+  /** 内容库传入后才在标题栏右侧显示当前类型的新建按钮 */
+  newScope?: ContentType;
+  onNew?: (type: ContentType) => void | Promise<void>;
 }) {
   const collapsed = useSidebarCollapsed();
+  const router = useRouter();
+  const [searchOpen, setSearchOpen] = React.useState(false);
 
-  /* ⌘\（Windows Ctrl+\）与 TitleBar 开关共享同一个唯一入口 */
+  /* ⌘\ 切侧栏；⌘K 打开全局搜索弹窗。 */
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "\\") {
         e.preventDefault();
         toggleSidebar();
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setSearchOpen((v) => !v);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -68,17 +73,25 @@ export function WorkspaceShell({
       >
         {/* macOS 桌面壳里这是 hiddenInset 红绿灯的保留区；Web/Windows 宽度为 0 */}
         <div className="workspace-safe" aria-hidden="true" />
-        <button
-          type="button"
-          onClick={toggleSidebar}
-          className="workspace-toggle"
+        <Button
+          variant="ghost"
+          className="workspace-toggle data-[hovered=true]:bg-hover data-[hovered=true]:text-ink"
           aria-expanded={!collapsed}
           aria-controls="workspace-rail"
           aria-label={collapsed ? "展开侧栏" : "收起侧栏"}
-          title={collapsed ? "展开侧栏 (⌘\\)" : "收起侧栏 (⌘\\)"}
+          onPress={toggleSidebar}
         >
-          <PanelIcon />
-        </button>
+          <Layout size={15} strokeWidth={1.9} />
+        </Button>
+
+        <Button
+          variant="ghost"
+          className="workspace-search data-[hovered=true]:bg-hover data-[hovered=true]:text-ink"
+          aria-label="搜索稿子"
+          onPress={() => setSearchOpen(true)}
+        >
+          <Search size={15} strokeWidth={2.2} />
+        </Button>
 
         {/* 展开态把上下文推到侧栏右边界；折叠态为 0，让它紧跟窗口开关。 */}
         <div className="workspace-rail-indent" aria-hidden="true" />
@@ -86,14 +99,22 @@ export function WorkspaceShell({
         {/* 当前视图的轻量上下文：页面大标题不再重复占内容区左上角 */}
         <div className="workspace-context">
           <h1 className="workspace-context-title">{context.title}</h1>
-          {context.meta && <span className="workspace-context-meta">{context.meta}</span>}
         </div>
 
         {/* 唯一的窗口拖拽热区：永远只落在空白条上，不覆盖任何交互控件 */}
         <div className="workspace-drag" aria-hidden="true" />
+        {newScope && onNew && (
+          <Button
+            className="flex-none gap-2 whitespace-nowrap rounded-full px-[15px] py-[7px] text-[13px] font-black text-white transition-[translate,filter] duration-150 data-[hovered=true]:-translate-y-px data-[hovered=true]:brightness-105"
+            style={{ background: TYPE_META[newScope].color }}
+            onPress={() => void onNew(newScope)}
+          >
+            <Add size={13} strokeWidth={3.3} /> 新建{TYPE_META[newScope].zh}
+          </Button>
+        )}
       </header>
 
-      <div className="flex min-h-0 flex-1">
+      <div className="flex min-h-0 flex-1 bg-rail">
         <Rail
           active={active}
           counts={counts}
@@ -102,8 +123,20 @@ export function WorkspaceShell({
           platforms={platforms}
           guard={guard}
         />
-        <main className="flex min-h-0 min-w-0 flex-1 flex-col">{children}</main>
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col rounded-tl-[14px] bg-paper">{children}</main>
       </div>
+
+      {searchOpen && (
+        <SearchModal
+          onClose={() => setSearchOpen(false)}
+        onOpen={(post) => {
+          setSearchOpen(false);
+          const open = () => router.push(`/editor/${post.id}`);
+          if (guard) guard(open);
+            else open();
+          }}
+        />
+      )}
     </div>
   );
 }

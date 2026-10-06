@@ -3,6 +3,8 @@
 
 import React from "react";
 import { TYPE_META, type PostDTO } from "@tassello/shared";
+import { Button } from "@heroui/react";
+import { Pause, Play } from "reicon-react";
 import { fmtTime } from "./bits";
 
 function fmtDuration(sec: number | null): string {
@@ -98,18 +100,14 @@ function AudioPlayer({ asset, durationSec }: { asset: PostDTO["assets"][number];
   return (
     <div className="flex items-center gap-2.5 rounded-xl bg-selected p-3">
       <audio ref={ref} src={`/api/assets/${asset.id}/raw`} preload="metadata" className="hidden" />
-      <button
-        type="button"
-        onClick={toggle}
+      <Button
+        isIconOnly
+        onPress={toggle}
         aria-label={playing ? "暂停播放" : "播放"}
-        className="flex h-[30px] w-[30px] flex-none cursor-pointer items-center justify-center rounded-full bg-ink text-card transition-transform data-[hovered=true]:scale-105"
+        className="min-w-0 flex h-[30px] w-[30px] flex-none cursor-pointer items-center justify-center rounded-full bg-ink text-card transition-transform data-[hovered=true]:scale-105"
       >
-        {playing ? (
-          <svg width="11" height="12" viewBox="0 0 11 12" aria-hidden="true"><rect x="0.5" width="3.4" height="12" rx="1.1" fill="currentColor" /><rect x="7.1" width="3.4" height="12" rx="1.1" fill="currentColor" /></svg>
-        ) : (
-          <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.4 1.05v9.9L11 6 2.4 1.05z" fill="currentColor" /></svg>
-        )}
-      </button>
+        {playing ? <Pause size={13} strokeWidth={3} aria-hidden="true" /> : <Play size={12} strokeWidth={3} aria-hidden="true" />}
+      </Button>
       <div
         className="relative h-[5px] min-w-0 flex-1 cursor-pointer rounded-[3px] bg-line"
         onPointerDown={seek}
@@ -193,7 +191,7 @@ export function PreviewColumn({
   more?: boolean;
 }) {
   return (
-    <div className="relative flex min-h-0 overflow-hidden">
+    <div className="relative flex min-h-0 overflow-hidden rounded-tl-[14px]">
       <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-hidden bg-hover px-7 py-[22px]">
         <PhoneCard post={post} paneRef={paneRef} onScroll={onScroll} more={more} />
       </div>

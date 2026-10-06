@@ -2,6 +2,7 @@
 "use client";
 
 import React from "react";
+import { ToggleButton, ToggleButtonGroup } from "@heroui/react";
 
 export type ThemePref = "light" | "dark" | "system";
 const THEME_KEY = "onda-theme";
@@ -47,21 +48,30 @@ export function ThemeSwitcher(): React.ReactElement {
     { id: "system", label: "跟随系统" },
   ];
   return (
-    <div className="inline-flex items-center gap-1 rounded-full border border-line bg-card p-1" role="radiogroup" aria-label="外观">
+    <ToggleButtonGroup
+      selectionMode="single"
+      disallowEmptySelection
+      selectedKeys={[pref]}
+      onSelectionChange={(keys) => {
+        const key = Array.from(keys)[0];
+        if (key === "light" || key === "dark" || key === "system") pick(key);
+      }}
+      className="inline-flex items-center gap-1 rounded-full border border-line bg-card p-1"
+      aria-label="外观"
+    >
       {opts.map((o) => (
-        <button
+        <ToggleButton
           key={o.id}
-          role="radio"
-          aria-checked={pref === o.id}
+          id={o.id}
           className={
-            "rounded-full px-3 py-1 text-xs font-bold transition-colors " +
-            (pref === o.id ? "bg-accent text-white" : "text-ink2 hover:bg-hover")
+            "h-auto rounded-full px-3 py-1 text-xs font-bold transition-colors " +
+            (pref === o.id ? "bg-accent text-white" : "bg-transparent text-ink2 data-[hovered=true]:bg-hover")
           }
-          onClick={() => pick(o.id)}
+          onPress={() => pick(o.id)}
         >
           {o.label}
-        </button>
+        </ToggleButton>
       ))}
-    </div>
+    </ToggleButtonGroup>
   );
 }

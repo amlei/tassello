@@ -1,7 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  output: "standalone",
   // workspace 内部包是 TS 源码直引，需要 Next 转译
+  allowedDevOrigins: ["localhost", "127.0.0.1"],
   transpilePackages: [
     "@tassello/shared",
     "@tassello/db",

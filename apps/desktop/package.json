@@ -1,13 +1,70 @@
 {
   "name": "@tassello/desktop",
+  "version": "0.1.0",
   "type": "module",
   "private": true,
   "main": "dist/main.js",
   "scripts": {
     "build": "bun build src/main.ts src/preload.ts --outdir dist --target node --external electron",
-    "desktop": "bun run build && electron dist/main.js"
+    "desktop": "bun run build && electron dist/main.js",
+    "dist:mac": "bun run build && bun scripts/prepare-web-resources.mjs && electron-builder --mac --arm64",
+    "dist:win": "bun run build && bun scripts/prepare-web-resources.mjs && electron-builder --win --x64"
+  },
+  "build": {
+    "appId": "com.jiuyang.onda",
+    "productName": "Tassello",
+    "copyright": "Copyright © 九漾 Onda",
+    "directories": {
+      "output": "../../release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**/*",
+      "icon.png"
+    ],
+    "extraResources": [
+      {
+        "from": "../web/.next/electron-web",
+        "to": "web"
+      },
+      {
+        "from": "../web/public",
+        "to": "web/apps/web/public"
+      },
+      {
+        "from": "../web/.next/static",
+        "to": "web/apps/web/.next/static"
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "icon": "build/tasselo.icns",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["arm64"]
+        }
+      ],
+      "identity": null,
+      "artifactName": "Tassello-${version}-arm64.${ext}"
+    },
+    "win": {
+      "icon": "icon.png",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "Tassello-Setup-${version}-x64.${ext}"
+    }
   },
   "devDependencies": {
-    "electron": "^39.2.0"
+    "electron": "^39.2.0",
+    "electron-builder": "^26.0.12"
   }
 }

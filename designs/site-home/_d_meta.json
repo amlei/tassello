@@ -1,0 +1,79 @@
+{
+  "type": "design",
+  "designSystems": [],
+  "primaryDesignSystem": null,
+  "assets": {
+    "home-flow-v2": {
+      "versions": [
+        {
+          "path": "home-flow-v2.html",
+          "createdAt": "2026-10-06T06:58:41.861Z",
+          "status": "changes-requested",
+          "subtitle": "已撤回 Hero 右侧动画方案，恢复独立动线区",
+          "viewport": {
+            "width": 1440,
+            "height": 5200
+          }
+        }
+      ]
+    },
+    "download-v2": {
+      "versions": [
+        {
+          "path": "download-v2.html",
+          "createdAt": "2026-10-06T07:50:43.866Z",
+          "status": "approved",
+          "subtitle": "两张平台卡片 + 真实系统芯片推荐",
+          "viewport": {
+            "width": 1440,
+            "height": 1500
+          }
+        }
+      ]
+    },
+    "download-dual-v3": {
+      "versions": [
+        {
+          "path": "download-dual-v3.html",
+          "createdAt": "2026-10-06T08:12:12.220Z",
+          "status": "changes-requested",
+          "subtitle": "已废弃：产品演示混入下载页，截图比例处理不当",
+          "viewport": {
+            "width": 1440,
+            "height": 4400
+          }
+        }
+      ]
+    },
+    "download-v4": {
+      "versions": [
+        {
+          "path": "download-v4.html",
+          "createdAt": "2026-10-06T08:42:47.438Z",
+          "status": "needs-review",
+          "subtitle": "仅获取方式的下载页，截图保持原比例",
+          "viewport": {
+            "width": 1440,
+            "height": 1700
+          }
+        }
+      ]
+    },
+    "home-dual-v4": {
+      "versions": [
+        {
+          "path": "home-dual-v4.html",
+          "createdAt": "2026-10-06T08:42:47.454Z",
+          "status": "needs-review",
+          "subtitle": "产品主页融合 Desktop 与 Obsidian 叙事",
+          "viewport": {
+            "width": 1440,
+            "height": 7500
+          }
+        }
+      ]
+    }
+  },
+  "createdAt": "2026-10-06T06:58:41.861Z",
+  "updatedAt": "2026-10-06T08:47:18.393Z"
+}
