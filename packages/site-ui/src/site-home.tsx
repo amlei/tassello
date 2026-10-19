@@ -28,13 +28,13 @@ const OBSIDIAN_SHOTS = [
   {
     key: "preview",
     title: "Payload 预览",
-    image: assetUrl("/assets/screenshots/obsidian-publisher-4k.png"),
+    image: "/assets/screenshots/obsidian-publisher-4k.png",
     alt: "Obsidian 插件在当前笔记右侧展示 Publisher payload 预览",
   },
   {
     key: "publish",
     title: "发布目标",
-    image: assetUrl("/assets/screenshots/obsidian-publisher-publish-4k.png"),
+    image: "/assets/screenshots/obsidian-publisher-publish-4k.png",
     alt: "Obsidian 插件展示发布目标选择与 Chrome 授权提示",
   },
 ];
@@ -43,19 +43,19 @@ const WORKFLOW_STEPS = [
   {
     title: "创作与手机预览",
     detail: "写作、素材和移动端观感在同一内容项里完成。",
-    image: assetUrl("/assets/screenshots/01-editor-preview.png"),
+    image: "/assets/screenshots/01-editor-preview.png",
     alt: "Onda 编辑器界面，左侧编辑内容，右侧实时显示手机预览效果",
   },
   {
     title: "多平台适配",
     detail: "选择平台后自动处理排版、素材上传和字段填写。",
-    image: assetUrl("/assets/screenshots/02-multi-platform-publish.png"),
+    image: "/assets/screenshots/02-multi-platform-publish.png",
     alt: "Onda 多平台发布设置界面，正在为一条内容选择多个目标平台",
   },
   {
     title: "发布队列",
     detail: "阶段、进度和需要人工确认的平台集中呈现。",
-    image: assetUrl("/assets/screenshots/03-publish-queue.png"),
+    image: "/assets/screenshots/03-publish-queue.png",
     alt: "Onda 发布队列界面，展示多个发布任务的阶段、进度和状态",
   },
 ];
@@ -180,7 +180,7 @@ export function SiteHome() {
       <section className="section stage-section" id="motion" aria-label="产品动线演示">
         <div className="shell">
           <div className="stage motion-stage">
-            <iframe src="/experience/intro-canvas/index.html" title="Onda 双端产品操作动画，展示内容准备、平台分发和发布确认" loading="lazy" />
+            <iframe src={assetUrl("/experience/intro-canvas/index.html")} title="Onda 双端产品操作动画，展示内容准备、平台分发和发布确认" loading="lazy" />
           </div>
         </div>
       </section>
@@ -191,7 +191,7 @@ export function SiteHome() {
             <iframe
               ref={mosaicRef}
               id="mosaicFrame"
-              src="/experience/mosaic/index.html"
+              src={assetUrl("/experience/mosaic/index.html")}
               title="Onda 编辑器可交互演示，可切换导航、编辑内容和查看手机预览"
               loading="lazy"
               onLoad={() => setDemoReady(true)}

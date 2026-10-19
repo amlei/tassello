@@ -1,0 +1,951 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tassello · 双端产品操作动画</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #37352f;
+      --ink-2: #787672;
+    }
+
+    * { box-sizing: border-box; }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: #f7f6f3;
+      font-family: Inter, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      color: var(--ink);
+    }
+
+    canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+    }
+
+    .controls {
+      position: fixed;
+      left: 50%;
+      bottom: 30px;
+      z-index: 2;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transform: translateX(-50%);
+    }
+
+    .controls button {
+      appearance: none;
+      border: 1px solid rgba(55, 53, 47, .10);
+      border-radius: 999px;
+      min-width: 72px;
+      padding: 9px 17px;
+      background: rgba(255, 255, 255, .74);
+      backdrop-filter: blur(18px) saturate(1.3);
+      -webkit-backdrop-filter: blur(18px) saturate(1.3);
+      color: var(--ink);
+      font: 600 13px/1 inherit;
+      cursor: pointer;
+      transition: transform .2s cubic-bezier(.2, .8, .2, 1), background .2s;
+    }
+
+    .controls button:hover {
+      background: rgba(255, 255, 255, .9);
+      transform: translateY(-1px);
+    }
+
+    .progress-track {
+      position: fixed;
+      left: 50%;
+      bottom: 18px;
+      width: min(190px, 32vw);
+      height: 3px;
+      border-radius: 99px;
+      background: rgba(55, 53, 47, .10);
+      transform: translateX(-50%);
+      overflow: hidden;
+    }
+
+    .progress-bar {
+      display: block;
+      width: 0%;
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, #2c6ff0, #d52088);
+      transition: width .16s linear;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="intro" aria-label="Tassello 的 Obsidian 插件和桌面应用发布演示动画" role="img"></canvas>
+
+  <nav class="controls" aria-label="动画控制">
+    <button id="replay" type="button">重播</button>
+    <button id="toggle" type="button">暂停</button>
+  </nav>
+  <div class="progress-track" aria-hidden="true">
+    <span class="progress-bar" id="progress"></span>
+  </div>
+
+  <script>
+    "use strict";
+
+    const canvas = document.getElementById("intro");
+    const ctx = canvas.getContext("2d");
+    const progress = document.getElementById("progress");
+    const toggleButton = document.getElementById("toggle");
+    const replayButton = document.getElementById("replay");
+
+    const DURATION = 24800;
+    const DESIGN_WIDTH = 1440;
+    const DESIGN_HEIGHT = 820;
+    const FONT_STACK = `Inter, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif`;
+    const MONO_FONT = `"SF Mono", ui-monospace, Menlo, Consolas, monospace`;
+    const C = {
+      blue: "#2c6ff0",
+      blueSoft: "rgba(44,111,240,.12)",
+      magenta: "#d52088",
+      orange: "#fd8d11",
+      cyan: "#0ec3d4",
+      green: "#07b56f",
+      red: "#e6162d",
+      xhs: "#ff2442",
+      purple: "#7c3aed",
+      ink: "#37352f",
+      ink2: "#787672",
+      ink3: "#aba9a4",
+      paper: "#f7f6f3",
+      line: "rgba(55,53,47,.08)",
+      white: "#fff"
+    };
+    const TASKS = [
+      { name: "微博", color: C.red, detail: "自动填好内容" },
+      { name: "知乎", color: "#0084ff", detail: "自动创建草稿" },
+      { name: "小红书", color: C.xhs, detail: "自动保存草稿" }
+    ];
+
+    let canvasWidth = 0;
+    let canvasHeight = 0;
+    let dpr = 1;
+    let isPlaying = true;
+    let time = 0;
+    let lastFrame = performance.now();
+    let frozenFrame = null;
+
+    const clamp = (value, min = 0, max = 1) => Math.min(max, Math.max(min, value));
+    const easeOutCubic = value => 1 - Math.pow(1 - value, 3);
+    const easeInOutCubic = value => value < .5
+      ? 4 * value * value * value
+      : 1 - Math.pow(-2 * value + 2, 3) / 2;
+    const easeOutBack = value => {
+      const c1 = 1.18;
+      const c3 = c1 + 1;
+      return 1 + c3 * Math.pow(value - 1, 3) + c1 * Math.pow(value - 1, 2);
+    };
+
+    function segment(local, start, duration) {
+      return clamp((local - start) / duration);
+    }
+
+    function appear(local, start, duration = 620, distance = 24) {
+      const value = easeOutCubic(segment(local, start, duration));
+      return { value, offset: (1 - value) * distance, alpha: value };
+    }
+
+    function resize() {
+      dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+      canvasWidth = window.innerWidth;
+      canvasHeight = window.innerHeight;
+      canvas.width = Math.round(canvasWidth * dpr);
+      canvas.height = Math.round(canvasHeight * dpr);
+      render();
+    }
+
+    function beginDesignContext() {
+      const scale = Math.min(canvasWidth / DESIGN_WIDTH, canvasHeight / DESIGN_HEIGHT) * .97;
+      ctx.save();
+      ctx.translate(canvasWidth / 2, canvasHeight / 2);
+      ctx.scale(scale, scale);
+      ctx.translate(-DESIGN_WIDTH / 2, -DESIGN_HEIGHT / 2);
+    }
+
+    function roundRect(x, y, width, height, radius) {
+      const safeRadius = Math.min(radius, width / 2, height / 2);
+      ctx.beginPath();
+      ctx.moveTo(x + safeRadius, y);
+      ctx.arcTo(x + width, y, x + width, y + height, safeRadius);
+      ctx.arcTo(x + width, y + height, x, y + height, safeRadius);
+      ctx.arcTo(x, y + height, x, y, safeRadius);
+      ctx.arcTo(x, y, x + width, y, safeRadius);
+      ctx.closePath();
+    }
+
+    function setFont(weight, size, mono = false) {
+      ctx.font = `${weight} ${size}px ${mono ? MONO_FONT : FONT_STACK}`;
+    }
+
+    function drawText(content, x, y, size, weight, color, options = {}) {
+      const { align = "center", alpha = 1, offsetY = 0, spacing = 0, baseline = "middle", mono = false } = options;
+      if (alpha <= 0) return;
+      ctx.save();
+      ctx.globalAlpha *= clamp(alpha);
+      setFont(weight, size, mono);
+      ctx.fillStyle = color;
+      ctx.textAlign = align;
+      ctx.textBaseline = baseline;
+      if ("letterSpacing" in ctx) ctx.letterSpacing = `${spacing}px`;
+      ctx.fillText(content, x, y + offsetY);
+      ctx.restore();
+    }
+
+    function drawCard(x, y, width, height, options = {}) {
+      const {
+        radius = 26,
+        alpha = 1,
+        fill = "rgba(255,255,255,.92)",
+        stroke = C.line,
+        shadow = .07,
+        scaleX = 1,
+        scaleY = 1
+      } = options;
+      if (alpha <= 0) return;
+      const centerX = x + width / 2;
+      const centerY = y + height / 2;
+      ctx.save();
+      ctx.globalAlpha *= clamp(alpha);
+      ctx.translate(centerX, centerY);
+      ctx.scale(scaleX, scaleY);
+      ctx.translate(-centerX, -centerY);
+      ctx.shadowColor = `rgba(55,53,47,${shadow})`;
+      ctx.shadowBlur = 34;
+      ctx.shadowOffsetY = 16;
+      roundRect(x, y, width, height, radius);
+      ctx.fillStyle = fill;
+      ctx.fill();
+      ctx.shadowColor = "transparent";
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetY = 0;
+      roundRect(x, y, width, height, radius);
+      ctx.strokeStyle = stroke;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawBackdrop(elapsed) {
+      const blobs = [
+        { x: 240, y: 150, r: 440, color: "44,111,240", phase: .12, drift: 28 },
+        { x: 1190, y: 220, r: 380, color: "213,32,136", phase: .28, drift: 22 },
+        { x: 680, y: 700, r: 430, color: "253,141,17", phase: .52, drift: 24 },
+        { x: 1260, y: 680, r: 330, color: "14,195,212", phase: .74, drift: 20 }
+      ];
+      ctx.fillStyle = C.paper;
+      ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+      for (const blob of blobs) {
+        const x = blob.x + Math.cos(elapsed * .00022 + blob.phase * 6.283) * blob.drift;
+        const y = blob.y + Math.sin(elapsed * .00019 + blob.phase * 6.283) * blob.drift * .7;
+        const gradient = ctx.createRadialGradient(x, y, 0, x, y, blob.r);
+        gradient.addColorStop(0, `rgba(${blob.color},.12)`);
+        gradient.addColorStop(.55, `rgba(${blob.color},.04)`);
+        gradient.addColorStop(1, `rgba(${blob.color},0)`);
+        ctx.fillStyle = gradient;
+        ctx.fillRect(x - blob.r, y - blob.r, blob.r * 2, blob.r * 2);
+      }
+      ctx.save();
+      ctx.globalAlpha = .045;
+      ctx.strokeStyle = C.ink;
+      const spacing = 72;
+      const shift = (elapsed * .006) % spacing;
+      for (let x = -spacing + shift; x < canvasWidth + spacing; x += spacing) {
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvasHeight); ctx.stroke();
+      }
+      for (let y = -spacing + shift; y < canvasHeight + spacing; y += spacing) {
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvasWidth, y); ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    function drawMark(x, y, size, alpha = 1, value = 1) {
+      if (alpha <= 0) return;
+      const scale = .82 + value * .18;
+      ctx.save();
+      ctx.globalAlpha *= clamp(alpha);
+      ctx.translate(x, y);
+      ctx.scale(scale, scale);
+      drawCard(-size / 2, -size / 2, size, size, { radius: size * .3, shadow: .1 });
+      const tile = size * .21;
+      const gap = size * .075;
+      const left = -tile - gap / 2;
+      const top = -tile - gap / 2;
+      [
+        { x: left, y: top, color: "rgba(55,53,47,.10)" },
+        { x: left + tile + gap, y: top, color: C.blue },
+        { x: left, y: top + tile + gap, color: C.magenta },
+        { x: left + tile + gap, y: top + tile + gap, color: C.orange }
+      ].forEach((item, index) => {
+        const tileValue = clamp(value * 1.6 - index * .17);
+        if (tileValue <= 0) return;
+        ctx.save();
+        ctx.translate(item.x + tile / 2, item.y + tile / 2);
+        ctx.scale(.55 + tileValue * .45, .55 + tileValue * .45);
+        roundRect(-tile / 2, -tile / 2, tile, tile, tile * .34);
+        ctx.fillStyle = item.color;
+        ctx.fill();
+        ctx.restore();
+      });
+      ctx.restore();
+    }
+
+    function drawTitle(title, subtitle, intro) {
+      drawText(title, DESIGN_WIDTH / 2, 122, 42, 740, C.ink, { alpha: intro.alpha, offsetY: intro.offset });
+      drawText(subtitle, DESIGN_WIDTH / 2, 170, 17, 450, C.ink2, { alpha: intro.alpha, offsetY: intro.offset * .7, spacing: 1 });
+    }
+
+    function drawWindow(x, y, width, height, title, alpha, dark = false) {
+      drawCard(x, y, width, height, {
+        alpha,
+        radius: 20,
+        fill: dark ? "#1f212a" : "rgba(255,255,255,.98)",
+        shadow: .11,
+        stroke: dark ? "rgba(255,255,255,.07)" : C.line
+      });
+      ctx.save();
+      ctx.globalAlpha *= clamp(alpha);
+      roundRect(x, y, width, 40, 20);
+      ctx.fillStyle = dark ? "#181a22" : "#fbfaf9";
+      ctx.fill();
+      ["#ff5f57", "#febc2e", "#28c840"].forEach((color, index) => {
+        ctx.beginPath();
+        ctx.arc(x + 24 + index * 18, y + 20, 5, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
+      });
+      drawText(title, x + width / 2, y + 21, 12, 600, dark ? "rgba(255,255,255,.62)" : C.ink2);
+      ctx.restore();
+    }
+
+    function drawButton(x, y, width, height, label, options = {}) {
+      const {
+        alpha = 1,
+        variant = "primary",
+        disabled = false,
+        pressed = 0,
+        small = false
+      } = options;
+      if (alpha <= 0) return;
+      const colors = {
+        primary: C.blue,
+        success: C.green,
+        warning: C.orange,
+        neutral: "rgba(255,255,255,.94)",
+        dark: "#31343f"
+      };
+      ctx.save();
+      ctx.globalAlpha *= clamp(alpha);
+      ctx.translate(x + width / 2, y + height / 2);
+      ctx.scale(1 - pressed * .035, 1 - pressed * .035);
+      ctx.translate(-(x + width / 2), -(y + height / 2));
+      ctx.shadowColor = disabled ? "transparent" : "rgba(55,53,47,.16)";
+      ctx.shadowBlur = disabled ? 0 : 18;
+      ctx.shadowOffsetY = disabled ? 0 : 6;
+      roundRect(x, y, width, height, height / 2);
+      ctx.fillStyle = disabled ? "rgba(55,53,47,.08)" : colors[variant];
+      ctx.fill();
+      ctx.shadowColor = "transparent";
+      roundRect(x, y, width, height, height / 2);
+      ctx.strokeStyle = disabled ? "rgba(55,53,47,.08)" : "rgba(55,53,47,.05)";
+      ctx.stroke();
+      const textColor = disabled ? C.ink3 : variant === "neutral" ? C.ink : "#fff";
+      drawText(label, x + width / 2, y + height / 2 + 1, small ? 12 : 14, 680, textColor);
+      ctx.restore();
+    }
+
+    function drawProgressBar(x, y, width, value, options = {}) {
+      const { alpha = 1, height = 8, color = C.blue, showPercent = false, statusText = "" } = options;
+      if (alpha <= 0) return;
+      ctx.save();
+      ctx.globalAlpha *= clamp(alpha);
+      roundRect(x, y, width, height, height / 2);
+      ctx.fillStyle = "rgba(55,53,47,.08)";
+      ctx.fill();
+      if (value > 0) {
+        roundRect(x, y, Math.max(height, width * clamp(value)), height, height / 2);
+        ctx.fillStyle = color;
+        ctx.fill();
+      }
+      if (showPercent) {
+        drawText(`${Math.round(value * 100)}%`, x + width + 32, y + height / 2, 11, 700, C.ink2, { align: "right" });
+      }
+      if (statusText) {
+        drawText(statusText, x, y + 22, 12, 560, C.ink2, { align: "left" });
+      }
+      ctx.restore();
+    }
+
+    function drawPointer(x, y, alpha = 1, pressed = 0) {
+      if (alpha <= 0) return;
+      ctx.save();
+      ctx.globalAlpha = clamp(alpha);
+      ctx.translate(x, y);
+      ctx.rotate(pressed * -.08);
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(19, 16);
+      ctx.lineTo(11, 17);
+      ctx.lineTo(15, 26);
+      ctx.lineTo(10, 28);
+      ctx.lineTo(6, 19);
+      ctx.lineTo(0, 24);
+      ctx.closePath();
+      ctx.fillStyle = "#fff";
+      ctx.strokeStyle = "rgba(55,53,47,.75)";
+      ctx.lineWidth = 1.5;
+      ctx.shadowColor = "rgba(55,53,47,.25)";
+      ctx.shadowBlur = 8;
+      ctx.shadowOffsetY = 3;
+      ctx.fill();
+      ctx.shadowColor = "transparent";
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function moveCursor(local, start, end, from, to) {
+      const value = easeInOutCubic(segment(local, start, end - start));
+      return {
+        x: from.x + (to.x - from.x) * value,
+        y: from.y + (to.y - from.y) * value,
+        alpha: value > 0 && value < 1 ? 1 : segment(local, start + 30, 180) * (1 - segment(local, end + 450, 260))
+      };
+    }
+
+    function pressAmount(local, pressStart, duration = 90) {
+      const enter = segment(local, pressStart, duration);
+      const leave = 1 - segment(local, pressStart + duration, duration);
+      return Math.min(enter, leave);
+    }
+
+    function drawClick(local, clickTime, x, y) {
+      const value = segment(local, clickTime, 520);
+      if (value <= 0 || value >= 1) return;
+      ctx.save();
+      ctx.globalAlpha = (1 - value) * .38;
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = C.blue;
+      ctx.beginPath();
+      ctx.arc(x, y, 10 + easeOutCubic(value) * 28, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawBrand(local) {
+      const mark = appear(local, 80, 760, 34);
+      const title = appear(local, 340, 700, 20);
+      const message = appear(local, 620, 720, 20);
+      drawMark(DESIGN_WIDTH / 2, 350, 116, mark.alpha, mark.value);
+      drawText("Tassello", DESIGN_WIDTH / 2, 458, 54, 780, C.ink, { alpha: title.alpha, offsetY: title.offset, spacing: 3 });
+      drawText("写一次内容，轻松发到多个平台。", DESIGN_WIDTH / 2, 522, 21, 500, C.ink2, {
+        alpha: message.alpha,
+        offsetY: message.offset,
+        spacing: 1
+      });
+      const labels = ["本地优先", "审批式发布", "多端编排"];
+      labels.forEach((label, index) => {
+        const value = easeOutCubic(clamp(segment(local, 850, 850) * 1.4 - index * .13));
+        const angle = -Math.PI / 2 + (index - 1) * .88 + Math.sin(local * .0007 + index * .8) * .035;
+        const x = DESIGN_WIDTH / 2 + Math.cos(angle) * 258 * value;
+        const y = 362 + Math.sin(angle) * 118 * value;
+        drawCard(x - 56, y - 19, 112, 38, { alpha: value, radius: 999, shadow: .03, fill: "rgba(255,255,255,.72)" });
+        drawText(label, x, y, 13, 620, C.ink2, { alpha: value });
+      });
+    }
+
+    function drawObsidianMini(x, y, width, height, alpha) {
+      drawWindow(x, y, width, height, "Obsidian · 产品发布.md", alpha, true);
+      const panelX = x + 14;
+      const panelY = y + 52;
+      const panelWidth = width * .52;
+      const panelHeight = height - 66;
+      roundRect(panelX, panelY, panelWidth, panelHeight, 10);
+      ctx.globalAlpha = alpha * .58;
+      ctx.fillStyle = "#2a2d38";
+      ctx.fill();
+      ctx.globalAlpha = alpha;
+      for (let i = 0; i < 5; i++) {
+        roundRect(panelX + 16, panelY + 20 + i * 24, panelWidth - 34 - (i % 3) * 22, 7, 99);
+        ctx.fillStyle = "rgba(255,255,255,.16)";
+        ctx.fill();
+      }
+      const rightX = panelX + panelWidth + 14;
+      const rightW = width - panelWidth - 56;
+      drawCard(rightX, panelY, rightW, panelHeight, { alpha, radius: 12, shadow: .04, fill: "rgba(247,246,243,.96)" });
+      drawText("Tassello Publisher", rightX + rightW / 2, panelY + 26, 12, 700, C.ink, { alpha });
+      drawButton(rightX + 18, panelY + panelHeight - 54, rightW - 36, 34, "发布这篇笔记", { alpha, small: true });
+      drawProgressBar(rightX + 18, panelY + panelHeight - 72, rightW - 36, .8, { alpha, height: 5 });
+    }
+
+    function drawDesktopMini(x, y, width, height, alpha) {
+      drawWindow(x, y, width, height, "Tassello Desktop", alpha);
+      ctx.save();
+      ctx.globalAlpha *= clamp(alpha);
+      roundRect(x + 14, y + 52, 88, height - 66, 10);
+      ctx.fillStyle = "#fbfaf9";
+      ctx.fill();
+      roundRect(x + 114, y + 52, width - 128, height - 66, 10);
+      ctx.fillStyle = "#fff";
+      ctx.fill();
+      for (let i = 0; i < 3; i++) {
+        drawCard(x + 126, y + 68 + i * 66, width - 156, 52, { alpha, radius: 10, shadow: .025, stroke: C.line });
+        roundRect(x + 142, y + 88 + i * 66, 92 + i * 28, 8, 99);
+        ctx.fillStyle = "rgba(55,53,47,.12)";
+        ctx.fill();
+      }
+      drawButton(x + width - 134, y + height - 70, 92, 32, "发布", { alpha, small: true });
+      ctx.restore();
+    }
+
+    function drawHosts(local) {
+      const intro = appear(local, 60, 560);
+      drawTitle("一次创作，两个入口", "无论用 Obsidian 还是桌面应用，都能简单完成发布。", intro);
+      const left = appear(local, 240, 760, 28);
+      const right = appear(local, 480, 760, 28);
+      drawObsidianMini(168, 258 + left.offset, 500, 336, left.alpha);
+      drawDesktopMini(772, 258 + right.offset, 500, 336, right.alpha);
+      drawCard(348, 640 + left.offset, 140, 38, { alpha: left.alpha, radius: 999, shadow: .03 });
+      drawText("Obsidian 插件", 418, 659 + left.offset, 13, 650, C.ink, { alpha: left.alpha });
+      drawCard(952, 640 + right.offset, 150, 38, { alpha: right.alpha, radius: 999, shadow: .03 });
+      drawText("网页 / 桌面端", 1027, 659 + right.offset, 13, 650, C.ink, { alpha: right.alpha });
+    }
+
+    function drawObsidianDemo(local) {
+      const intro = appear(local, 40, 520);
+      drawTitle("在 Obsidian 里发布", "点一下发布，笔记会自动送到各个平台。", intro);
+
+      const windowX = 148;
+      const windowY = 212;
+      const windowWidth = 1144;
+      const windowHeight = 486;
+      drawWindow(windowX, windowY + intro.offset * .35, windowWidth, windowHeight, "Obsidian · 我的产品笔记", intro.alpha, true);
+
+      const noteX = windowX + 18;
+      const noteY = windowY + 52 + intro.offset * .35;
+      const noteW = 552;
+      const noteH = windowHeight - 68;
+      roundRect(noteX, noteY, noteW, noteH, 12);
+      ctx.save();
+      ctx.globalAlpha = intro.alpha;
+      ctx.fillStyle = "#272a35";
+      ctx.fill();
+      ctx.strokeStyle = "rgba(255,255,255,.05)";
+      ctx.stroke();
+
+      const completed = local > 5150;
+      ["知乎", "微博", "小红书", "存为草稿"].forEach((tag, index) => {
+        const tagX = noteX + 24 + index * 86;
+        roundRect(tagX, noteY + 68, index === 3 ? 94 : 76, 28, 14);
+        ctx.fillStyle = index === 3 ? "rgba(253,141,17,.18)" : "rgba(255,255,255,.10)";
+        ctx.fill();
+        drawText(tag, tagX + (index === 3 ? 47 : 38), noteY + 83, 11, 580, index === 3 ? "#ffc98a" : "rgba(255,255,255,.68)");
+      });
+
+      const noteStatus = completed ? "已完成" : local > 2050 ? "发布中" : "未发布";
+      const noteStatusColor = completed ? "#5ce2a5" : local > 2050 ? "#85b6ff" : "rgba(255,255,255,.52)";
+      drawText("发布状态", noteX + 24, noteY + 131, 12, 600, "rgba(255,255,255,.48)", { align: "left" });
+      roundRect(noteX + 90, noteY + 116, 82, 28, 14);
+      ctx.fillStyle = completed ? "rgba(7,181,111,.18)" : local > 2050 ? "rgba(44,111,240,.20)" : "rgba(255,255,255,.08)";
+      ctx.fill();
+      drawText(noteStatus, noteX + 131, noteY + 131, 11, 680, noteStatusColor);
+
+      drawText("产品更新", noteX + 24, noteY + 235, 20, 700, "rgba(255,255,255,.90)", { align: "left" });
+      [270, 302, 334, 398, 428].forEach((lineY, index) => {
+        roundRect(noteX + 24, noteY + lineY, noteW - 50 - (index % 2) * 58, index > 3 ? 9 : 7, 99);
+        ctx.fillStyle = index > 3 ? "rgba(44,111,240,.22)" : "rgba(255,255,255,.13)";
+        ctx.fill();
+      });
+
+      const panelX = noteX + noteW + 18;
+      const panelY = noteY;
+      const panelW = windowWidth - noteW - 54;
+      const panelH = noteH;
+      drawCard(panelX, panelY, panelW, panelH, { alpha: intro.alpha, radius: 14, shadow: .05, fill: "rgba(247,246,243,.98)" });
+      drawText("Tassello Publisher", panelX + 26, panelY + 30, 15, 720, C.ink, { align: "left", alpha: intro.alpha });
+      ctx.save();
+      ctx.globalAlpha = intro.alpha;
+      ctx.beginPath();
+      ctx.arc(panelX + panelW - 34, panelY + 30, 5, 0, Math.PI * 2);
+      ctx.fillStyle = C.green;
+      ctx.fill();
+      ctx.restore();
+      drawText("准备就绪", panelX + panelW - 46, panelY + 30, 11, 560, C.green, { align: "right", alpha: intro.alpha });
+
+      const publishProgress = easeInOutCubic(segment(local, 2130, 2000));
+      TASKS.forEach((task, index) => {
+        const rowY = panelY + 58 + index * 56;
+        const itemIntro = appear(local, 220 + index * 90, 480, 12);
+        drawCard(panelX + 18, rowY + itemIntro.offset, panelW - 36, 46, {
+          alpha: itemIntro.alpha,
+          radius: 12,
+          shadow: .02,
+          fill: "rgba(255,255,255,.90)"
+        });
+        ctx.save();
+        ctx.globalAlpha = itemIntro.alpha;
+        ctx.beginPath();
+        ctx.arc(panelX + 39, rowY + 23, 9, 0, Math.PI * 2);
+        ctx.fillStyle = task.color;
+        ctx.fill();
+        ctx.restore();
+        drawText(task.name, panelX + 57, rowY + 23, 13, 680, C.ink, { align: "left", alpha: itemIntro.alpha });
+        let status = "待处理";
+        let statusColor = C.ink3;
+        if (completed) {
+          status = "已完成";
+          statusColor = C.green;
+        } else if (publishProgress >= 1) {
+          status = "待确认";
+          statusColor = C.orange;
+        } else if (publishProgress > .18 + index * .25) {
+          status = index === 0 ? "内容备好 · 待确认" : index === 1 ? "草稿已创建" : "草稿已保存";
+          statusColor = index === 0 ? C.orange : C.blue;
+        } else if (publishProgress > .04 + index * .1) {
+          status = index === 0 ? "整理内容" : index === 1 ? "创建草稿" : "上传图片";
+          statusColor = C.blue;
+        }
+        drawText(status, panelX + panelW - 36, rowY + 23, 11, 650, statusColor, { align: "right", alpha: itemIntro.alpha });
+      });
+
+      const stageText = completed
+        ? "发布记录已保存"
+        : publishProgress >= 1
+          ? "等待人工确认"
+          : publishProgress > .68
+            ? "生成平台内容…"
+            : publishProgress > .34
+              ? "上传图片…"
+              : "整理笔记内容…";
+      drawProgressBar(panelX + 18, panelY + 240, panelW - 92, publishProgress, {
+        alpha: intro.alpha,
+        height: 7,
+        color: completed ? C.green : C.blue,
+        showPercent: true,
+        statusText: stageText
+      });
+
+      let label = "发布这篇笔记";
+      let variant = "primary";
+      let disabled = false;
+      if (local > 2130 && local < 4200) {
+        label = "发布中…";
+        disabled = true;
+      } else if (local >= 4200 && !completed) {
+        label = "标记完成";
+        variant = "warning";
+      } else if (completed) {
+        label = "已完成";
+        variant = "success";
+      }
+      const firstPress = pressAmount(local, 2050);
+      const secondPress = pressAmount(local, 5050);
+      drawButton(panelX + 18, panelY + 292, panelW - 36, 48, label, {
+        alpha: intro.alpha,
+        variant,
+        disabled,
+        pressed: Math.max(firstPress, secondPress)
+      });
+
+      const obsidianButton = { x: panelX + 18 + (panelW - 36) / 2, y: panelY + 316 };
+      const firstCursor = moveCursor(local, 1180, 2050, { x: 560, y: 660 }, obsidianButton);
+      const secondCursor = moveCursor(local, 4350, 5050, { x: 820, y: 660 }, obsidianButton);
+      drawClick(local, 2050, obsidianButton.x, obsidianButton.y);
+      drawClick(local, 5050, obsidianButton.x, obsidianButton.y);
+      if (local > 1180 && local < 2700) drawPointer(firstCursor.x, firstCursor.y, firstCursor.alpha, firstPress);
+      if (local > 4350 && local < 5700) drawPointer(secondCursor.x, secondCursor.y, secondCursor.alpha, secondPress);
+      ctx.restore();
+    }
+
+    function drawDesktopDemo(local) {
+      const intro = appear(local, 40, 520);
+      drawTitle("在桌面应用里发布", "勾选平台，点击发布，最后一键确认。", intro);
+
+      const windowX = 148;
+      const windowY = 190;
+      const windowWidth = 1144;
+      const windowHeight = 520;
+      drawWindow(windowX, windowY + intro.offset * .3, windowWidth, windowHeight, "Tassello Desktop", intro.alpha);
+      const uiOffset = intro.offset * .3;
+
+      ctx.save();
+      ctx.globalAlpha = intro.alpha;
+      roundRect(windowX + 18, windowY + 52 + uiOffset, 208, windowHeight - 70, 12);
+      ctx.fillStyle = "#fbfaf9";
+      ctx.fill();
+      ctx.strokeStyle = C.line;
+      ctx.stroke();
+      ["内容库", "编辑器", "发布队列", "设置"].forEach((item, index) => {
+        const itemY = windowY + 105 + uiOffset + index * 47;
+        if (index === 0) {
+          roundRect(windowX + 30, itemY - 17, 184, 36, 10);
+          ctx.fillStyle = "rgba(44,111,240,.10)";
+          ctx.fill();
+        }
+        drawText(item, windowX + 52, itemY + 1, 13, index === 0 ? 700 : 560, index === 0 ? C.blue : C.ink2, { align: "left" });
+      });
+
+      const mainX = windowX + 242;
+      const mainY = windowY + 52 + uiOffset;
+      const mainW = 486;
+      const mainH = windowHeight - 70;
+      drawCard(mainX, mainY, mainW, mainH, { alpha: intro.alpha, radius: 12, shadow: .025, fill: "#fff" });
+      drawText("内容库", mainX + 22, mainY + 32, 16, 720, C.ink, { align: "left" });
+      drawButton(mainX + mainW - 94, mainY + 14, 72, 32, "新建", { alpha: intro.alpha, variant: "neutral", small: true });
+
+      drawCard(mainX + 20, mainY + 62, mainW - 40, 148, { alpha: intro.alpha, radius: 14, shadow: .03 });
+      drawText("发布一篇产品更新", mainX + 42, mainY + 96, 16, 700, C.ink, { align: "left" });
+      drawText("文章 · 已选 3 个平台", mainX + 42, mainY + 122, 11, 560, C.ink2, { align: "left" });
+      [145, 171].forEach((lineY, index) => {
+        roundRect(mainX + 42, mainY + lineY, mainW - 130 - index * 42, 7, 99);
+        ctx.fillStyle = "rgba(55,53,47,.11)";
+        ctx.fill();
+      });
+      drawButton(mainX + mainW - 122, mainY + 145, 82, 36, "发布", { alpha: intro.alpha, variant: "primary" });
+
+      const stages = ["整理内容", "上传图片", "生成内容", "你的确认"];
+      stages.forEach((stage, index) => {
+        const stageX = mainX + 58 + index * 110;
+        const stageY = mainY + 274;
+        const active = local > 3650 + index * 750;
+        ctx.beginPath();
+        ctx.arc(stageX, stageY, 8, 0, Math.PI * 2);
+        ctx.fillStyle = active ? C.blue : "rgba(55,53,47,.10)";
+        ctx.fill();
+        drawText(stage, stageX, stageY + 27, 11, 580, active ? C.ink : C.ink3);
+        if (index < 3) {
+          ctx.strokeStyle = active ? "rgba(44,111,240,.48)" : C.line;
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(stageX + 13, stageY);
+          ctx.lineTo(stageX + 97, stageY);
+          ctx.stroke();
+        }
+      });
+
+      const queueX = mainX + mainW + 18;
+      const queueY = mainY;
+      const queueW = windowWidth - (queueX - windowX) - 18;
+      const queueH = mainH;
+      drawCard(queueX, queueY, queueW, queueH, { alpha: intro.alpha, radius: 12, shadow: .025, fill: "#fff" });
+      drawText("发布队列", queueX + 22, queueY + 32, 16, 720, C.ink, { align: "left" });
+      const confirmed = local > 6550;
+      const allPending = local > 6050 && local < 6500;
+      const confirmLabel = confirmed ? "已完成" : allPending ? "全部确认" : "等待任务";
+      drawButton(queueX + queueW - 108, queueY + 16, 86, 32, confirmLabel, {
+        alpha: intro.alpha,
+        variant: confirmed ? "success" : allPending ? "primary" : "neutral",
+        disabled: !allPending,
+        small: true,
+        pressed: pressAmount(local, 6500)
+      });
+      ctx.restore();
+
+      const targetIntro = easeOutCubic(segment(local, 2150, 520));
+      const targetClose = 1 - easeInOutCubic(segment(local, 3350, 340));
+      const targetAlpha = targetIntro * targetClose;
+      if (targetAlpha > 0) {
+        const modalScale = .94 + easeOutBack(targetIntro) * .06;
+        drawCard(468, 244, 560, 372, { alpha: targetAlpha, radius: 22, shadow: .14, scaleX: modalScale, scaleY: modalScale });
+        drawText("选择发布目标", 748, 288, 19, 720, C.ink, { alpha: targetAlpha });
+      drawText("已选 3 个平台，发布后只需要确认一次", 748, 318, 12, 500, C.ink2, { alpha: targetAlpha });
+        ["知乎", "微博", "小红书", "X", "即刻", "豆瓣"].forEach((name, index) => {
+          const column = index % 3;
+          const row = Math.floor(index / 3);
+          const chipX = 500 + column * 168;
+          const chipY = 356 + row * 60;
+          const selected = index < 3;
+          drawCard(chipX, chipY, 148, 46, {
+            alpha: targetAlpha,
+            radius: 14,
+            shadow: .02,
+            fill: selected ? C.blueSoft : "rgba(255,255,255,.90)",
+            stroke: selected ? "rgba(44,111,240,.35)" : C.line
+          });
+          drawText(name, chipX + 22, chipY + 23, 13, 660, selected ? C.blue : C.ink2, { align: "left", alpha: targetAlpha });
+          if (selected) {
+            ctx.save();
+            ctx.globalAlpha = targetAlpha;
+            ctx.strokeStyle = C.blue;
+            ctx.lineWidth = 2.4;
+            ctx.lineCap = "round";
+            ctx.beginPath();
+            ctx.moveTo(chipX + 117, chipY + 23);
+            ctx.lineTo(chipX + 121, chipY + 27);
+            ctx.lineTo(chipX + 128, chipY + 18);
+            ctx.stroke();
+            ctx.restore();
+          }
+        });
+        drawButton(868, 532, 128, 42, "开始发布", { alpha: targetAlpha, pressed: pressAmount(local, 3250) });
+      }
+
+      TASKS.forEach((task, index) => {
+        const start = 3650 + index * 750;
+        const taskValue = easeInOutCubic(segment(local, start, 900));
+        const rowAlpha = easeOutCubic(segment(local, start - 120, 420));
+        if (rowAlpha <= 0) return;
+        const rowY = windowY + 112 + uiOffset + index * 92;
+        const done = local > 6550;
+        const pending = taskValue >= 1 && !done;
+        let status = "排队中";
+        let statusColor = C.ink3;
+        let progress = taskValue * .18;
+        if (done) {
+          status = "已完成";
+          statusColor = C.green;
+          progress = 1;
+        } else if (pending) {
+          status = "待确认";
+          statusColor = C.orange;
+          progress = 1;
+        } else if (taskValue > .1) {
+          status = index === 0 ? "整理内容" : index === 1 ? "创建草稿" : "上传图片";
+          statusColor = C.blue;
+          progress = .22 + taskValue * .78;
+        }
+        drawCard(queueX + 18, rowY, queueW - 36, 76, { alpha: rowAlpha, radius: 14, shadow: .02 });
+        ctx.save();
+        ctx.globalAlpha = rowAlpha;
+        ctx.beginPath();
+        ctx.arc(queueX + 42, rowY + 26, 9, 0, Math.PI * 2);
+        ctx.fillStyle = task.color;
+        ctx.fill();
+        ctx.restore();
+        drawText(task.name, queueX + 60, rowY + 26, 13, 680, C.ink, { align: "left", alpha: rowAlpha });
+        drawText(status, queueX + queueW - 36, rowY + 26, 11, 650, statusColor, { align: "right", alpha: rowAlpha });
+        drawText(task.detail, queueX + 60, rowY + 50, 10, 480, C.ink3, { align: "left", alpha: rowAlpha });
+        drawProgressBar(queueX + 200, rowY + 45, queueW - 250, progress, { alpha: rowAlpha, height: 5, color: done ? C.green : C.blue });
+      });
+
+      const publishTarget = { x: mainX + mainW - 81, y: mainY + 163 };
+      const startTarget = { x: 932, y: 553 };
+      const confirmTarget = { x: queueX + queueW - 65, y: queueY + 32 };
+      const publishCursor = moveCursor(local, 1450, 2050, { x: 650, y: 610 }, publishTarget);
+      const targetCursor = moveCursor(local, 2450, 3250, publishTarget, startTarget);
+      const confirmCursor = moveCursor(local, 5850, 6500, startTarget, confirmTarget);
+      drawClick(local, 2050, publishTarget.x, publishTarget.y);
+      drawClick(local, 3250, 932, 553);
+      drawClick(local, 6500, confirmTarget.x, confirmTarget.y);
+      if (local > 1450 && local < 2700) drawPointer(publishCursor.x, publishCursor.y, publishCursor.alpha, pressAmount(local, 2050));
+      if (local > 2450 && local < 3900) drawPointer(targetCursor.x, targetCursor.y, targetCursor.alpha, pressAmount(local, 3250));
+      if (local > 5850 && local < 7150) drawPointer(confirmCursor.x, confirmCursor.y, confirmCursor.alpha, pressAmount(local, 6500));
+    }
+
+    function drawFinal(local) {
+      const markIntro = appear(local, 120, 760, 30);
+      const titleIntro = appear(local, 420, 720, 20);
+      const subtitleIntro = appear(local, 680, 720, 16);
+      const centerX = DESIGN_WIDTH / 2;
+      drawMark(centerX, 312, 104, markIntro.alpha, markIntro.value);
+      drawText("Tassello Publisher", centerX, 442, 44, 760, C.ink, { alpha: titleIntro.alpha, offsetY: titleIntro.offset, spacing: 2 });
+      drawText("在 Obsidian 或桌面应用里，都能轻松发布。", centerX, 502, 19, 480, C.ink2, {
+        alpha: subtitleIntro.alpha,
+        offsetY: subtitleIntro.offset,
+        spacing: 1
+      });
+      const chips = ["Obsidian 插件", "桌面应用", "简单易用", "一键发布"];
+      chips.forEach((chip, index) => {
+        const chipIntro = appear(local, 980 + index * 150, 620, 16);
+        const width = 150;
+        const total = chips.length * width + (chips.length - 1) * 16;
+        const x = centerX - total / 2 + index * (width + 16);
+        drawCard(x, 570 + chipIntro.offset, width, 44, { alpha: chipIntro.alpha, radius: 999, shadow: .03, fill: "rgba(255,255,255,.72)" });
+        drawText(chip, x + width / 2, 592 + chipIntro.offset, 13, 620, C.ink2, { alpha: chipIntro.alpha });
+      });
+    }
+
+    const scenes = [
+      { start: 0, end: 3400, render: drawBrand },
+      { start: 2900, end: 7100, render: drawHosts },
+      { start: 6600, end: 13300, render: drawObsidianDemo },
+      { start: 12800, end: 21100, render: drawDesktopDemo },
+      { start: 20600, end: DURATION, render: drawFinal }
+    ];
+
+    function render() {
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+      drawBackdrop(time);
+      beginDesignContext();
+      for (const scene of scenes) {
+        if (time < scene.start - 1 || time > scene.end + 1) continue;
+        const local = clamp(time - scene.start, 0, scene.end - scene.start);
+        const fadeIn = 620;
+        const fadeOut = scene.end === DURATION ? 0 : 620;
+        const alpha = Math.min(
+          clamp((time - scene.start) / fadeIn),
+          fadeOut ? clamp((scene.end - time) / fadeOut) : 1
+        );
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        scene.render(local);
+        ctx.restore();
+      }
+      ctx.restore();
+      progress.style.width = `${time / DURATION * 100}%`;
+    }
+
+    function frame(now) {
+      const delta = Math.min(now - lastFrame, 48);
+      lastFrame = now;
+      if (isPlaying && frozenFrame === null) {
+        time = (time + delta) % DURATION;
+        render();
+      }
+      requestAnimationFrame(frame);
+    }
+
+    toggleButton.addEventListener("click", () => {
+      isPlaying = !isPlaying;
+      toggleButton.textContent = isPlaying ? "暂停" : "播放";
+    });
+
+    replayButton.addEventListener("click", () => {
+      time = 0;
+      isPlaying = true;
+      toggleButton.textContent = "暂停";
+      render();
+    });
+
+    const frameParams = new URLSearchParams(window.location.search);
+    const requestedFrame = Number(frameParams.get("t"));
+    if (Number.isFinite(requestedFrame) && frameParams.has("t")) {
+      frozenFrame = clamp(requestedFrame, 0, DURATION - 1);
+      time = frozenFrame;
+    }
+    if (frameParams.get("freeze") === "1") {
+      if (frozenFrame === null) frozenFrame = time;
+      isPlaying = false;
+      toggleButton.textContent = "播放";
+    }
+
+    window.addEventListener("resize", resize);
+    window.__setIntroTime = value => {
+      time = clamp(value, 0, DURATION - 1);
+      render();
+    };
+
+    if (frozenFrame === null && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      time = DURATION - 1;
+      isPlaying = false;
+      toggleButton.textContent = "播放";
+    }
+
+    resize();
+    requestAnimationFrame(frame);
+  </script>
+</body>
+</html>
