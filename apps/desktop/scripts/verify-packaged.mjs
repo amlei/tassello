@@ -8,10 +8,12 @@
  *     Windows 原生绑定文件在位）；DB 链路留给同平台机器（CI windows runner）跑完整校验。
  */
 import { spawn } from "node:child_process";
-import { existsSync, readdirSync, statSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, statSync } from "node:fs";
 import http from "node:http";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { execFileSync } from "node:child_process";
 
 const args = process.argv.slice(2);
 function argValue(flag) {
@@ -49,6 +51,16 @@ const artifactPlatform = /win-unpacked/.test(appRoot) || existsSync(path.join(ap
   : "darwin";
 const fullCheck = artifactPlatform === process.platform;
 log(fullCheck ? "模式: 完整校验（页面 + DB）" : "模式: 结构校验（跨平台，不验 DB）");
+
+/* 全新临时数据目录 + prisma db push 建表：不污染宿主机数据，也不依赖宿主机已有库 */
+const dataDir = mkdtempSync(path.join(os.tmpdir(), "tassello-verify-"));
+const packagesDbDir = path.resolve(repoRoot, "packages", "db");
+log(`数据目录: ${dataDir}`);
+execFileSync(process.execPath, ["x", "prisma", "db", "push"], {
+  cwd: packagesDbDir,
+  stdio: "inherit",
+  env: { ...process.env, TASSELLO_DATA_DIR: dataDir },
+});
 
 const port = 4400 + Math.floor(Math.random() * 400);
 
@@ -90,6 +102,7 @@ child = spawn(runCmd, runArgs, {
     HOSTNAME: "127.0.0.1",
     PORT: String(port),
     TASSELLO_DESKTOP: "1",
+    TASSELLO_DATA_DIR: dataDir,
     ...(prodExecutable ? { ELECTRON_RUN_AS_NODE: "1" } : {}),
   },
 });

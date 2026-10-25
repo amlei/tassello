@@ -1,4 +1,4 @@
-import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { cp, lstat, mkdir, readdir, readFile, realpath, readlink, rm, stat, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -32,13 +32,46 @@ if (!existsSync(path.join(standaloneDir, "apps", "web", "server.js"))) {
 
 await rm(outputDir, { recursive: true, force: true });
 
-// dereference: true 会把 Bun/Next standalone 中的 workspace symlink 落成真实文件，
-// 避免 Windows/NSIS 打包时读取跨目录失效 symlink。
-await cp(standaloneDir, outputDir, {
-  recursive: true,
-  dereference: true,
-  force: true,
-});
+/* 解引用式递归拷贝：逐条目 readlink 解析 symlink 再拷贝目标内容，不 stat 链接本身——
+ * Windows 上 fs.cp({dereference:true}) 跟随 bun store 的 symlink 会 EPERM。
+ * seen 集按 realpath 防循环；悬空链接跳过。 */
+const seenRealpaths = new Set();
+async function copyDeref(src, dest) {
+  const real = await realpath(src).catch(() => null);
+  if (!real) return; // 悬空链接
+  if (seenRealpaths.has(real)) return;
+  seenRealpaths.add(real);
+  const st = await lstat(real);
+  if (st.isDirectory()) {
+    await mkdir(dest, { recursive: true });
+    for (const e of await readdir(real)) {
+      await copyDeref(path.join(real, e), path.join(dest, e));
+    }
+  } else if (st.isFile()) {
+    await mkdir(path.dirname(dest), { recursive: true });
+    await writeFile(dest, await readFile(real));
+  }
+}
+async function copyTree(src, dest) {
+  await mkdir(dest, { recursive: true });
+  for (const e of await readdir(src, { withFileTypes: true })) {
+    // .bun dot store 整棵跳过：展平依赖取自仓库根完整 store，追踪清单在 .next/server 下，
+    // 这棵树最终也会被删除；里面的链接环与海量文件只会拖慢打包
+    if (e.name === ".bun") continue;
+    const s = path.join(src, e.name);
+    const d = path.join(dest, e.name);
+    if (e.isSymbolicLink()) {
+      const target = await readlink(s).then((t) => path.resolve(path.dirname(s), t)).catch(() => null);
+      if (!target) continue;
+      await copyDeref(target, d);
+    } else if (e.isDirectory()) {
+      await copyTree(s, d);
+    } else if (e.isFile()) {
+      await writeFile(d, await readFile(s));
+    }
+  }
+}
+await copyTree(standaloneDir, outputDir);
 
 await cp(
   path.join(webDir, ".next", "static"),
