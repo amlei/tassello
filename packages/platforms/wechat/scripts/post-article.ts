@@ -127,6 +127,14 @@ async function pasteIntoProseMirror(cdp: Cdp, sessionId: string, pickJs: string,
       const el = pick(Array.from(document.querySelectorAll(".ProseMirror")));
       if (!el) return false;
       el.focus();
+      // 必须显式设置选区：PM 的 paste 管线只在有选区时才提交事务，
+      // 否则内容只落 DOM，会被编辑器状态回灌清空
+      const sel = getSelection();
+      sel.removeAllRanges();
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      range.collapse(true);
+      sel.addRange(range);
       const dt = new DataTransfer();
       dt.setData("text/html", ${JSON.stringify(html)});
       dt.setData("text/plain", ${JSON.stringify(plain)});
@@ -210,33 +218,27 @@ await withPage("wechat", { url: EDITOR_URL(0, null), keepOpen: true, activate: t
   if (digest) await fillTextarea(cdp, sid, "textarea#js_description", digest);
   console.log("[wechat] 标题与摘要已填");
 
-  // 4. 正文：非标题区里最高的 ProseMirror
-  const pasted = await pasteIntoProseMirror(
-    cdp,
-    sid,
-    `(roots) => roots.filter((e) => e.offsetHeight > 80).sort((a, b) => b.offsetHeight - a.offsetHeight)[0] || null`,
-    html,
-    plainText,
-  );
+  // 4. 正文：合成 paste（pasteIntoProseMirror 内部已显式设置选区，PM 才会提交事务）
+  const bodyPickJs = `(roots) => roots.filter((e) => e.offsetHeight > 80).sort((a, b) => b.offsetHeight - a.offsetHeight)[0] || null`;
+  // 注意：占位符「从这里开始写正文」本身就是 8 个真实字符，只判“有文字”会被它骗过
+  const bodyFilledJs = `(() => {
+    const pms = Array.from(document.querySelectorAll(".ProseMirror")).filter((e) => e.offsetHeight > 40);
+    const body = pms.find((e) => e.querySelector("p, img, h1, h2, h3, blockquote, ul, ol, section"));
+    const t = body ? body.innerText.replace(/\\s+/g, "") : "";
+    return !!body && ((t.length > 100 && !t.includes("从这里开始写正文")) || body.querySelectorAll("img").length >= 3);
+  })()`;
+  const pasted = await pasteIntoProseMirror(cdp, sid, bodyPickJs, html, plainText);
   if (!pasted) throw new Error("未找到公众号正文编辑区（页面结构可能变更）");
   if (await confirmContinueInsert(cdp, sid)) console.log("[wechat] 已确认正文「继续插入」");
 
   // 5. 等编辑器真吃下内容
-  await waitForJs(
-    cdp,
-    sid,
-    `(() => {
-      const pms = Array.from(document.querySelectorAll(".ProseMirror")).filter((e) => e.offsetHeight > 40);
-      const body = pms.find((e) => e.querySelector("p, img, h1, h2, h3, blockquote, ul, ol, section"));
-      return !!body && (body.textContent.replace(/\\s+/g, "").length > 0 || body.querySelectorAll("img").length >= 1);
-    })()`,
-    20_000,
-    "正文填充校验",
-  );
+  await waitForJs(cdp, sid, bodyFilledJs, 20_000, "正文填充校验");
   console.log("[wechat] 正文已粘贴");
 
   // 5.5 可选：自动「保存为草稿」并取回 appmsgid（草稿编辑 URL）
   if (saveDraft) {
+    // 给 ProseMirror 状态同步 / 防抖保存留出时间，避免把未提交的 DOM 内容丢掉
+    await new Promise((r) => setTimeout(r, 2500));
     const clicked = await evaluateScalar<boolean>(
       cdp,
       sid,

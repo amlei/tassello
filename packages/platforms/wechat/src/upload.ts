@@ -137,7 +137,8 @@ export async function uploadWechatMaterial(
         cdn: j.cdn_url || (j.content && j.content.url) || null,
       };
     })()`,
-    { timeoutMs: 120_000 },
+    // 大图 base64 整包 evaluate 较慢，放宽到 5 分钟，避免 mp 侧慢响应时被误判超时
+    { timeoutMs: 300_000 },
   );
 
   if (uploaded.ret !== 0 || !uploaded.content) {
