@@ -11,6 +11,18 @@ type CachedStableRelease = {
 
 const CACHE_KEY = "onda:release:stable:v1";
 const RELEASE_API = "https://api.github.com/repos/amlei/tassello/releases/latest";
+const RELEASE_LIST_API = "https://api.github.com/repos/amlei/tassello/releases?per_page=5";
+
+type ReleaseSummary = {
+  tag_name?: unknown;
+  draft?: unknown;
+  prerelease?: unknown;
+};
+
+function usableRelease(release: ReleaseSummary): string | null {
+  if (typeof release.tag_name !== "string" || release.draft === true) return null;
+  return release.tag_name;
+}
 
 function readCache(): CachedStableRelease | null {
   try {
@@ -58,7 +70,7 @@ function normalizeVersion(tag: string): string {
  * 持久缓存 latest stable release。二次访问先显示缓存，再用 ETag 条件请求；
  * GitHub 返回 304 时不计入 API 配额，release 未更新则数据不变。
  */
-export function useLatestRelease(fallbackVersion = "0.1.0") {
+export function useLatestRelease(fallbackVersion = "0.1.1") {
   const cachedVersion = useSyncExternalStore(
     subscribeToCache,
     getCachedVersion,
@@ -73,26 +85,29 @@ export function useLatestRelease(fallbackVersion = "0.1.0") {
       const cache = readCache();
       if (cache?.etag) headers["If-None-Match"] = cache.etag;
 
-      const response = await fetch(RELEASE_API, { headers, cache: "no-store" });
-      if (response.status === 304 || !response.ok) return;
-
-      const release = await response.json() as {
-        tag_name?: unknown;
-        draft?: unknown;
-        prerelease?: unknown;
+      /* 优先 stable latest；仓库只有 Pre-release 时 latest 返回 404，
+       * 此时回退到 releases 列表取最新一条（含 Pre-release） */
+      const pick = async (): Promise<{ tag: string; etag?: string } | null> => {
+        const latest = await fetch(RELEASE_API, { headers, cache: "no-store" });
+        if (latest.status === 304) return null;
+        if (latest.ok) {
+          const tag = usableRelease((await latest.json()) as ReleaseSummary);
+          if (tag) return { tag, etag: latest.headers.get("etag") ?? undefined };
+        }
+        const list = await fetch(RELEASE_LIST_API, { headers: { Accept: "application/vnd.github+json" }, cache: "no-store" });
+        if (!list.ok) return null;
+        const releases = (await list.json()) as ReleaseSummary[];
+        const first = releases.map((r) => usableRelease(r)).find((t) => t !== null);
+        return first ? { tag: first } : null;
       };
-      if (
-        typeof release.tag_name !== "string" ||
-        release.draft === true ||
-        release.prerelease === true
-      ) {
-        return;
-      }
+
+      const picked = await pick();
+      if (!picked) return;
 
       const next: CachedStableRelease = {
-        tag: release.tag_name,
-        version: normalizeVersion(release.tag_name),
-        etag: response.headers.get("etag") ?? undefined,
+        tag: picked.tag,
+        version: normalizeVersion(picked.tag),
+        etag: picked.etag,
         fetchedAt: Date.now(),
       };
       writeCache(next);
