@@ -113,7 +113,7 @@ for (const manifest of manifestFiles) {
   for (const rel of parsed.files ?? []) {
     const abs = path.resolve(path.dirname(manifest), rel);
     if (!abs.startsWith(outputDir)) continue;
-    const m = abs.match(/node_modules\/\.bun\/([^/]+)\/node_modules\/(.+)$/);
+    const m = abs.match(/node_modules[\\/]\.bun[\\/]([^\\/]+)[\\/]node_modules[\\/](.+)$/);
     if (!m) continue;
     tracedCount++;
     const d = decodeKey(m[1]);
@@ -178,8 +178,11 @@ const skipNames = new Set(["next"]); // standalone 已自带 apps/web/node_modul
 const materialized = new Map(); // 包名 -> version
 const pending = [...constraints.entries()];
 
-/* 本构建覆盖的平台（mac arm64 + win x64）；optionalDeps 只装这两个平台的变体 */
-const wantedPlatforms = [/darwin-arm64$/, /win32-x64/];
+/* 本构建覆盖的平台原生绑定：跟随构建宿主（Windows 包在 Windows 构建、mac 包在 mac 构建，
+ * 不再做交叉构建，原生绑定由 bun install 在对应平台直接装好） */
+const wantedPlatforms = process.platform === "win32"
+  ? [/win32-x64/]
+  : [/darwin-arm64$/];
 
 let guard = 0;
 while (pending.length > 0) {
@@ -234,7 +237,10 @@ log(`依赖闭包展平 ${materialized.size} 个包: ${[...materialized.keys()].
 
 /* ---- 第 4 步：结构门禁 ---- */
 
-for (const critical of ["@libsql/client", "libsql", "@libsql/darwin-arm64", "@swc/helpers", "async-mutex"]) {
+const criticalByPlatform = process.platform === "win32"
+  ? ["@libsql/client", "libsql", "@libsql/win32-x64-msvc", "@swc/helpers", "async-mutex"]
+  : ["@libsql/client", "libsql", "@libsql/darwin-arm64", "@swc/helpers", "async-mutex"];
+for (const critical of criticalByPlatform) {
   if (!existsSync(path.join(appNodeModules, critical))) {
     fail(`展平后缺少关键运行时依赖: ${critical}`);
   }
