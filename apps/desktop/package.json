@@ -1,14 +1,17 @@
 {
   "name": "@tassello/desktop",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "private": true,
   "main": "dist/main.js",
   "scripts": {
     "build": "bun build src/main.ts src/preload.ts --outdir dist --target node --external electron",
     "desktop": "bun run build && electron dist/main.js",
-    "dist:mac": "bun run build && bun scripts/prepare-web-resources.mjs && electron-builder --mac --arm64",
-    "dist:win": "bun run build && bun scripts/prepare-web-resources.mjs && electron-builder --win --x64"
+    "dist:mac": "cd ../web && bun run build && cd ../desktop && bun run build && bun scripts/prepare-web-resources.mjs && electron-builder --mac --arm64 && bun scripts/verify-packaged.mjs --target mac-arm64",
+    "dist:win": "cd ../web && bun run build && cd ../desktop && bun run build && bun scripts/prepare-web-resources.mjs && electron-builder --win --x64 && bun scripts/verify-packaged.mjs --target win-unpacked",
+    "dist:mac:dir": "cd ../web && bun run build && cd ../desktop && bun run build && bun scripts/prepare-web-resources.mjs && electron-builder --mac --arm64 --dir && bun scripts/verify-packaged.mjs --target mac-arm64",
+    "dist:win:dir": "cd ../web && bun run build && cd ../desktop && bun run build && bun scripts/prepare-web-resources.mjs && electron-builder --win --x64 --dir && bun scripts/verify-packaged.mjs --target win-unpacked",
+    "verify:packaged": "bun scripts/verify-packaged.mjs"
   },
   "build": {
     "appId": "com.jiuyang.onda",

@@ -20,6 +20,7 @@ const targets = [
   "packages/server",
   "apps/site",
   "apps/web",
+  "apps/desktop",
   "apps/obsidian",
 ];
 
