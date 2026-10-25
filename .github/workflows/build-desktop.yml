@@ -1,0 +1,46 @@
+# 桌面安装包构建：Windows 包必须在 windows runner 上出（libsql/sharp 等
+# 原生绑定无法从 macOS 交叉 trace），macOS 同理。产物构建后自动跑运行时自检。
+name: build-desktop
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            script: dist:win
+            artifact: release/*.exe
+            name: windows-x64
+          - os: macos-latest
+            script: dist:mac
+            artifact: release/*.dmg
+            name: macos-arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: 安装依赖
+        run: bun install
+
+      - name: 生成 Prisma client
+        run: bun run db:generate
+
+      - name: 构建 + 打包 + 自检
+        working-directory: apps/desktop
+        run: bun run ${{ matrix.script }}
+
+      - name: 上传产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: tassello-${{ matrix.name }}
+          path: ${{ matrix.artifact }}
+          if-no-files-found: error
