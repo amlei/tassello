@@ -2,6 +2,7 @@ import { parse as parseYaml } from "yaml";
 import type { ContentType, PlatformId } from "../types";
 
 export type NoteFrontmatter = {
+  id?: string;
   title?: string;
   type?: ContentType;
   platforms?: PlatformId[];
@@ -45,6 +46,7 @@ export function splitNote(raw: string): SplitNote {
   try {
     const parsed = parseYaml(match[1] ?? "") as Record<string, unknown> | null;
     const config = normalizeConfig(parsed?.tassello);
+    const id = typeof config.id === "string" && config.id.trim() ? config.id.trim() : undefined;
     const type = typeof config.type === "string" && CONTENT_TYPES.has(config.type as ContentType)
       ? config.type as ContentType
       : undefined;
@@ -60,7 +62,7 @@ export function splitNote(raw: string): SplitNote {
       }
     }
     const title = typeof config.title === "string" ? config.title : undefined;
-    return { frontmatter: { title, type, platforms, options }, body: raw.slice(match[0]?.length ?? 0) };
+    return { frontmatter: { id, title, type, platforms, options }, body: raw.slice(match[0]?.length ?? 0) };
   } catch {
     return {
       frontmatter: {},

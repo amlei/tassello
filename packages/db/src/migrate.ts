@@ -18,7 +18,7 @@ let inflightByFile = new Map<string, Promise<void>>();
 export function migrateToHead(): Promise<void> {
   const dbFile = resolveDbFile();
   let p = inflightByFile.get(dbFile);
-  p ??= run();
+  p ??= run(dbFile);
   inflightByFile.set(dbFile, p);
   return p;
 }
@@ -76,8 +76,10 @@ function execPrisma(layout: CliLayout, args: string[]): { status: number; output
   return { status: result.status ?? 1, output };
 }
 
-async function run(): Promise<void> {
+async function run(dbFile: string): Promise<void> {
   const layout = resolveCliLayout();
+  fs.mkdirSync(path.dirname(dbFile), { recursive: true });
+  if (!fs.existsSync(dbFile)) fs.writeFileSync(dbFile, "");
   const deploy = execPrisma(layout, ["migrate", "deploy"]);
   if (deploy.status !== 0) {
     throw new Error(`数据库迁移失败（prisma migrate deploy，${layout.mode} 布局）: ${deploy.output}`);

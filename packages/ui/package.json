@@ -4,12 +4,24 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./platform-icons": "./src/platform-icons.tsx"
+    "./platform-icons": "./src/platform-icons.tsx",
+    "./primitives": "./src/primitives/index.ts",
+    "./layout": "./src/layout/index.ts",
+    "./patterns": "./src/patterns/index.ts"
   },
   "typesVersions": {
     "*": {
       "platform-icons": [
         "./src/platform-icons.tsx"
+      ],
+      "primitives": [
+        "./src/primitives/index.ts"
+      ],
+      "layout": [
+        "./src/layout/index.ts"
+      ],
+      "patterns": [
+        "./src/patterns/index.ts"
       ]
     }
   },
@@ -18,10 +30,14 @@
     "assets"
   ],
   "peerDependencies": {
-    "react": "^19"
+    "@heroui/react": "^3.2.6",
+    "react": "^19",
+    "reicon-react": "^1.2.5"
   },
   "devDependencies": {
+    "@heroui/react": "^3.2.6",
     "@types/react": "^19",
-    "react": "^19"
+    "react": "^19",
+    "reicon-react": "^1.2.5"
   }
 }

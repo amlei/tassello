@@ -5,6 +5,26 @@ import { z } from "zod";
 export const CONTENT_TYPES = ["article", "image", "video", "audio"] as const;
 export type ContentType = (typeof CONTENT_TYPES)[number];
 
+/** 手动安装与开发版共享的扩展 ID；manifest 使用同一 public key 固定此值。 */
+export const BUNDLED_EXTENSION_ID = "ablhokoljngdpaicipgpaigjeagmbhkl";
+export const NATIVE_HOST_NAME = "com.jiuyang.onda";
+
+export function configuredExtensionIds(env: Record<string, string | undefined> = {}): string[] {
+  const candidates = [
+    BUNDLED_EXTENSION_ID,
+    env.ONDA_CHROME_EXTENSION_ID,
+    env.ONDA_EDGE_EXTENSION_ID,
+    ...(env.ONDA_EXTENSION_IDS ?? "").split(","),
+  ];
+  return [...new Set(candidates
+    .map((value) => value?.trim())
+    .filter((value): value is string => !!value && /^[a-p]{32}$/.test(value)))];
+}
+
+export function extensionOrigin(extensionId: string): string {
+  return `chrome-extension://${extensionId}/`;
+}
+
 export const TYPE_META: Record<
   ContentType,
   { zh: string; en: string; color: string; glyph: string }
@@ -18,7 +38,7 @@ export const TYPE_META: Record<
 export const TYPE_ORDER: ContentType[] = ["article", "image", "video", "audio"];
 
 /* ---------- 平台 ---------- */
-export const AUTH_MODES = ["api", "cdp", "rss-downstream"] as const;
+export const AUTH_MODES = ["api", "extension", "cdp", "rss-downstream"] as const;
 export type AuthMode = (typeof AUTH_MODES)[number];
 export type PlatformStatus = "active" | "planned";
 export type PublishPersistence = "draft" | "state";
@@ -49,7 +69,19 @@ export type PlatformMeta = {
 };
 
 /* ---------- 发布任务 ---------- */
-export const TASK_STATUSES = ["queued", "running", "success", "failed"] as const;
+export const TASK_STATUSES = [
+  "queued",
+  "rendering",
+  "uploading",
+  "filling",
+  "running",
+  "awaiting_confirm",
+  "waiting_extension",
+  "unknown",
+  "success",
+  "failed",
+  "cancelled",
+] as const;
 export type TaskStatus = (typeof TASK_STATUSES)[number];
 export const STAGE_LABELS = ["渲染排版", "上传素材", "填充编辑器", "人工确认"] as const;
 
@@ -69,15 +101,44 @@ export type AssetDTO = {
   id: string;
   kind: string;
   path: string;
+  url?: string | null;
   color?: string | null;
+};
+
+export type DocumentStatus = "ready" | "missing" | "identity_conflict" | "invalid_frontmatter";
+
+export type MediaRefDTO = {
+  raw: string;
+  alt: string;
+  kind: "image" | "video" | "audio";
+  source: "relative" | "absolute" | "url";
+  resolved: string;
+  order: number;
+};
+
+export type PublishMediaRefDTO = MediaRefDTO & {
+  /** 本机媒体通过签名 token 交给扩展读取。 */
+  assetId: string | null;
+  fileName: string | null;
 };
 
 export type PostDTO = {
   id: string;
   type: ContentType;
   title: string;
+  /** Markdown 正文，含首个 H1；磁盘文件是唯一持久事实源。 */
+  markdown: string;
+  /** 由 Markdown 派生的纯文本，仅用于摘要和搜索。 */
   body: string;
+  /** 由 Markdown 派生的编辑/预览 HTML，不持久化。 */
   bodyHtml: string;
+  filePath: string;
+  fingerprint: string;
+  status: DocumentStatus;
+  issues: string[];
+  platforms: string[];
+  options: Record<string, unknown>;
+  media: MediaRefDTO[];
   durationSec: number | null;
   updatedAt: string;
   manualOrder: number;
@@ -90,6 +151,23 @@ export type ChannelDTO = {
   coverUrl?: string | null;
 };
 
+export const ACCOUNT_SYNC_PHASES = [
+  "unsupported",
+  "extension_offline",
+  "unverified",
+  "checking",
+  "source_changed",
+  "needs_login",
+  "failed",
+  "connected",
+] as const;
+export type AccountSyncPhase = (typeof ACCOUNT_SYNC_PHASES)[number];
+
+export type AccountSyncDTO = {
+  phase: AccountSyncPhase;
+  reason: string | null;
+};
+
 export type AccountDTO = {
   id: string;
   platformId: string;
@@ -100,20 +178,21 @@ export type AccountDTO = {
   avatarUrl: string | null;
   authExpiresAt: string | null;
   lastCheckedAt: string | null;
-  /** 最近一次 verify 使用的 profile 版本；用于判断是否可以跳过启动浏览器 */
-  profileGeneration?: string | null;
   /** 播客账号的发布目标：小宇宙节目 / 喜马拉雅专辑 / 荔枝播单 */
   channels?: ChannelDTO[];
 };
 
 export type PlatformDTO = PlatformMeta & {
   account: AccountDTO | null;
+  /** 由持久化账号、扩展连接和当前 verify 共同派生，不写入账号文件。 */
+  sync: AccountSyncDTO;
 };
 
 export type TaskDTO = {
   id: string;
   postId: string;
   postTitle: string;
+  documentPath?: string | null;
   platformId: string;
   accountUid: string | null;
   channelId: string | null;
@@ -123,6 +202,12 @@ export type TaskDTO = {
   progress: number;
   failReason: string | null;
   url: string | null;
+  urlSource?: "auto" | "manual" | null;
+  noPublicUrl?: boolean;
+  pageUrl?: string | null;
+  manualHint?: string | null;
+  tabId?: number | null;
+  retryOfTaskId?: string | null;
   createdAt: string;
   finishedAt: string | null;
 };
@@ -131,15 +216,15 @@ export type TaskDTO = {
 export const postCreateSchema = z.object({
   type: z.enum(CONTENT_TYPES),
   title: z.string().max(200).optional().default(""),
-  body: z.string().optional().default(""),
+  markdown: z.string().optional().default(""),
 });
 
 export const postUpdateSchema = z.object({
   title: z.string().max(200).optional(),
-  body: z.string().optional(),
-  bodyHtml: z.string().optional(),
+  markdown: z.string().optional(),
   durationSec: z.number().int().nonnegative().nullable().optional(),
   order: z.array(z.string()).optional(), // 拖拽排序：可见稿子的新顺序
+  expectedFingerprint: z.string().optional(),
 });
 
 export const publishRequestSchema = z.object({
@@ -149,23 +234,42 @@ export const publishRequestSchema = z.object({
   channelIds: z.record(z.string(), z.string().min(1)).optional(),
 });
 
-export const settingsUpdateSchema = z.object({
-  defaultTargets: z.partialRecord(z.enum(CONTENT_TYPES), z.array(z.string())).optional(),
-  importBrowser: z.enum(["chrome", "edge"]).optional(),
+export const extensionAutoPairSchema = z.object({
+  clientId: z.string().min(1).max(160).optional(),
+  extensionId: z.string().regex(/^[a-p]{32}$/),
+  browserLabel: z.string().min(1).max(80),
+  userAgent: z.string().max(4096).default(""),
+  version: z.string().min(1).max(80),
+  runtimeId: z.string().min(1).max(160).optional(),
 });
 
-/* 登录态导入源：获取账号时从哪个日常浏览器复制登录态。
-   全局单选是技术约束（整个 Cookies 库复制 + 单一 os_crypt 密钥），不支持按平台混用 */
-export type ImportBrowserId = "chrome" | "edge";
-export const IMPORT_BROWSERS: { id: ImportBrowserId; name: string }[] = [
-  { id: "chrome", name: "Google Chrome" },
-  { id: "edge", name: "Microsoft Edge" },
-];
-export type ImportBrowserDTO = { id: ImportBrowserId; name: string; detected: boolean };
+export const settingsUpdateSchema = z.object({
+  defaultTargets: z.partialRecord(z.enum(CONTENT_TYPES), z.array(z.string())).optional(),
+  vaultPath: z.string().trim().min(1).max(4096).optional(),
+  attachmentPath: z.string().trim().min(1).max(4096).optional(),
+  theme: z.enum(["light", "dark", "system"]).optional(),
+});
+
+export const uploadCacheQuerySchema = z.object({
+  platformId: z.string().trim().min(1).max(80),
+  accountUid: z.string().trim().min(1).max(300),
+  contentHash: z.string().regex(/^[a-f0-9]{64}$/i),
+  kind: z.string().trim().min(1).max(40),
+  scope: z.string().trim().min(1).max(120),
+}).strict();
+
+export const uploadCacheSaveSchema = uploadCacheQuerySchema.extend({
+  id: z.string().trim().min(1).max(4096),
+  url: z.string().trim().url().max(4096).nullable().optional(),
+  payload: z.record(z.string(), z.unknown()).optional(),
+}).strict();
 
 export type AppSettings = {
   defaultTargets: Record<ContentType, string[]>;
-  importBrowser: ImportBrowserId;
+  vaultPath: string | null;
+  /** 粘贴和上传资源相对 Vault 的目录；默认 files。 */
+  attachmentPath: string;
+  theme: "light" | "dark" | "system";
 };
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -175,7 +279,175 @@ export const DEFAULT_SETTINGS: AppSettings = {
     video: ["weibo"],
     audio: [],
   },
-  importBrowser: "chrome",
+  vaultPath: null,
+  attachmentPath: "files",
+  theme: "system",
+};
+
+export type PublishCapabilityDTO = {
+  installationId: string;
+  state: "ready" | "waiting" | "unavailable";
+  extension: {
+    connected: boolean;
+    clientId: string | null;
+    lastHeartbeatAt: string | null;
+    browserLabel: string | null;
+  };
+  reason: string | null;
+};
+
+export type PublishSnapshotDTO = {
+  documentId: string;
+  documentPath: string;
+  title: string;
+  type: ContentType;
+  markdown: string;
+  /** 任务创建时由统一 Markdown 渲染器生成的正文，平台驱动只替换媒体占位。 */
+  bodyHtml?: string;
+  plainText?: string;
+  media: PublishMediaRefDTO[];
+  contentHash: string;
+  platformId: string;
+  accountUid: string | null;
+  targetChannel: { id: string; name: string } | null;
+  options: Record<string, unknown>;
+};
+
+export type ExtensionJob = {
+  jobId: string;
+  attempt: number;
+  snapshot: PublishSnapshotDTO;
+};
+
+export type ExtensionJobEvent = {
+  type: "job.event";
+  jobId: string;
+  event: {
+    status?: TaskStatus;
+    stage?: number;
+    progress?: number;
+    message?: string | null;
+    pageUrl?: string | null;
+    tabId?: number | null;
+  };
+};
+
+export type ExtensionJobResult = {
+  type: "job.result";
+  jobId: string;
+  result: {
+    status: "success" | "awaiting_confirm" | "unknown" | "failed" | "cancelled";
+    url?: string | null;
+    urlSource?: "auto" | "manual" | null;
+    noPublicUrl?: boolean;
+    pageUrl?: string | null;
+    tabId?: number | null;
+    error?: string | null;
+  };
+};
+
+export type UploadCacheQuery = {
+  platformId: string;
+  accountUid: string;
+  contentHash: string;
+  kind: string;
+  scope: string;
+};
+
+export type UploadCacheRef = {
+  id: string;
+  url: string | null;
+  payload: Record<string, unknown>;
+  updatedAt: string;
+};
+
+const accountTextSchema = z.string().trim().min(1).max(200);
+const accountOptionalTextSchema = z.string().trim().max(200).nullable();
+const accountUrlSchema = z.string().trim().url().max(4096).refine(
+  (value) => /^https?:\/\//i.test(value),
+  "只接受 HTTP(S) URL",
+).nullable();
+
+export const extensionAccountChannelSchema = z.object({
+  id: accountTextSchema,
+  name: accountTextSchema,
+  coverUrl: accountUrlSchema.optional().default(null),
+}).strict();
+
+export const extensionAccountProfileSchema = z.object({
+  uid: accountTextSchema,
+  name: accountOptionalTextSchema,
+  avatarUrl: accountUrlSchema,
+  authExpiresAt: z.string().trim().max(80).nullable(),
+  channels: z.array(extensionAccountChannelSchema).max(200).default([]),
+}).strict();
+export type ExtensionAccountProfileDTO = z.infer<typeof extensionAccountProfileSchema>;
+
+export const extensionAccountRequestSchema = z.object({
+  type: z.enum(["account.verify", "account.open-login"]),
+  requestId: z.string().uuid(),
+  platformId: z.string().trim().min(1).max(80),
+});
+export type ExtensionAccountRequest = z.infer<typeof extensionAccountRequestSchema>;
+
+export const extensionAccountResultSchema = z.object({
+  type: z.literal("account.result"),
+  requestId: z.string().uuid(),
+  platformId: z.string().trim().min(1).max(80),
+  state: z.enum(["ok", "needs_login", "failed"]),
+  error: z.string().trim().max(2000).nullable().default(null),
+  profile: extensionAccountProfileSchema.nullable(),
+}).strict().superRefine((value, context) => {
+  if (value.state === "ok" && !value.profile) {
+    context.addIssue({ code: "custom", path: ["profile"], message: "登录成功结果必须包含账号资料" });
+  }
+  if (value.state !== "ok" && value.profile) {
+    context.addIssue({ code: "custom", path: ["profile"], message: "未登录或失败结果不得携带账号资料" });
+  }
+  if (
+    value.profile
+    && new TextEncoder().encode(JSON.stringify(value.profile)).byteLength > 64 * 1024
+  ) {
+    context.addIssue({ code: "custom", path: ["profile"], message: "账号资料超过 64 KiB 限制" });
+  }
+});
+export type ExtensionAccountResult = z.infer<typeof extensionAccountResultSchema>;
+
+export const extensionLoginOpenedSchema = z.object({
+  type: z.literal("account.login-opened"),
+  requestId: z.string().uuid(),
+  platformId: z.string().trim().min(1).max(80),
+  ok: z.boolean(),
+  error: z.string().trim().max(2000).nullable().default(null),
+}).strict();
+export type ExtensionLoginOpened = z.infer<typeof extensionLoginOpenedSchema>;
+
+export type ExtensionDTO = {
+  clientId: string;
+  installationId: string;
+  browserLabel: string;
+  userAgent: string;
+  version: string;
+  connected: boolean;
+  revoked: boolean;
+  lastHeartbeatAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type DirectoryEntryDTO = {
+  name: string;
+  path: string;
+  isVault: boolean;
+  writable: boolean;
+};
+
+export type DirectoryListingDTO = {
+  path: string;
+  parent: string | null;
+  isVault: boolean;
+  writable: boolean;
+  entries: DirectoryEntryDTO[];
 };
 
 /* ---------- API envelope ---------- */

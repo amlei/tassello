@@ -1,36 +1,35 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# @tassello/web
 
-## Getting Started
+九漾 Onda 的 Next.js Web 工作台。Next.js 只承担界面与 SSR 数据加载，业务 API、WebSocket、Markdown 文件和发布状态由独立的 Bun + ElysiaJS 服务提供。
 
-First, run the development server:
+## 开发
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+bun run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+页面默认地址为 `http://localhost:3000`。`/api/*` 由 Next rewrite 转发到 `127.0.0.1:4311/api/v1/*`，可用 `TASSELLO_API_PORT` 覆盖 API 端口。
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+完整开发环境应在仓库根目录执行 `bun run dev`，同时启动 API 与 Web；桌面模式执行 `bun run desktop`。
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 代码结构
 
-## Learn More
+- `app/`：Next.js 路由、服务端取数与 Screen 选择。
+- `screens/`：内容库、队列和编辑器的页面状态与 API 组合。
+- `features/`：内容卡、设置、发布、搜索、导航等业务组合。
+- `adapters/`：API、Next.js 工作台与桌面环境适配。
+- `lib/`：格式化等无 UI 工具。
 
-To learn more about Next.js, take a look at the following resources:
+跨页面 Layout、Primitives 和 Patterns 位于 `packages/ui`。
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 验证
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+bun run lint
+bun run build
+cd ../.. && bun run typecheck
+```
 
-## Deploy on Vercel
+修改 Next.js 代码前必须阅读 [`AGENTS.md`](./AGENTS.md)，并按其中要求查阅本地 Next.js 文档。
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+架构、设计语言和完整流程从 [`docs/README.md`](../../docs/README.md) 进入。

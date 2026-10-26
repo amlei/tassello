@@ -1,4 +1,5 @@
 import { PLATFORM_METAS } from "@tassello/platform-core";
+import type { AccountSyncPhase } from "@tassello/shared";
 
 export type ContentType = "article" | "image" | "video" | "audio";
 export type PlatformId = string;
@@ -27,6 +28,7 @@ export type ResolvedAsset = {
 };
 
 export type SourceDraft = {
+  id: string;
   filePath: string;
   contentDigest: string;
   title: string;
@@ -43,6 +45,8 @@ export type PublishStatus =
   | "queued"
   | "running"
   | "awaiting_confirm"
+  | "waiting_extension"
+  | "unknown"
   | "success"
   | "failed"
   | "cancelled";
@@ -57,6 +61,10 @@ export type PublishTask = {
   message?: string | null;
   failReason?: string | null;
   url?: string | null;
+  urlSource?: "auto" | "manual" | null;
+  noPublicUrl?: boolean;
+  tabId?: number | null;
+  retryOfTaskId?: string | null;
   sourceDigestAtStart?: string | null;
   sourceChangedAfterStart?: boolean;
   pageUrl?: string | null;
@@ -74,6 +82,10 @@ export type PlatformCapability = {
   glyph: string;
   supports: ContentType[];
   description: string;
+  status: "active" | "planned";
+  syncPhase: AccountSyncPhase;
+  syncReason: string | null;
+  accountName: string | null;
 };
 
 export const PLATFORMS: PlatformCapability[] = PLATFORM_METAS.map((meta) => ({
@@ -85,6 +97,10 @@ export const PLATFORMS: PlatformCapability[] = PLATFORM_METAS.map((meta) => ({
   glyph: meta.char,
   supports: meta.supports,
   description: meta.lands,
+  status: meta.status,
+  syncPhase: "unverified",
+  syncReason: null,
+  accountName: null,
 }));
 
 export const PLATFORM_BY_ID = new Map(PLATFORMS.map((p) => [p.id, p]));

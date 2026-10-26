@@ -1,4 +1,5 @@
 /* @tassello/render —— 正文渲染：纯文本 ↔ 平台无关 HTML（移植原型 bits.jsx 的 mdToHtml 逻辑） */
+import { Marked } from "marked";
 
 /** 正文里的插图记号：![说明](asset://id)，独占一行时落成图块 */
 export const ASSET_IMG_RE = /^!\[([^\]]*)\]\(asset:\/\/([^)]+)\)$/;
@@ -7,6 +8,18 @@ export type RenderAsset = { id: string; color?: string | null; path?: string | n
 
 export function escHtml(s: string): string {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+export function escAttr(s: string): string {
+  return escHtml(s).replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+function safeHref(value: string): string | null {
+  const href = value.trim();
+  if (!href) return null;
+  if (/^(?:https?:|mailto:|tel:)/i.test(href)) return href;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(href) || href.startsWith("//")) return null;
+  return href;
 }
 
 /** #标签 包成 span（颜色随内容类型），字号字重都不动 */
@@ -64,6 +77,71 @@ export function mdToHtml(body: string, color: string, assets?: RenderAsset[]): s
 export function plainSummary(body: string): string {
   const lines = (body || "").split("\n").map((s) => s.trim()).filter(Boolean);
   return lines.find((l) => !ASSET_IMG_RE.test(l)) || "";
+}
+
+export type MarkdownImage = {
+  href: string;
+  title: string | null;
+  alt: string;
+};
+
+/** CommonMark + GFM → HTML。原始 HTML 在 Vault 解析阶段拒绝，不会进入这里。 */
+export function markdownToHtml(
+  markdown: string,
+  options: { renderImage?: (image: MarkdownImage) => string } = {},
+): string {
+  const instance = new Marked({
+    async: false,
+    breaks: false,
+    gfm: true,
+    renderer: {
+      image(token) {
+        if (options.renderImage) return options.renderImage({
+          href: token.href,
+          title: token.title ?? null,
+          alt: token.text,
+        });
+        const href = safeHref(token.href);
+        const title = token.title ? ` title="${escAttr(token.title)}"` : "";
+        return href
+          ? `<img src="${escAttr(href)}" alt="${escAttr(token.text)}"${title}>`
+          : escHtml(token.text);
+      },
+      link(token) {
+        const label = this.parser.parseInline(token.tokens);
+        const href = safeHref(token.href);
+        if (!href) return label;
+        const title = token.title ? ` title="${escAttr(token.title)}"` : "";
+        return `<a href="${escAttr(href)}"${title}>${label}</a>`;
+      },
+      html(token) {
+        return escHtml(token.text);
+      },
+    },
+  });
+  return (instance.parse(markdown) as string)
+    .replace(/<p>(<figure[\s\S]*?<\/figure>)<\/p>/g, "$1");
+}
+
+/** Markdown → 平台纯文本。保留段落、列表符号和链接文字，去掉标记与媒体。 */
+export function markdownToPlain(markdown: string): string {
+  return markdown
+    .replace(/^```[^\n]*\n([\s\S]*?)^```$/gm, (_, code: string) => code.replace(/\n$/, ""))
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
+    .replace(/^ {0,3}#{1,6}\s+/gm, "")
+    .replace(/^ {0,3}>\s?/gm, "")
+    .replace(/^([ \t]*)[-*+]\s+/gm, "$1• ")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/(?:\*\*|__)(?=\S)([\s\S]*?\S)(?:\*\*|__)/g, "$1")
+    .replace(/(?<!\*)\*(?!\*)(?=\S)([\s\S]*?\S)\*(?!\*)/g, "$1")
+    .replace(/~~(?=\S)([\s\S]*?\S)~~/g, "$1")
+    .replace(/==(?=\S)([\s\S]*?\S)==/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/^ {0,3}(?:---+|\*\*\*+)\s*$/gm, "")
+    .replace(/<[^>]+>/g, "")
+    .replace(/\r\n?/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 /** 平台回执链接（与原型 platformLink 一致） */

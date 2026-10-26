@@ -17,11 +17,11 @@
         {
           "path": "directions/mosaic/index.html",
           "createdAt": "2026-09-12T15:59:46.263Z",
-          "status": "changes-requested",
-          "subtitle": "账号→频道两级：多频道平台发布选频道",
+          "status": "needs-review",
+          "subtitle": "移除仓库照片素材，使用类型色占位；扩展采用应用图标",
           "viewport": {
-            "width": 1440,
-            "height": 900
+            "width": 1920,
+            "height": 1080
           }
         }
       ]
@@ -37,5 +37,5 @@
     }
   },
   "createdAt": "2026-09-12T15:59:46.188Z",
-  "updatedAt": "2026-10-03T03:12:18.732Z"
+  "updatedAt": "2026-10-27T00:14:44.277Z"
 }

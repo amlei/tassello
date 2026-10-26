@@ -1,0 +1,46 @@
+{
+  "manifest_version": 3,
+  "name": "九漾 Onda 发布扩展",
+  "version": "0.2.0",
+  "description": "连接本机九漾 Onda 发布服务，在用户日常浏览器中执行发布任务。",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA/7SEuhCWArjL91cxN+E+aXQ44AtBj27I5cb5pgpOh6VjtWW4eo3oKCpT+TBm1/EEMVYL6xqd/YYNWMWPre1rNeTLtFd2/mrb1okmP892m8UTcpzYg4fFYrkxCBelri2xw1WuHgdqbWpMLU2YbMc1ktEHsg27DY6wgilVs2mfd1N3yG4QgGwyTpGmC+cfwpQmZkAeSk6v6zX3fAy29/HeEmRv4yTkoMtD+QdYQvQU6ApuyyPUetd366FJBIzzMXQPbp/8oSTl3KgV0DpBSJO6Y9I3h+voZV9EJgFhJ9xagm8m4QZX6pMcKxGvhr/g75ZDykRtECw8behwAp2uNXX1QQIDAQAB",
+  "permissions": ["storage", "scripting", "tabs", "alarms", "nativeMessaging"],
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "host_permissions": [
+    "http://127.0.0.1/*",
+    "http://localhost/*",
+    "https://weibo.com/*",
+    "https://passport.weibo.com/*",
+    "https://mp.weixin.qq.com/*",
+    "https://creator.xiaohongshu.com/*",
+    "https://web.okjike.com/*",
+    "https://www.zhihu.com/*",
+    "https://zhuanlan.zhihu.com/*",
+    "https://x.com/*",
+    "https://www.douban.com/*",
+    "https://m.douban.com/*",
+    "https://www.xiaoyuzhoufm.com/*",
+    "https://podcaster.xiaoyuzhoufm.com/*",
+    "https://www.ximalaya.com/*",
+    "https://studio.ximalaya.com/*",
+    "https://passport.ximalaya.com/*",
+    "https://nj.lizhi.fm/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "九漾 Onda",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png"
+    }
+  }
+}

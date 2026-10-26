@@ -1,0 +1,25 @@
+{
+  "type": "design",
+  "title": "九漾 Onda 浏览器扩展 Popup",
+  "prompt": "设计浏览器扩展 popup，用于展示 Native Messaging 自动连接状态、当前任务与断线重试，使用户无需手动配对；视觉延续 Mosaic 中性工作台。",
+  "designSystems": [],
+  "primaryDesignSystem": null,
+  "assets": {
+    "浏览器扩展 Popup": {
+      "versions": [
+        {
+          "path": "Extension Popup.html",
+          "createdAt": "2026-10-26T12:41:17.828Z",
+          "status": "needs-review",
+          "subtitle": "使用应用图标；Native Messaging 自动连接状态",
+          "viewport": {
+            "width": 1920,
+            "height": 1200
+          }
+        }
+      ]
+    }
+  },
+  "createdAt": "2026-10-26T12:41:17.828Z",
+  "updatedAt": "2026-10-27T00:15:20.898Z"
+}

@@ -6,13 +6,12 @@ export const PUBLISHER_VIEW_TYPE = "tassello-publisher-view";
 
 export type PublisherServices = {
   app: import("obsidian").App;
-  browser: import("../core/browser/default-chrome").DefaultChromeManager;
-  engine: import("../core/tasks/task-engine").TaskEngine;
+  api: import("../core/api/client").BackendApi;
+  engine: import("../core/tasks/remote-task-engine").RemoteTaskEngine;
   getSelectedPlatforms(): PlatformId[];
   setSelectedPlatforms(values: PlatformId[]): Promise<void>;
   getDefaultPlatforms(type: import("../core/types").ContentType): PlatformId[];
   setDefaultPlatforms(type: import("../core/types").ContentType, values: PlatformId[]): Promise<void>;
-  openPublicationBase(): Promise<void>;
   publishCurrentFile(): Promise<void>;
 };
 

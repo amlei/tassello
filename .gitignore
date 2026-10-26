@@ -23,6 +23,7 @@ build/
 # misc
 .DS_Store
 *.pem
+.agents/
 
 # debug
 npm-debug.log*
@@ -51,9 +52,15 @@ apps/desktop/dist/
 packages/db/src/generated/
 apps/desktop/build/
 apps/web/prisma-cli/
+apps/extension/dist/
+apps/api/dist/
 
 # obsidian plugin
 apps/obsidian/dist/
 apps/obsidian/release/
+apps/native-host/dist/
+
+# Onda 本地运行状态
+.onda/
 
 .workbuddy/

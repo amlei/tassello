@@ -1,15 +1,18 @@
-/* Electron 主进程：拉起 Next.js server（网页模式同一套），就绪后开窗加载。
- * 失败可见性铁律：server 起不来时必须弹窗告知用户并留下日志，
+/* Electron 主进程：拉起独立的 Elysia API 与 Next.js UI，就绪后开窗加载。
+ * 失败可见性铁律：任一进程起不来时必须弹窗告知用户并留下日志，
  * 不允许 v0.1.0 那种"干等 60 秒静默退出"的行为。 */
 import { spawn, type ChildProcess } from "node:child_process";
 import http from "node:http";
 import net from "node:net";
-import { appendFileSync, closeSync, existsSync, openSync, writeSync } from "node:fs";
+import { closeSync, existsSync, openSync, writeSync } from "node:fs";
 import path from "node:path";
 import { app, BrowserWindow, dialog, Menu, ipcMain, shell, type MenuItemConstructorOptions } from "electron";
+import { configuredExtensionIds } from "@tassello/shared";
+import { nativeHostBinaryName, registerNativeMessagingHosts } from "@tassello/native-host/register";
 
 // 开发时 __dirname = apps/desktop/dist → 仓库根在三层之上；打包时定位 resources/web。
 const ROOT = path.resolve(__dirname, "..", "..", "..");
+const DEV_API_DIR = path.join(ROOT, "apps", "api");
 const DEV_WEB_DIR = path.join(ROOT, "apps", "web");
 const PACKAGED_WEB_CANDIDATES: string[] = [
   path.join(process.resourcesPath ?? "", "web", "apps", "web"),
@@ -18,19 +21,34 @@ const PACKAGED_WEB_CANDIDATES: string[] = [
 const WEB_DIR: string = app.isPackaged
   ? PACKAGED_WEB_CANDIDATES.find((candidate) => existsSync(path.join(candidate, "server.js"))) ?? PACKAGED_WEB_CANDIDATES[0]!
   : DEV_WEB_DIR;
-/* 打包产物端口由系统动态分配（PORT=0 → 启动前向 OS 申请空闲端口），避免与其他程序冲突；
- * TASSELLO_PORT 显式固定（CI 自检用）；dev 保持 4311 便于调试与固定 URL */
-const FIXED_PORT = Number(process.env.TASSELLO_PORT ?? (app.isPackaged ? 0 : 4311));
-let activePort = FIXED_PORT;
+const PACKAGED_API_BINARY = path.join(
+  process.resourcesPath ?? "",
+  "api",
+  process.platform === "win32" ? "tassello-api.exe" : "tassello-api",
+);
+const PACKAGED_NATIVE_HOST = path.join(process.resourcesPath ?? "", "native-host", nativeHostBinaryName());
+const DEV_NATIVE_HOST = path.join(ROOT, "apps", "native-host", "dist", nativeHostBinaryName());
+const APP_ICON = path.join(__dirname, "..", "icon.png");
+/* API 与 Web 各自向 OS 申请端口，避免与用户已有程序冲突。
+ * CI 可通过 TASSELLO_API_PORT / TASSELLO_WEB_PORT 固定端口。 */
+const FIXED_API_PORT = Number(process.env.TASSELLO_API_PORT ?? (app.isPackaged ? 0 : 4311));
+const FIXED_WEB_PORT = Number(process.env.TASSELLO_WEB_PORT ?? process.env.TASSELLO_PORT ?? (app.isPackaged ? 0 : 3000));
+let activeApiPort = FIXED_API_PORT;
+let activeWebPort = FIXED_WEB_PORT;
 
-function urlBase(): string {
-  return `http://127.0.0.1:${activePort}`;
+function apiUrlBase(): string {
+  return `http://127.0.0.1:${activeApiPort}`;
+}
+
+function webUrlBase(): string {
+  return `http://127.0.0.1:${activeWebPort}`;
 }
 
 function windowUrl(): string {
+  if (process.env.TASSELLO_WEB_URL) return process.env.TASSELLO_WEB_URL;
   /* 页面必须走 localhost：Next dev 的 allowedDevOrigins 默认只信任 localhost，
    * 用 127.0.0.1 加载会让 dev 资源/HMR 被降级，React 不水合，页面全是"死"按钮 */
-  return `http://localhost:${activePort}/library/article`;
+  return `http://localhost:${activeWebPort}/library/article`;
 }
 
 /** 向 OS 申请一个空闲端口（bind :0 后立即释放）。极端情况下存在释放后被抢占的窗口期，
@@ -48,27 +66,27 @@ function allocateEphemeralPort(): Promise<number> {
   });
 }
 
-let server: ChildProcess | null = null;
+let apiServer: ChildProcess | null = null;
+let webServer: ChildProcess | null = null;
 let logFd: number | null = null;
 
-/* web server 输出的滚动尾部：启动失败时直接展示进弹窗（v0.1.1 反馈的
- * 「web server 进程提前退出（code=1）」毫无诊断价值，真因 no such table 全在日志里） */
-const WEB_TAIL_LINES = 30;
-const webOutputTail: string[] = [];
+/* 子进程输出的滚动尾部：启动失败时直接展示进弹窗。 */
+const PROCESS_TAIL_LINES = 40;
+const processOutputTail: string[] = [];
 
-function pushWebOutput(chunk: Buffer): void {
+function pushProcessOutput(chunk: Buffer): void {
   for (const line of chunk.toString().split("\n")) {
     const trimmed = line.trimEnd();
-    if (trimmed) webOutputTail.push(trimmed);
+    if (trimmed) processOutputTail.push(trimmed);
   }
-  if (webOutputTail.length > WEB_TAIL_LINES) {
-    webOutputTail.splice(0, webOutputTail.length - WEB_TAIL_LINES);
+  if (processOutputTail.length > PROCESS_TAIL_LINES) {
+    processOutputTail.splice(0, processOutputTail.length - PROCESS_TAIL_LINES);
   }
 }
 
-function webTailBlock(): string {
-  if (webOutputTail.length === 0) return "";
-  return `\n— web server 输出末尾（完整内容见日志）—\n${webOutputTail.join("\n")}`;
+function processTailBlock(): string {
+  if (processOutputTail.length === 0) return "";
+  return `\n— 本机服务输出末尾（完整内容见日志）—\n${processOutputTail.join("\n")}`;
 }
 
 /* dev 模式下菜单栏应用名取自 app.name（而非 Electron 二进制的 Info.plist），需显式设置 */
@@ -127,62 +145,101 @@ ipcMain.handle("tassello:open-external", (_event, value: unknown) => {
   return openExternalUrl(value);
 });
 
-function startServer(): void {
+function wireChildProcess(child: ChildProcess, label: "api" | "web"): void {
+  child.stdout?.on("data", (chunk: Buffer) => {
+    pushProcessOutput(chunk);
+    log(`[${label}] ${chunk.toString().trimEnd()}`);
+  });
+  child.stderr?.on("data", (chunk: Buffer) => {
+    pushProcessOutput(chunk);
+    log(`[${label}] ${chunk.toString().trimEnd()}`);
+  });
+  child.on("exit", (code, signal) => {
+    log(`${label} 进程退出 code=${code} signal=${signal ?? ""}`);
+    if (label === "api") apiServer = null;
+    else webServer = null;
+  });
+}
+
+function startApiServer(): void {
+  const command = app.isPackaged ? PACKAGED_API_BINARY : process.env.TASSELLO_BUN ?? "bun";
+  const args = app.isPackaged ? [] : ["run", "src/index.ts"];
+  const dataDir = process.env.TASSELLO_DATA_DIR
+    ?? (app.isPackaged ? path.join(app.getPath("appData"), "Onda") : path.join(ROOT, ".onda"));
+  apiServer = spawn(command, args, {
+    cwd: app.isPackaged ? path.dirname(PACKAGED_API_BINARY) : DEV_API_DIR,
+    stdio: ["ignore", "pipe", "pipe"],
+    env: {
+      ...process.env,
+      TASSELLO_API_PORT: String(activeApiPort),
+      TASSELLO_DATA_DIR: dataDir,
+      TASSELLO_DESKTOP: "1",
+    },
+  });
+  wireChildProcess(apiServer, "api");
+}
+
+async function registerNativeHost(): Promise<void> {
+  const binaryPath = app.isPackaged ? PACKAGED_NATIVE_HOST : DEV_NATIVE_HOST;
+  if (!existsSync(binaryPath)) {
+    log(`Native Messaging Host 不存在：${binaryPath}`);
+    return;
+  }
+  try {
+    const files = await registerNativeMessagingHosts({
+      binaryPath,
+      extensionIds: configuredExtensionIds(process.env),
+    });
+    log(`Native Messaging Host 已注册：${files.join(", ")}`);
+  } catch (error) {
+    log(`Native Messaging Host 注册失败：${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+function startWebServer(): void {
   if (app.isPackaged) {
     /* Electron 二进制以 ELECTRON_RUN_AS_NODE=1 复用为 Node runtime，用户无需安装 Bun/Node。 */
     const entry = path.join(WEB_DIR, "server.js");
-    server = spawn(process.execPath, [entry], {
+    webServer = spawn(process.execPath, [entry], {
       cwd: WEB_DIR,
-      // 打包后没有终端可看，stdout/stderr 必须落日志；dev 模式保留 inherit 方便调试
       stdio: ["ignore", "pipe", "pipe"],
       env: {
         ...process.env,
         ELECTRON_RUN_AS_NODE: "1",
         NODE_ENV: "production",
         HOSTNAME: "127.0.0.1",
-        PORT: String(activePort),
+        PORT: String(activeWebPort),
+        TASSELLO_API_PORT: String(activeApiPort),
         TASSELLO_DESKTOP: "1",
       },
     });
   } else {
     const bin = process.env.TASSELLO_BUN ?? "bun";
-    server = spawn(bin, ["run", "dev", "--", "-p", String(activePort)], {
+    webServer = spawn(bin, ["run", "dev", "--", "-p", String(activeWebPort)], {
       cwd: WEB_DIR,
-      stdio: "inherit",
-      env: { ...process.env, TASSELLO_DESKTOP: "1" },
+      stdio: ["ignore", "pipe", "pipe"],
+      env: {
+        ...process.env,
+        TASSELLO_API_PORT: String(activeApiPort),
+        TASSELLO_DESKTOP: "1",
+      },
     });
   }
-  server.stdout?.on("data", (chunk: Buffer) => {
-    pushWebOutput(chunk);
-    log(`[web] ${chunk.toString().trimEnd()}`);
-  });
-  server.stderr?.on("data", (chunk: Buffer) => {
-    pushWebOutput(chunk);
-    log(`[web] ${chunk.toString().trimEnd()}`);
-  });
-  server.on("exit", (code, signal) => {
-    log(`web server 退出 code=${code} signal=${signal ?? ""}`);
-    server = null;
-  });
+  wireChildProcess(webServer, "web");
 }
 
-/** 健康检查带握手：必须返回 {ok:true,data:[..]}，防止 4311 被无关服务占用时误复用 */
-function probeServer(timeoutMs: number): Promise<void> {
+function getJson(url: string, timeoutMs: number): Promise<unknown> {
   return new Promise((resolve, reject) => {
-    const req = http.get(`${urlBase()}/api/platforms`, (res) => {
+    const req = http.get(url, (res) => {
       const chunks: Buffer[] = [];
       res.on("data", (d: Buffer) => chunks.push(d));
       res.on("end", () => {
         res.resume();
         if ((res.statusCode ?? 500) >= 500) return reject(new Error(`HTTP ${res.statusCode}`));
         try {
-          const json = JSON.parse(Buffer.concat(chunks).toString("utf8")) as { ok?: unknown; data?: unknown };
-          if (json.ok !== true || !Array.isArray(json.data)) {
-            return reject(new Error("端口 4311 上不是 Tassello 服务（握手不匹配）"));
-          }
-          resolve();
+          resolve(JSON.parse(Buffer.concat(chunks).toString("utf8")));
         } catch {
-          reject(new Error("端口 4311 上不是 Tassello 服务（响应非 JSON）"));
+          reject(new Error(`响应非 JSON：${url}`));
         }
       });
     });
@@ -194,51 +251,75 @@ function probeServer(timeoutMs: number): Promise<void> {
   });
 }
 
-function waitForServer(timeoutMs = 60_000): Promise<void> {
+/** API 握手：防止固定端口被无关服务占用时误判。 */
+async function probeApi(timeoutMs: number): Promise<void> {
+  const json = await getJson(`${apiUrlBase()}/api/v1/health`, timeoutMs) as {
+    ok?: unknown;
+    data?: { ready?: unknown };
+  };
+  if (json.ok !== true || json.data?.ready !== true) {
+    throw new Error("API 健康检查握手不匹配");
+  }
+}
+
+/** 穿过 Next rewrite 访问 API，同时验证 UI 与 API 的完整链路。 */
+async function probeWeb(timeoutMs: number): Promise<void> {
+  const json = await getJson(`${webUrlBase()}/api/platforms`, timeoutMs) as {
+    ok?: unknown;
+    data?: unknown;
+  };
+  if (json.ok !== true || !Array.isArray(json.data)) {
+    throw new Error("Web → API 健康检查握手不匹配");
+  }
+}
+
+function waitFor(check: () => Promise<void>, label: "api" | "web", timeoutMs = 60_000): Promise<void> {
   const start = Date.now();
   return new Promise((resolve, reject) => {
     let settled = false;
     const done = (err?: Error) => {
       if (settled) return;
       settled = true;
-      if (server && server.exitCode === null && server.signalCode === null) {
-        server.off("exit", onExit);
+      const child = label === "api" ? apiServer : webServer;
+      if (child && child.exitCode === null && child.signalCode === null) {
+        child.off("exit", onExit);
       }
       if (err) reject(err);
       else resolve();
     };
     const tick = () => {
       if (settled) return;
-      probeServer(2000)
+      check()
         .then(() => done())
         .catch(() => {
           if (settled) return;
           if (Date.now() - start > timeoutMs) {
-            done(new Error(`web server 在 ${timeoutMs / 1000}s 内未就绪`));
+            done(new Error(`${label} 在 ${timeoutMs / 1000}s 内未就绪`));
             return;
           }
           setTimeout(tick, 600);
         });
     };
-    /* server 子进程崩了就不必干等到超时，立即失败 */
+    /* 子进程崩了就不必干等到超时，立即失败。 */
     const onExit = (code: number | null) => {
-      done(new Error(`web server 进程提前退出（code=${code}）`));
+      done(new Error(`${label} 进程提前退出（code=${code}）`));
     };
-    if (server) server.once("exit", onExit);
+    const child = label === "api" ? apiServer : webServer;
+    if (child) child.once("exit", onExit);
     tick();
   });
 }
 
-/** 启动失败的统一出口：弹窗（附 web server 输出尾部）+ 日志路径，然后退出 */
+/** 启动失败的统一出口：弹窗（附进程输出尾部）+ 日志路径，然后退出 */
 function failToStart(reason: string): void {
   log(`启动失败: ${reason}`);
   const detail = [
     reason,
-    webTailBlock(),
+    processTailBlock(),
     "",
     `详细日志: ${logPath()}`,
     "",
-    "常见原因：安装包损坏（请重新下载）、端口 4311 被其他程序占用、安全软件拦截。",
+    "常见原因：安装包损坏（请重新下载）、本机端口被占用、安全软件拦截。",
   ].join("\n");
   try {
     dialog.showErrorBox("九漾 Onda 启动失败", detail);
@@ -259,7 +340,7 @@ async function createWindow(): Promise<void> {
       titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
       trafficLightPosition: { x: 16, y: 16 },
       backgroundColor: "#F4F1E8",
-      icon: path.join(__dirname, "..", "icon.png"),
+      icon: APP_ICON,
       webPreferences: { preload: path.join(__dirname, "preload.js") },
     });
   const appOrigin = new URL(windowUrl()).origin;
@@ -295,10 +376,10 @@ async function createWindow(): Promise<void> {
   await win.loadURL(windowUrl());
 }
 
-/** 4311 已有可握手的 Tassello web server（如 bun run dev 的 dev.ts 已拉起）则直接复用 */
-async function serverAlreadyRunning(): Promise<boolean> {
+/** 固定端口上已有可握手的 Tassello UI/API 时复用，便于开发与 CI。 */
+async function serversAlreadyRunning(): Promise<boolean> {
   try {
-    await probeServer(2_000);
+    await probeWeb(2_000);
     return true;
   } catch {
     return false;
@@ -397,28 +478,55 @@ if (!app.requestSingleInstanceLock()) {
 
   app.whenReady().then(async () => {
     openLogFile();
-    log(`启动 ${app.isPackaged ? "packaged" : "dev"} 模式, web=${WEB_DIR}, port=${FIXED_PORT === 0 ? "(系统动态分配)" : FIXED_PORT}`);
+    if (process.platform === "darwin") app.dock?.setIcon(APP_ICON);
+    app.setAboutPanelOptions({
+      applicationName: "九漾 Onda",
+      iconPath: APP_ICON,
+    });
+    log(
+      `启动 ${app.isPackaged ? "packaged" : "dev"} 模式, web=${WEB_DIR}, ` +
+      `apiPort=${FIXED_API_PORT === 0 ? "(动态)" : FIXED_API_PORT}, ` +
+      `webPort=${FIXED_WEB_PORT === 0 ? "(动态)" : FIXED_WEB_PORT}`,
+    );
     setupMenu();
-    /* 端口固定时才探测复用（动态端口每次都是新端口，无可复用对象） */
-    if (FIXED_PORT !== 0 && (await serverAlreadyRunning())) {
-      log(`复用已运行的 web server at ${urlBase()}`);
+    await registerNativeHost();
+    if (process.env.TASSELLO_WEB_URL) {
+      log(`复用外部启动的 API/Web：${process.env.TASSELLO_WEB_URL}`);
+      await createWindow();
+      return;
+    }
+    /* 两个端口都固定时才探测复用；动态端口每次都是新端口，无可复用对象。 */
+    if (FIXED_API_PORT !== 0 && FIXED_WEB_PORT !== 0 && (await serversAlreadyRunning())) {
+      log(`复用已运行的 UI/API at ${webUrlBase()}`);
     } else {
       let attempts = 0;
       while (true) {
-        if (FIXED_PORT === 0) {
-          activePort = await allocateEphemeralPort();
-          log(`已分配动态端口: ${activePort}`);
+        if (FIXED_API_PORT === 0) {
+          activeApiPort = await allocateEphemeralPort();
+          log(`API 已分配动态端口: ${activeApiPort}`);
         }
-        startServer();
+        if (FIXED_WEB_PORT === 0) {
+          activeWebPort = await allocateEphemeralPort();
+          log(`Web 已分配动态端口: ${activeWebPort}`);
+        }
         try {
-          await waitForServer();
+          if (app.isPackaged && !existsSync(PACKAGED_API_BINARY)) {
+            throw new Error(`安装包缺少 API 二进制：${PACKAGED_API_BINARY}`);
+          }
+          startApiServer();
+          await waitFor(() => probeApi(2_000), "api");
+          startWebServer();
+          await waitFor(() => probeWeb(2_000), "web");
           break;
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e);
-          server?.kill();
-          /* 动态端口存在极小的"释放后被抢占"窗口：换端口重开 server；固定端口不重试 */
-          if (FIXED_PORT === 0 && ++attempts < 3) {
-            log(`端口 ${activePort} 启动失败，换端口重试（第 ${attempts}/3 次）: ${msg}`);
+          webServer?.kill();
+          apiServer?.kill();
+          webServer = null;
+          apiServer = null;
+          /* 动态端口存在极小的"释放后被抢占"窗口：换端口重开；固定端口不重试。 */
+          if ((FIXED_API_PORT === 0 || FIXED_WEB_PORT === 0) && ++attempts < 3) {
+            log(`本机服务启动失败，换端口重试（第 ${attempts}/3 次）: ${msg}`);
             continue;
           }
           failToStart(msg);
@@ -444,7 +552,10 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", () => {
-  server?.kill();
+  webServer?.kill();
+  apiServer?.kill();
+  webServer = null;
+  apiServer = null;
   if (logFd !== null) {
     closeSync(logFd);
     logFd = null;

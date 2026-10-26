@@ -1,19 +1,19 @@
-/* dev —— 一条命令拉起网页 + Electron 壳：
- *   1. spawn `bun run dev -p 4311`（apps/web，TASSELLO_DESKTOP=1）
- *   2. 轮询 /api/platforms 就绪 → 构建 desktop（如需）→ 起 Electron
- * 任一侧退出或 Ctrl+C，两侧一起收尾。纯网页模式仍可用 `bun run dev:web`。
- */
-import { spawn, spawnSync, type ChildProcess } from "node:child_process";
+/* dev —— 同时启动 Elysia API 与 Next.js；可选再拉起 Electron。 */
+import { spawn, type ChildProcess } from "node:child_process";
 import http from "node:http";
-import fs from "node:fs";
 import path from "node:path";
+import { $ } from "bun";
+import { configuredExtensionIds } from "../packages/shared/src";
+import { nativeHostBinaryName, registerNativeMessagingHosts } from "../apps/native-host/src/register";
 
 const ROOT = path.resolve(import.meta.dir, "..");
+const API_DIR = path.join(ROOT, "apps", "api");
 const WEB_DIR = path.join(ROOT, "apps", "web");
 const DESKTOP_DIR = path.join(ROOT, "apps", "desktop");
-const PORT = Number(process.env.TASSELLO_PORT ?? 4311);
-const URL_BASE = `http://127.0.0.1:${PORT}`;
-
+const NATIVE_HOST_DIR = path.join(ROOT, "apps", "native-host");
+const API_PORT = Number(process.env.TASSELLO_API_PORT ?? 4311);
+const WEB_PORT = Number(process.env.TASSELLO_WEB_PORT ?? 3000);
+const WITH_DESKTOP = process.argv.includes("--desktop") || process.env.TASSELLO_DESKTOP === "1";
 const children: ChildProcess[] = [];
 
 function run(cmd: string, args: string[], cwd: string, extraEnv: Record<string, string> = {}): ChildProcess {
@@ -21,18 +21,17 @@ function run(cmd: string, args: string[], cwd: string, extraEnv: Record<string, 
   const child = spawn(cmd, args, { cwd, stdio: "inherit", env: { ...rest, ...extraEnv } });
   children.push(child);
   child.on("exit", (code) => {
-    console.log(`[dev] ${cmd} ${args.join(" ")} exited (${code})`);
-    shutdown(code ?? 0);
+    if (code && code !== 0) shutdown(code);
   });
   return child;
 }
 
 let shuttingDown = false;
 function shutdown(code: number): void {
-  if (shuttingDown) process.exit(code);
+  if (shuttingDown) return;
   shuttingDown = true;
-  for (const c of children) {
-    if (c.exitCode === null && !c.killed) c.kill("SIGTERM");
+  for (const child of children) {
+    if (child.exitCode === null && !child.killed) child.kill("SIGTERM");
   }
   process.exit(code);
 }
@@ -40,78 +39,52 @@ function shutdown(code: number): void {
 process.on("SIGINT", () => shutdown(130));
 process.on("SIGTERM", () => shutdown(143));
 
-function waitForServer(timeoutMs = 90_000): Promise<void> {
-  const start = Date.now();
-  return new Promise((resolve, reject) => {
+async function waitFor(url: string, timeoutMs = 90_000): Promise<void> {
+  const startedAt = Date.now();
+  await new Promise<void>((resolve, reject) => {
     const tick = () => {
-      const req = http.get(`${URL_BASE}/api/platforms`, (res) => {
-        res.resume();
-        if ((res.statusCode ?? 500) < 500) return resolve();
+      const request = http.get(url, (response) => {
+        response.resume();
+        if ((response.statusCode ?? 500) < 500) return resolve();
         retry();
       });
-      req.on("error", retry);
-      req.setTimeout(2000, () => {
-        req.destroy();
+      request.on("error", retry);
+      request.setTimeout(2000, () => {
+        request.destroy();
         retry();
       });
     };
     const retry = () => {
-      if (Date.now() - start > timeoutMs) return reject(new Error("web server not ready in time"));
-      setTimeout(tick, 600);
+      if (Date.now() - startedAt > timeoutMs) return reject(new Error(`${url} 未在 ${timeoutMs / 1000}s 内就绪`));
+      setTimeout(tick, 500);
     };
     tick();
   });
 }
 
-async function desktopBuilt(): Promise<boolean> {
-  const f = Bun.file(path.join(DESKTOP_DIR, "dist", "main.js"));
-  return await f.exists();
+await $`bun run build`.cwd(NATIVE_HOST_DIR).quiet();
+await registerNativeMessagingHosts({
+  binaryPath: path.join(NATIVE_HOST_DIR, "dist", nativeHostBinaryName()),
+  extensionIds: configuredExtensionIds(process.env),
+});
+
+run(process.env.TASSELLO_BUN ?? "bun", ["run", "src/index.ts"], API_DIR, {
+  TASSELLO_API_PORT: String(API_PORT),
+  TASSELLO_DATA_DIR: process.env.TASSELLO_DATA_DIR ?? path.join(ROOT, ".onda"),
+});
+await waitFor(`http://127.0.0.1:${API_PORT}/api/v1/health`);
+
+run(process.env.TASSELLO_BUN ?? "bun", ["run", "dev", "--", "-p", String(WEB_PORT)], WEB_DIR, {
+  TASSELLO_API_PORT: String(API_PORT),
+});
+await waitFor(`http://127.0.0.1:${WEB_PORT}/library/article`);
+
+if (WITH_DESKTOP) {
+  run(process.env.TASSELLO_BUN ?? "bun", ["run", "build"], DESKTOP_DIR);
+  run("electron", ["dist/main.js"], DESKTOP_DIR, {
+    TASSELLO_WEB_URL: `http://localhost:${WEB_PORT}/library/article`,
+  });
 }
 
-/** Electron 可执行文件直连：优先 dev 壳 bundle（Dock 名称/图标都来自它）。
- *  避免 bun run electron 经 node 垫片导致 app undefined */
-function electronBin(): string {
-  const bundle = path.join(DESKTOP_DIR, "build", "Tasselo.app", "Contents", "MacOS", "Electron");
-  if (fs.existsSync(bundle)) return bundle;
-  const base = path.join(DESKTOP_DIR, "node_modules", "electron", "dist");
-  return process.platform === "darwin"
-    ? path.join(base, "Electron.app", "Contents", "MacOS", "Electron")
-    : path.join(base, process.platform === "win32" ? "electron.exe" : "electron");
-}
-
-/** 端口被占则直接报错退出：残留的旧 dev/服务会让 next 起不来，继而引发连环失败 */
-function portInUse(): boolean {
-  const res = spawnSync("lsof", ["-nP", `-iTCP:${PORT}`, "-sTCP:LISTEN"], { encoding: "utf8" });
-  return res.status === 0 && res.stdout.trim().length > 0;
-}
-
-if (portInUse()) {
-  console.error(`[dev] 端口 ${PORT} 已被占用（可能是残留的 dev 服务）。先释放：`);
-  console.error(`  lsof -ti tcp:${PORT} | xargs kill`);
-  process.exit(1);
-}
-
-run("bun", ["run", "dev", "--", "-p", String(PORT)], WEB_DIR, { TASSELLO_DESKTOP: "1" });
-
-try {
-  await waitForServer();
-  if (!(await desktopBuilt())) {
-    console.log("[dev] building desktop shell ...");
-    run("bun", ["run", "build"], DESKTOP_DIR).on("exit", (code) => {
-      if (code !== 0) shutdown(code ?? 1);
-    });
-    // build 是同步依赖，等它结束后再起 Electron：run 已推入 children，
-    // 这里用轮询等 dist/main.js 出现
-    while (!(await desktopBuilt())) await new Promise((r) => setTimeout(r, 300));
-  }
-  // dev 壳 bundle（Dock 名称/图标）缺失时现做一份
-  if (!fs.existsSync(path.join(DESKTOP_DIR, "build", "Tasselo.app"))) {
-    console.log("[dev] creating Tasselo.app dev bundle ...");
-    const r = spawnSync("bash", ["scripts/make-dev-bundle.sh"], { cwd: DESKTOP_DIR, stdio: "inherit" });
-    if (r.status !== 0) console.warn("[dev] dev bundle 创建失败，回退裸 Electron 二进制");
-  }
-  run(electronBin(), ["dist/main.js"], DESKTOP_DIR);
-} catch (e) {
-  console.error(e);
-  shutdown(1);
-}
+console.log(`[dev] API http://127.0.0.1:${API_PORT}`);
+console.log(`[dev] Web http://localhost:${WEB_PORT}/library/article`);

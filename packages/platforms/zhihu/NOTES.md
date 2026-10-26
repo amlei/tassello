@@ -1,6 +1,6 @@
 # 知乎平台包 NOTES（2026-10-02 真机验证）
 
-> 可并入 docs/platforms.md §2 的小节。验证环境：macOS + 独立 Chrome（visible，端口 9342，
+> 可并入 docs/platforms/README.md §2 的小节。验证环境：macOS + 独立 Chrome（visible，端口 9342，
 > profile `~/.local/share/tassello/probe-profiles/zhihu`，全新目录不碰共享 profile）。
 > 账号：呀土豆（uid 3cbcecce…，url_token an-wen-18-42）。
 
@@ -21,7 +21,7 @@
 ### verify
 - `GET https://www.zhihu.com/api/v4/me`：干净 JSON，无需签名、无需 `x-xsrftoken`。
   字段是 **snake_case**：`id / url_token / name / avatar_url / is_org / headline / vip_info…`
-  （docs/platforms.md 旧记录里的 `urlToken/isOrg` 驼峰写法有误，以本节为准）。
+  （docs/platforms/README.md 旧记录里的 `urlToken/isOrg` 驼峰写法有误，以本节为准）。
 - 401 时返回 `{"error":{"code":100,"name":"AuthenticationInvalidRequest",...}}`。
 
 ### 想法（pin）直发

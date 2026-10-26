@@ -21,7 +21,7 @@ python3 -m http.server 4311 --directory designs
 # 对比画布：http://localhost:4311/onda-explore/Explore.html
 ```
 
-原型是 React + Babel 多文件形式（`jsx/*.jsx`），必须走 HTTP，`file://` 打不开。
+原型是 React + Babel 多文件形式（`components/**`、`features/**`、`mock/**`、`screens/**`），必须走 HTTP，`file://` 打不开。
 
 ## 视觉与改动
 
@@ -42,7 +42,7 @@ python3 -m http.server 4311 --directory designs
 
 - 中性风格：底色白、发丝线（1px `--line`）、一个功能蓝（`--accent:#2383E2`），
   水墨纸色（`#FAFAF6/#16130E`）与 2px 墨色描边全部退场；类型色只留在小面积（方块/chip）
-- 深浅主题：`data-theme="dark"` 全套灰阶翻转，设置里新增「外观 · 主题色」三段选择器
+- 深浅主题：`data-theme="dark"` 全套灰阶翻转，主题三段选择器收在「基础设置」中
   （浅色 / 深色 / 跟随系统），偏好存 localStorage，首屏防闪烁脚本在 `index.html`
 - 删掉「全部稿子」：左栏只有四类型 + 发布队列；新建内容收进左栏顶部的蓝色主按钮
 - 四类全部卡片化：文章 / 音频 / 视频不再用行，统一进 212px 卡片网格；
@@ -50,7 +50,7 @@ python3 -m http.server 4311 --directory designs
   贴图 = 2×2 拼贴（1 张独占 / 2 张各半 / 3 张首格横跨）
 - 卡片状态：封面左下角「发布中」accent 药丸，标题行「已发布」绿色贴纸（发布事实仍只在队列）
 - 素材拖拽归一：编辑页图片素材条换掉 HTML5 拖拽，改用与贴图页同一套长按拖拽
-  （`dnd.jsx` 的 `useLongPressReorder`：按住 220ms 拎起、其余缩略图 FLIP 让位、松手落位）；
+  （`features/library/dnd.jsx` 的 `useLongPressReorder`：按住 220ms 拎起、其余缩略图 FLIP 让位、松手落位）；
   角上的 × 挂在 `.w-tileacts` 里，删除不会把长按也吃了
 - 素材可删：贴图的每张缩略图悬停出 ×（正文里引用它的图块一并清掉）；
   视频 / 音频素材悬停出 ×，删掉回到「未上传」的虚线上传槽，点一下再传；
@@ -112,7 +112,7 @@ python3 -m http.server 4311 --directory designs
   一枚 select 挂标题右侧（与主题切换器同构，浏览器越支持越多也不占地方），控件左侧挂品牌 icon
   （Chrome 三色扇面 / Edge 渐变波浪，跟随选中项切换）——小白靠图形直接认浏览器；未检测到的禁用并带
   「（未安装）」后缀，偏好存 localStorage（`onda-import-browser`）。全局单选是技术约束（整个 Cookies
-  库复制 + 单一 os_crypt 密钥），按平台绑定导入来源记入 `docs/todo.md`
+  库复制 + 单一 os_crypt 密钥），按平台绑定导入来源记入 `docs/todos/index.md`
 - 导入登录态 = 全局唯一入口 + 自动全量重校验：多平台登录态一起失效时，日常浏览器重新登录后在设置里
   点一次「导入」即可——确认弹窗（取消 / 导入并校验全部，Esc 或点背景取消，按钮走主色：
   有打断、不毁数据）→ 关一次工作台浏览器 → 整体覆盖 → 全部平台自动重校验（期间账号行统一显示
@@ -129,13 +129,14 @@ python3 -m http.server 4311 --directory designs
 | 文件 | 内容 |
 |---|---|
 | `index.html` | 样式与脚本入口（token 浅/深两套、组件样式、`.w-*` 骨架样式、主题防闪烁脚本） |
-| `jsx/data.jsx` | 类型、11 个平台矩阵、60 篇种子内容（每类 7–24） |
-| `jsx/library.jsx` | 左侧栏、视图头部（搜索/排序/新建）、四类卡片 |
-| `jsx/dnd.jsx` | 长按拖拽排序（实时预演 + FLIP 落位） |
-| `jsx/phone.jsx` | 手机预览：编辑页右侧常驻那一列 |
-| `jsx/app.jsx` | 三个视图的状态与发布任务引擎 |
-| `jsx/settings.jsx` | 设置：外观（主题色）+ 浏览器选择 + 平台账号 + 各类型的默认发布名单 |
-| `jsx/{editor,tasks,publish,bits,icons}.jsx` | 编辑器、发布队列、发布弹层与共享组件 |
+| `app.jsx` | 三个视图的状态与发布任务引擎 |
+| `mock/data.jsx` | 类型、平台矩阵和示例内容 |
+| `screens/library.jsx` | 内容库页面与统一卡片网格 |
+| `components/{icons,primitives}` | 图标与基础展示组件 |
+| `features/library/dnd.jsx` | 长按拖拽排序（实时预演 + FLIP 落位） |
+| `features/editor/{editor,publish,phone}.jsx` | 编辑器、发布弹层和手机预览 |
+| `features/queue/tasks.jsx` | 发布队列、任务状态与结果处理 |
+| `features/settings/settings.jsx` | 设置、账号与默认发布目标 |
 
 ## 这一版判断了什么
 
@@ -144,7 +145,7 @@ python3 -m http.server 4311 --directory designs
 3. 预览只在编辑页：卡片不挂预览入口，想看发出去什么样就打开稿子。
 4. 版式跟内容形状走，但壳统一：四种类型共用一个卡片壳（1px 发丝线 + 14px 圆角 + hover 浮起），
    封面各自长脸 —— 文章/音频摘要封面、视频播放封面、贴图拼贴封面。
-5. 栏底只留一个设置入口：外观、平台账号与默认发布名单都收在设置里；只有凭据缺失时该行才冒出一个数字。
+5. 栏底只留一个设置入口：基础设置、平台账号与默认发布名单都收在设置里；只有凭据缺失时该行才冒出一个数字。
 6. 平台账号一行说的是「哪个账号」：账号名 + 身份常显；点一下，凭据卡从设置弹窗**外侧**浮出来。
    左列账号往左弹、右列往右弹，带箭头指着被点的那一行，不顶走下面的名单；窗口太窄放不下时退回视口内。
 7. 默认发布平台四行各成一条横带（上下 18px 留白 + 一条细线），不再只靠行间距分开。
@@ -159,6 +160,6 @@ python3 -m http.server 4311 --directory designs
     一拖就把排序档切到「自定义顺序」。搜索中与按标题排时不开拖动。
 14. 标题全套按 Apple HIG 的层级做法，只留两级（Title 1 / Title 2），层级只靠字号差：
     一级 28px/700（栏目名、正在编辑的稿子），二级 22px/700（弹层标题），行/格子标题 15–17px/700。
-15. 主题切换器与实现（`apps/web/components/theme.tsx`）同源：localStorage key 同为 `onda-theme`，
+15. 主题切换器与实现（`apps/web/features/settings/theme-switcher.tsx`）同源：localStorage key 同为 `onda-theme`，
     「跟随系统」由首屏脚本常驻监听，切到浅/深只落偏好。
 16. 音频＝播客：`audio` 只留给播客平台（小宇宙 / 喜马拉雅 / 荔枝播客）和微信公众号的语音消息。

@@ -1,4 +1,4 @@
-# 即刻适配器 —— 通道选型与真机笔记（可并入 docs/platforms.md §2）
+# 即刻适配器 —— 通道选型与真机笔记（可并入 docs/platforms/README.md §2）
 
 实测日期：2026-10-02。验证环境：隔离 Chrome（`--user-data-dir=~/.local/share/tassello/probe-profiles/jike`，端口 9341，visible），人工扫码登录后全部接口用 Bun 直连复测。
 

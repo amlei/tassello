@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import { ThemeScript } from "@/components/theme";
-import { DesktopChrome } from "@/components/desktop-chrome";
+import { ThemeScript } from "@/features/settings/theme-switcher";
+import { DesktopChrome } from "@/adapters/desktop-chrome";
 import "./globals.css";
 
 export const metadata: Metadata = {

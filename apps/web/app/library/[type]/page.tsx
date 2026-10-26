@@ -2,7 +2,7 @@
 import { notFound } from "next/navigation";
 import { CONTENT_TYPES } from "@tassello/shared";
 import { loadLibraryData } from "@/lib/data";
-import { LibraryScreen } from "@/components/library";
+import { LibraryScreen } from "@/screens/library-screen";
 
 export const dynamic = "force-dynamic";
 

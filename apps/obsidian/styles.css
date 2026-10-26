@@ -38,30 +38,18 @@
 .tassello-publisher .mark i:last-child { background: #0ec3d4; }
 .tassello-publisher .panel-title { flex: 1; font-size: 15px; font-weight: 700; }
 
-.tassello-publisher .conn {
-  display: flex; align-items: center; gap: 8px;
-  min-height: 31px; padding: 0 9px; margin-bottom: 8px;
-  border: 1px solid var(--tp-line); border-radius: 9px; background: var(--tp-rail);
-  color: var(--tp-ink2); font-size: 11.5px;
+.tassello-publisher .conn-indicator {
+  width: 28px; height: 28px; margin-left: auto;
+  display: grid; place-items: center; border-radius: 8px;
 }
-.tassello-publisher .conn .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--tp-ink3); }
-.tassello-publisher .conn .conn-detail {
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  color: var(--tp-ink3); font-size: 10.5px;
-}
-.tassello-publisher .conn.on { color: var(--tp-ink); }
-.tassello-publisher .conn.on .dot { background: var(--tp-ok); }
-.tassello-publisher .conn.wait .dot { background: var(--text-accent); animation: tp-pulse 1.2s ease infinite; }
-.tassello-publisher .conn.bad { border-color: color-mix(in srgb, var(--tp-error) 35%, transparent); color: var(--tp-error); }
-.tassello-publisher .conn.bad .dot { background: var(--tp-error); }
-.tassello-publisher .conn button {
-  margin-left: auto; min-height: 23px; padding: 0 7px;
-  border-radius: 6px; border: 1px solid var(--tp-line); background: var(--tp-card); color: var(--tp-ink);
-  font-size: 11px;
-}
+.tassello-publisher .conn-indicator:hover { background: var(--tp-hover); }
+.tassello-publisher .conn-indicator .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--tp-ink3); }
+.tassello-publisher .conn-indicator.on .dot { background: var(--tp-ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--tp-ok) 16%, transparent); }
+.tassello-publisher .conn-indicator.wait .dot { background: var(--tp-warn); animation: tp-pulse 1.2s ease infinite; }
+.tassello-publisher .conn-indicator.bad .dot { background: var(--tp-error); box-shadow: 0 0 0 3px color-mix(in srgb, var(--tp-error) 14%, transparent); }
 
 .tassello-publisher .mode {
-  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 3px;
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px;
   padding: 3px; border: 1px solid var(--tp-line); border-radius: 10px; background: var(--tp-rail);
 }
 .tassello-publisher .mode button {
@@ -423,6 +411,9 @@
 }
 .tassello-publisher .completion-modal h3 { margin: 0; font-size: 14px; }
 .tassello-publisher .completion-desc { margin-top: 6px; color: var(--text-muted); font-size: 11.5px; line-height: 1.45; }
+.tassello-publisher .completion-desc.warning { color: var(--tp-warn); }
+.tassello-publisher .completion-check { display: flex; align-items: flex-start; gap: 7px; margin-top: 10px; color: var(--text-muted); font-size: 11.2px; line-height: 1.45; }
+.tassello-publisher .completion-check input { width: 14px; height: 14px; margin: 1px 0 0; padding: 0; }
 .tassello-publisher .completion-modal label { display: block; margin: 14px 0 5px; color: var(--text-muted); font-size: 11px; font-weight: 600; }
 .tassello-publisher .completion-modal input {
   width: 100%;

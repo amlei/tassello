@@ -7,16 +7,17 @@ const nextConfig: NextConfig = {
   transpilePackages: [
     "@tassello/site-ui",
     "@tassello/shared",
-    "@tassello/db",
-    "@tassello/render",
-    "@tassello/cdp",
-    "@tassello/platform-core",
-    "@tassello/platform-wechat",
-    "@tassello/platform-weibo",
-    "@tassello/server",
+    "@tassello/ui",
   ],
-  // 原生模块不进打包器
-  serverExternalPackages: ["@libsql/client", "libsql", "@prisma/adapter-libsql", "@prisma/client"],
+  async rewrites() {
+    const apiPort = process.env.TASSELLO_API_PORT ?? "4311";
+    return [
+      {
+        source: "/api/:path*",
+        destination: `http://127.0.0.1:${apiPort}/api/v1/:path*`,
+      },
+    ];
+  },
 };
 
 export default nextConfig;

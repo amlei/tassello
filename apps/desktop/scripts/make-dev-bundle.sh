@@ -10,7 +10,7 @@ DST="build/Tasselo.app"
 ICNS_SRC="build/tasselo.icns"
 LOGO="../web/public/logo.svg"
 
-# icns 从 logo.svg 生成：Chrome headless 渲染 → 合成满幅底 → iconset → icns。
+# icns 从 logo.svg 生成：Chrome headless 渲染 → macOS 圆角底 → iconset → icns。
 # logo.svg 是唯一图标源；改 logo 后重跑本脚本即可。Chrome 不在时回退现有 icon.png
 mkdir -p build
 CHROME="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
@@ -29,16 +29,37 @@ raw = Image.open("build/logo-raw.png").convert("RGBA")
 bbox = raw.split()[3].getbbox()
 content = raw.crop(bbox)
 S = 1024
-canvas = Image.new("RGB", (S, S), (255, 255, 255))
-d = ImageDraw.Draw(canvas)
+canvas = Image.new("RGBA", (S, S), (0, 0, 0, 0))
+inset = 72
+radius = 220
 top, bottom = (255, 255, 255), (244, 241, 232)   # 白 → 应用米色 #F4F1E8
+
+gradient = Image.new("RGB", (S, S), top)
+d = ImageDraw.Draw(gradient)
 for y in range(S):
     t = y / S
     d.line([(0, y), (S, y)], fill=tuple(int(top[i] + (bottom[i] - top[i]) * t) for i in range(3)))
-target = 880   # 系统遮罩区约 824/1024，logo 自带留白，86% 视觉贴边
+
+mask = Image.new("L", (S, S), 0)
+ImageDraw.Draw(mask).rounded_rectangle(
+  (inset, inset, S - inset - 1, S - inset - 1),
+  radius=radius,
+  fill=255,
+)
+background = gradient.convert("RGBA")
+background.putalpha(mask)
+canvas.alpha_composite(background)
+
+target = 760
 content = content.resize((target, target), Image.LANCZOS)
 canvas.paste(content, ((S - target) // 2, (S - target) // 2), content)
-canvas.save("icon.png")
+ImageDraw.Draw(canvas).rounded_rectangle(
+  (inset, inset, S - inset - 1, S - inset - 1),
+  radius=radius,
+  outline=(255, 255, 255, 90),
+  width=2,
+)
+canvas.save("icon.png", optimize=True)
 print("[dev-bundle] icon.png regenerated from logo.svg")
 PY
 fi

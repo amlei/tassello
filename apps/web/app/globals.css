@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* Tailwind 需要扫描工作区的可复用 UI 包，否则组件内 class 不会进入产物。 */
+@source "../../../packages/ui/src";
+
 /* HeroUI v3（必须在 tailwindcss 之后）。经 ./css 子路径取到 dist/index.css（default 条件，解析稳定） */
 @import "@heroui/styles/css";
 
@@ -122,6 +125,7 @@
   --color-orange: #fd8d11;
   --color-cyan: #0ec3d4;
   --color-green: #07b56f;
+  --color-warn: #9a6700;
   /* 错误色只有一种：所有「出问题」的信号都归它，橙色因此回归成纯内容色（视频） */
   --color-error: #c81e4e;
 
@@ -209,6 +213,12 @@
   button {
     font-family: inherit;
     cursor: pointer;
+  }
+  /* HeroUI ghost 的默认 hover 会把取消按钮压成深底灰字；对话框取消动作保持安静的灰井。 */
+  .dialog-cancel[data-hovered="true"],
+  .dialog-cancel:hover {
+    background-color: var(--color-hover) !important;
+    color: var(--color-ink) !important;
   }
   input,
   textarea {

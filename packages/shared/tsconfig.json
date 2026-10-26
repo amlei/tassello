@@ -21,7 +21,8 @@
     "noUnusedParameters": false,
     "noPropertyAccessFromIndexSignature": false,
     "types": [
-      "node"
+      "node",
+      "bun"
     ]
   }
 }

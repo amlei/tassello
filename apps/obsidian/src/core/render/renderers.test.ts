@@ -4,6 +4,7 @@ import type { SourceDraft } from "../types";
 
 function source(overrides: Partial<SourceDraft> = {}): SourceDraft {
   return {
+    id: "note-id",
     filePath: "test.md",
     contentDigest: "abc",
     title: "标题",
