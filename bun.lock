@@ -15,7 +15,7 @@
     },
     "apps/desktop": {
       "name": "@tassello/desktop",
-      "version": "0.1.0",
+      "version": "0.1.2",
       "devDependencies": {
         "electron": "^39.2.0",
         "electron-builder": "^26.0.12",
@@ -80,7 +80,7 @@
     },
     "apps/web": {
       "name": "@tassello/web",
-      "version": "0.1.0",
+      "version": "0.1.2",
       "dependencies": {
         "@heroui/react": "^3.2.6",
         "@heroui/styles": "^3.2.6",
@@ -91,9 +91,10 @@
         "@prisma/client-runtime-utils": "7.10.0",
         "@prisma/driver-adapter-utils": "7.10.0",
         "@swc/helpers": "0.5.23",
+        "@tassello/db": "workspace:*",
         "@tassello/server": "workspace:*",
         "@tassello/shared": "workspace:*",
-        "@tassello/site-ui": "workspace:packages/site-ui",
+        "@tassello/site-ui": "workspace:*",
         "@tassello/ui": "workspace:*",
         "@tiptap/core": "^3.31.3",
         "@tiptap/extension-highlight": "^3.31.3",

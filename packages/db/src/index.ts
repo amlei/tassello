@@ -6,6 +6,7 @@ import { PrismaClient } from "./generated/prisma/client";
 import { resolveDataDir, resolveDbFile, resolveDbUrl } from "./paths";
 
 export { resolveDataDir, resolveDbFile, resolveDbUrl };
+export { migrateToHead } from "./migrate";
 
 let singleton: PrismaClient | null = null;
 

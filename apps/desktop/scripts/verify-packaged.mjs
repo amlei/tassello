@@ -7,13 +7,14 @@
  *   平台不一致（如在 mac 上验 win 包）→ 结构校验（server 能起、静态页 200、
  *     Windows 原生绑定文件在位）；DB 链路留给同平台机器（CI windows runner）跑完整校验。
  */
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readdirSync, statSync } from "node:fs";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { execFileSync } from "node:child_process";
+
+const EXPECTED_TABLES = ["Post", "Asset", "PlatformAccount", "PlatformAssetUpload", "PublishTask", "PublishLog", "Setting"];
 
 const args = process.argv.slice(2);
 function argValue(flag) {
@@ -52,15 +53,12 @@ const artifactPlatform = /win-unpacked/.test(appRoot) || existsSync(path.join(ap
 const fullCheck = artifactPlatform === process.platform;
 log(fullCheck ? "模式: 完整校验（页面 + DB）" : "模式: 结构校验（跨平台，不验 DB）");
 
-/* 全新临时数据目录 + prisma db push 建表：不污染宿主机数据，也不依赖宿主机已有库 */
+/* 全新临时数据目录：建表必须由产物自身的启动流程完成（首启空库自愈）。
+ * v0.1.1 教训：这里原先预先 prisma db push 建好表，掩盖了"真实用户首启
+ * no such table: PlatformAccount → web server 起不来"的致命回归。 */
 const dataDir = mkdtempSync(path.join(os.tmpdir(), "tassello-verify-"));
-const packagesDbDir = path.resolve(repoRoot, "packages", "db");
-log(`数据目录: ${dataDir}`);
-execFileSync(process.execPath, ["x", "prisma", "db", "push"], {
-  cwd: packagesDbDir,
-  stdio: "inherit",
-  env: { ...process.env, TASSELLO_DATA_DIR: dataDir },
-});
+const dbFile = path.join(dataDir, "tassello.db");
+log(`数据目录: ${dataDir}（空目录，验证产物自建 schema）`);
 
 const port = 4400 + Math.floor(Math.random() * 400);
 
@@ -77,6 +75,17 @@ if (artifactPlatform === "win32") {
   const bindingDir = path.join(nm, "@libsql", "win32-x64-msvc");
   if (!hasNativeFile(bindingDir)) fail(`${bindingDir} 下没有 .node 原生文件`);
   log("win 原生绑定在位");
+}
+
+/* vendored prisma CLI 在位（首启建表走它，缺了就是 v0.1.1 式首启回归） */
+{
+  const cliEntry = path.join(webDir, "prisma-cli", "node_modules", "prisma", "build", "index.js");
+  const engineWasm = path.join(webDir, "prisma-cli", "node_modules", "prisma", "build", "schema_engine_bg.wasm");
+  const migrationsSql = path.join(webDir, "prisma-cli", "prisma", "migrations", "0001_init", "migration.sql");
+  for (const f of [cliEntry, engineWasm, migrationsSql]) {
+    if (!existsSync(f)) fail(`产物缺迁移组件: ${f}`);
+  }
+  log("vendored prisma CLI + 迁移文件在位");
 }
 
 /* 与生产完全一致：用产物内的 Electron 二进制以 ELECTRON_RUN_AS_NODE=1 跑 server.js */
@@ -127,6 +136,7 @@ try {
       }
     });
     log("/api/platforms 握手通过（DB + libsql 原生绑定工作正常）");
+    await assertSchemaCreated();
 
     await expectOk(`${url()}/library/article`, 20_000, (status, body) => {
       if (status !== 200) return `HTTP ${status}`;
@@ -186,6 +196,41 @@ function findWebDir(root) {
     /* root 不可读则跳过 */
   }
   return candidates.find((c) => existsSync(path.join(c, "server.js"))) ?? null;
+}
+
+/** v0.1.1 回归门禁：7 张业务表 + 官方迁移记录必须由产物自身首启建出（数据目录启动前是空目录）。
+ * 断言在 packages/db 上下文跑探针（@libsql/client 只在那里的依赖闭包里） */
+async function assertSchemaCreated() {
+  if (!existsSync(dbFile)) fail(`产物首启后数据库文件不存在: ${dbFile}`);
+  const packagesDbDir = path.resolve(repoRoot, "packages", "db");
+  const probe = `
+const { createClient } = require("@libsql/client");
+(async () => {
+  const c = createClient({ url: "file:" + process.env.TASSELLO_VERIFY_DB });
+  const t = await c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'");
+  const m = await c.execute("SELECT migration_name FROM _prisma_migrations");
+  console.log(JSON.stringify({ tables: t.rows.map((r) => String(r.name)), migrations: m.rows.map((r) => String(r.migration_name)) }));
+  c.close();
+})().catch((e) => { console.error(String(e)); process.exit(1); });
+`;
+  const res = spawnSync(process.execPath, ["-e", probe], {
+    cwd: packagesDbDir,
+    encoding: "utf8",
+    env: { ...process.env, TASSELLO_VERIFY_DB: dbFile },
+  });
+  if (res.status !== 0) fail(`schema 断言探针失败: ${`${res.stdout ?? ""}${res.stderr ?? ""}`.trim()}`);
+  let data;
+  try {
+    data = JSON.parse(res.stdout);
+  } catch {
+    fail(`schema 断言探针输出异常: ${res.stdout.trim()}`);
+  }
+  const missing = EXPECTED_TABLES.filter((t) => !data.tables.includes(t));
+  if (missing.length > 0) {
+    fail(`产物首启未建全表，缺: ${missing.join(", ")}（现有: ${data.tables.join(", ") || "无"}）`);
+  }
+  if (data.migrations.length < 1) fail(`官方迁移记录为空（_prisma_migrations 无记录），说明迁移未真正执行`);
+  log(`数据库 7 张表齐全，官方迁移记录: ${data.migrations.join(", ")}（由产物首启自建，非自检预建）`);
 }
 
 function hasNativeFile(dir) {

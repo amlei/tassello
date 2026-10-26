@@ -16,15 +16,20 @@
 
 - `bun run dev` — web 开发服务器（apps/web，Next.js）
 - `bun run typecheck` — 全仓逐包 tsgo（TS7 native preview）`--noEmit`，改完代码必跑
-- `bun test` — 目前只有 packages/cdp 有测试（源码用 node:test 写，但 bun test 可跑）
-- `bun run db:push` — Prisma schema 推送（packages/db，无迁移历史）
+- `bun test` — packages/cdp 与 packages/db 有测试（源码用 node:test 写，但 bun test 可跑）
+- `bun run db:generate` — 生成 Prisma client（packages/db，clone 后必跑）
+- schema 变更走官方迁移：改 `packages/db/prisma/schema.prisma` 后
+  `cd packages/db && bunx prisma migrate diff --from-migrations prisma/migrations --to-schema prisma/schema.prisma --script`
+  输出存为新目录 `prisma/migrations/NNNN_描述/migration.sql`（4 位序号顺延），官方 `migrate deploy` 负责应用
 - lint 只在 apps/web 配置：`cd apps/web && bun run lint`
-- 桌面壳 `bun run desktop`：Electron 会 spawn `bun run dev -p 4311`（端口可用 `TASSELLO_PORT` 覆盖）；纯网页模式直接 `bun run dev` 即可调试
+- 桌面壳 `bun run desktop`：Electron 会 spawn `bun run dev -p 4311`（端口可用 `TASSELLO_PORT` 覆盖）；纯网页模式直接 `bun run dev` 即可调试。打包产物端口由系统动态分配（`TASSELLO_PORT` 可显式固定），避免与开发端口或其他程序冲突
 
 ## 数据与生成物
 
-- Prisma client 生成到 `packages/db/src/generated/`（已 gitignore）——clone 后或改过 schema 后需在 packages/db 里 `bunx prisma generate`，否则类型检查/运行会报错。
-- 数据目录 `TASSELLO_DATA_DIR`（默认 `~/.local/share/tassello`）：SQLite 库、`secrets.json`、CDP 专用 Chrome profile 都在这里。`packages/db/src/paths.ts` 与 `prisma.config.ts` 共用这套解析。
+- Prisma client 生成到 `packages/db/src/generated/`（已 gitignore）——clone 后或改过 schema 后需 `bun run db:generate`，否则类型检查/运行会报错。
+- 迁移历史在 `packages/db/prisma/migrations/`（含官方 `migration_lock.toml`），schema 变更用官方 `prisma migrate diff --from-migrations --to-schema` 生成新迁移（见上方命令）；`db push` 已移除。打包链用 `apps/desktop/scripts/prepare-prisma-cli.mjs` 把官方 CLI + 迁移文件 vendor 进产物（gitignore 于 `apps/web/prisma-cli/`）。
+- 数据目录 `TASSELLO_DATA_DIR`（默认 Windows `%APPDATA%\tassello`，macOS/Linux `~/.local/share/tassello`）：SQLite 库、`secrets.json`、CDP 专用 Chrome profile 都在这里。`packages/db/src/paths.ts` 与 `prisma.config.ts` 共用这套解析。
+- 首启建表/升级由 server 启动钩子 exec 官方 `prisma migrate deploy` 完成，`_prisma_migrations` 为水位，事务与失败恢复语义全在官方 CLI。注意：对「有表但无迁移记录」的库（如 v0.1.1 手工建表）deploy 会报 P3005 并给出官方基线指引，不做自动处理。
 
 ## 架构速览
 
