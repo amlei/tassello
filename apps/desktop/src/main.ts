@@ -3,6 +3,7 @@
  * 不允许 v0.1.0 那种"干等 60 秒静默退出"的行为。 */
 import { spawn, type ChildProcess } from "node:child_process";
 import http from "node:http";
+import net from "node:net";
 import { appendFileSync, closeSync, existsSync, openSync, writeSync } from "node:fs";
 import path from "node:path";
 import { app, BrowserWindow, dialog, Menu, ipcMain, shell, type MenuItemConstructorOptions } from "electron";
@@ -17,14 +18,58 @@ const PACKAGED_WEB_CANDIDATES: string[] = [
 const WEB_DIR: string = app.isPackaged
   ? PACKAGED_WEB_CANDIDATES.find((candidate) => existsSync(path.join(candidate, "server.js"))) ?? PACKAGED_WEB_CANDIDATES[0]!
   : DEV_WEB_DIR;
-const PORT = Number(process.env.TASSELLO_PORT ?? 4311);
-const URL_BASE = `http://127.0.0.1:${PORT}`;
-/* 页面必须走 localhost：Next dev 的 allowedDevOrigins 默认只信任 localhost，
- * 用 127.0.0.1 加载会让 dev 资源/HMR 被降级，React 不水合，页面全是"死"按钮 */
-const WINDOW_URL = `http://localhost:${PORT}/library/article`;
+/* 打包产物端口由系统动态分配（PORT=0 → 启动前向 OS 申请空闲端口），避免与其他程序冲突；
+ * TASSELLO_PORT 显式固定（CI 自检用）；dev 保持 4311 便于调试与固定 URL */
+const FIXED_PORT = Number(process.env.TASSELLO_PORT ?? (app.isPackaged ? 0 : 4311));
+let activePort = FIXED_PORT;
+
+function urlBase(): string {
+  return `http://127.0.0.1:${activePort}`;
+}
+
+function windowUrl(): string {
+  /* 页面必须走 localhost：Next dev 的 allowedDevOrigins 默认只信任 localhost，
+   * 用 127.0.0.1 加载会让 dev 资源/HMR 被降级，React 不水合，页面全是"死"按钮 */
+  return `http://localhost:${activePort}/library/article`;
+}
+
+/** 向 OS 申请一个空闲端口（bind :0 后立即释放）。极端情况下存在释放后被抢占的窗口期，
+ * 由启动重试兜底（换端口重开 server） */
+function allocateEphemeralPort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const srv = net.createServer();
+    srv.unref();
+    srv.on("error", reject);
+    srv.listen(0, "127.0.0.1", () => {
+      const address = srv.address();
+      const port = typeof address === "object" && address ? address.port : 0;
+      srv.close(() => (port > 0 ? resolve(port) : reject(new Error("系统端口分配失败"))));
+    });
+  });
+}
 
 let server: ChildProcess | null = null;
 let logFd: number | null = null;
+
+/* web server 输出的滚动尾部：启动失败时直接展示进弹窗（v0.1.1 反馈的
+ * 「web server 进程提前退出（code=1）」毫无诊断价值，真因 no such table 全在日志里） */
+const WEB_TAIL_LINES = 30;
+const webOutputTail: string[] = [];
+
+function pushWebOutput(chunk: Buffer): void {
+  for (const line of chunk.toString().split("\n")) {
+    const trimmed = line.trimEnd();
+    if (trimmed) webOutputTail.push(trimmed);
+  }
+  if (webOutputTail.length > WEB_TAIL_LINES) {
+    webOutputTail.splice(0, webOutputTail.length - WEB_TAIL_LINES);
+  }
+}
+
+function webTailBlock(): string {
+  if (webOutputTail.length === 0) return "";
+  return `\n— web server 输出末尾（完整内容见日志）—\n${webOutputTail.join("\n")}`;
+}
 
 /* dev 模式下菜单栏应用名取自 app.name（而非 Electron 二进制的 Info.plist），需显式设置 */
 app.setName("九漾 Onda");
@@ -95,20 +140,26 @@ function startServer(): void {
         ELECTRON_RUN_AS_NODE: "1",
         NODE_ENV: "production",
         HOSTNAME: "127.0.0.1",
-        PORT: String(PORT),
+        PORT: String(activePort),
         TASSELLO_DESKTOP: "1",
       },
     });
   } else {
     const bin = process.env.TASSELLO_BUN ?? "bun";
-    server = spawn(bin, ["run", "dev", "--", "-p", String(PORT)], {
+    server = spawn(bin, ["run", "dev", "--", "-p", String(activePort)], {
       cwd: WEB_DIR,
       stdio: "inherit",
       env: { ...process.env, TASSELLO_DESKTOP: "1" },
     });
   }
-  server.stdout?.on("data", (chunk: Buffer) => log(`[web] ${chunk.toString().trimEnd()}`));
-  server.stderr?.on("data", (chunk: Buffer) => log(`[web] ${chunk.toString().trimEnd()}`));
+  server.stdout?.on("data", (chunk: Buffer) => {
+    pushWebOutput(chunk);
+    log(`[web] ${chunk.toString().trimEnd()}`);
+  });
+  server.stderr?.on("data", (chunk: Buffer) => {
+    pushWebOutput(chunk);
+    log(`[web] ${chunk.toString().trimEnd()}`);
+  });
   server.on("exit", (code, signal) => {
     log(`web server 退出 code=${code} signal=${signal ?? ""}`);
     server = null;
@@ -118,7 +169,7 @@ function startServer(): void {
 /** 健康检查带握手：必须返回 {ok:true,data:[..]}，防止 4311 被无关服务占用时误复用 */
 function probeServer(timeoutMs: number): Promise<void> {
   return new Promise((resolve, reject) => {
-    const req = http.get(`${URL_BASE}/api/platforms`, (res) => {
+    const req = http.get(`${urlBase()}/api/platforms`, (res) => {
       const chunks: Buffer[] = [];
       res.on("data", (d: Buffer) => chunks.push(d));
       res.on("end", () => {
@@ -178,11 +229,12 @@ function waitForServer(timeoutMs = 60_000): Promise<void> {
   });
 }
 
-/** 启动失败的统一出口：弹窗 + 日志路径，然后退出 */
+/** 启动失败的统一出口：弹窗（附 web server 输出尾部）+ 日志路径，然后退出 */
 function failToStart(reason: string): void {
   log(`启动失败: ${reason}`);
   const detail = [
     reason,
+    webTailBlock(),
     "",
     `详细日志: ${logPath()}`,
     "",
@@ -210,12 +262,12 @@ async function createWindow(): Promise<void> {
       icon: path.join(__dirname, "..", "icon.png"),
       webPreferences: { preload: path.join(__dirname, "preload.js") },
     });
-  const appOrigin = new URL(WINDOW_URL).origin;
+  const appOrigin = new URL(windowUrl()).origin;
 
   /* target=_blank / window.open 全部拒绝创建 Electron 子窗口；HTTP(S) 外链交给系统浏览器 */
   win.webContents.setWindowOpenHandler(({ url }) => {
     try {
-      if (new URL(url, WINDOW_URL).origin === appOrigin) return { action: "deny" };
+      if (new URL(url, windowUrl()).origin === appOrigin) return { action: "deny" };
     } catch {
       return { action: "deny" };
     }
@@ -226,7 +278,7 @@ async function createWindow(): Promise<void> {
   /* 兜住不带 target 的外链 <a>：应用内同源导航保留，其它导航不允许替换主窗口 */
   win.webContents.on("will-navigate", (event, url) => {
     try {
-      if (new URL(url, WINDOW_URL).origin === appOrigin) return;
+      if (new URL(url, windowUrl()).origin === appOrigin) return;
     } catch {
       event.preventDefault();
       return;
@@ -238,9 +290,9 @@ async function createWindow(): Promise<void> {
   win.webContents.on("render-process-gone", (_event, details) => {
     log(`渲染进程异常退出: ${details.reason}`);
   });
-  win.webContents.on("did-finish-load", () => log(`窗口加载完成: ${WINDOW_URL}`));
+  win.webContents.on("did-finish-load", () => log(`窗口加载完成: ${windowUrl()}`));
 
-  await win.loadURL(WINDOW_URL);
+  await win.loadURL(windowUrl());
 }
 
 /** 4311 已有可握手的 Tassello web server（如 bun run dev 的 dev.ts 已拉起）则直接复用 */
@@ -327,28 +379,61 @@ process.on("unhandledRejection", (reason) => {
   log(`主进程未处理的 Promise 拒绝: ${message}`);
 });
 
-app.whenReady().then(async () => {
-  openLogFile();
-  log(`启动 ${app.isPackaged ? "packaged" : "dev"} 模式, web=${WEB_DIR}, port=${PORT}`);
-  setupMenu();
-  if (await serverAlreadyRunning()) {
-    log(`复用已运行的 web server at ${URL_BASE}`);
-  } else {
-    startServer();
-    try {
-      await waitForServer();
-    } catch (e) {
-      failToStart(e instanceof Error ? e.message : String(e));
-      return;
+/* 单实例锁：双击多开时第二个实例直接退出、由第一个实例把窗口带回前台，
+ * 不再出现多实例争抢端口 4311 的连环失败（v0.1.1 用户反馈的表象问题） */
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on("second-instance", () => {
+    const win = BrowserWindow.getAllWindows()[0];
+    if (win) {
+      if (win.isMinimized()) win.restore();
+      win.show();
+      win.focus();
+    } else {
+      void createWindow();
     }
-  }
-  try {
-    await createWindow();
-    log("窗口创建成功");
-  } catch (e) {
-    failToStart(`窗口创建失败：${e instanceof Error ? e.message : String(e)}`);
-  }
-});
+  });
+
+  app.whenReady().then(async () => {
+    openLogFile();
+    log(`启动 ${app.isPackaged ? "packaged" : "dev"} 模式, web=${WEB_DIR}, port=${FIXED_PORT === 0 ? "(系统动态分配)" : FIXED_PORT}`);
+    setupMenu();
+    /* 端口固定时才探测复用（动态端口每次都是新端口，无可复用对象） */
+    if (FIXED_PORT !== 0 && (await serverAlreadyRunning())) {
+      log(`复用已运行的 web server at ${urlBase()}`);
+    } else {
+      let attempts = 0;
+      while (true) {
+        if (FIXED_PORT === 0) {
+          activePort = await allocateEphemeralPort();
+          log(`已分配动态端口: ${activePort}`);
+        }
+        startServer();
+        try {
+          await waitForServer();
+          break;
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          server?.kill();
+          /* 动态端口存在极小的"释放后被抢占"窗口：换端口重开 server；固定端口不重试 */
+          if (FIXED_PORT === 0 && ++attempts < 3) {
+            log(`端口 ${activePort} 启动失败，换端口重试（第 ${attempts}/3 次）: ${msg}`);
+            continue;
+          }
+          failToStart(msg);
+          return;
+        }
+      }
+    }
+    try {
+      await createWindow();
+      log("窗口创建成功");
+    } catch (e) {
+      failToStart(`窗口创建失败：${e instanceof Error ? e.message : String(e)}`);
+    }
+  });
+}
 
 app.on("activate", () => {
   if (BrowserWindow.getAllWindows().length === 0) void createWindow();

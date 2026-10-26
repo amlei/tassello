@@ -50,6 +50,7 @@ apps/desktop/release/
 apps/desktop/dist/
 packages/db/src/generated/
 apps/desktop/build/
+apps/web/prisma-cli/
 
 # obsidian plugin
 apps/obsidian/dist/

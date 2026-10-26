@@ -10,7 +10,6 @@
   "scripts": {
     "build:obsidian": "cd apps/obsidian && bun run build",
     "build:web": "cd apps/web && bun run build",
-    "db:push": "cd packages/db && bunx prisma db push",
     "db:generate": "cd packages/db && bunx prisma generate",
     "desktop": "cd apps/desktop && bun run desktop",
     "dev": "bun scripts/dev.ts",

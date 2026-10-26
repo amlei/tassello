@@ -18,7 +18,7 @@
 | UI | **Next.js**（bun init）+ **HeroUI v3** + **reicon-react** | UI 复刻 Mosaic 方向 |
 | 桌面壳 | **Electron**（可选宿主） | main / preload 用 TS；网页模式可脱离壳独立运行 |
 | 类型检查 | **tsgo**（@typescript/native-preview，即 TS7） | 仅 typecheck；运行时由 bun（服务层）与 Electron（壳）承担 |
-| 数据 | **Prisma + SQLite** | 本地单用户；数据目录 `TASSELLO_DATA_DIR`（默认 `~/.local/share/tassello`），库文件与专用 Chrome profile 都放在这里。驱动用 `@prisma/adapter-libsql`（better-sqlite3 在 Bun 下不可用，见 oven-sh/bun#4290） |
+| 数据 | **Prisma + SQLite** | 本地单用户；数据目录 `TASSELLO_DATA_DIR`（默认 Windows `%APPDATA%\tassello`，macOS/Linux `~/.local/share/tassello`），库文件与专用 Chrome profile 都放在这里。驱动用 `@prisma/adapter-libsql`（better-sqlite3 在 Bun 下不可用，见 oven-sh/bun#4290）。schema 落地走迁移历史 + 启动时官方 CLI（见 §5「迁移与 schema 落地」） |
 | 发布通道 | 官方 API + **Chrome CDP** + RSS（二期） | CDP 是主通道，API 是增强 |
 
 ## 3. 总体架构
@@ -173,6 +173,13 @@ model Setting {
   valueJson String
 }
 ```
+
+### 迁移与 schema 落地（v0.1.1 真机事故后的制度化）
+
+- **迁移历史是权威**：`packages/db/prisma/migrations/`（含官方 `migration_lock.toml`），schema 的任何结构变更用官方命令生成一条迁移：`cd packages/db && bunx prisma migrate diff --from-migrations prisma/migrations --to-schema prisma/schema.prisma --script`，输出存为 `NNNN_描述/migration.sql`（4 位序号顺延）。`db push` 已移除（官方定位是无历史的原型工具，正是 v0.1.1 事故温床）。
+- **用户机器上的落地**：server 启动钩子（`apps/web/instrumentation.ts`，Next 保证 register 完成前不处理请求）调 `packages/db/src/migrate.ts` exec 官方 CLI `migrate deploy`。Prisma 7 无运行时迁移 API，打包 CLI + exec 是官方唯一支持路径；打包链 `prepare-prisma-cli.mjs` 把裁剪后的 CLI（148MB，每轮裁剪由真实 deploy 冒烟背书）+ 迁移文件 + schema + prisma.config.ts vendor 进产物。
+- **无自研迁移逻辑**：水位（`_prisma_migrations`）、事务、失败恢复语义全在官方 CLI。注意 deploy 对「有表但无迁移记录」的库（如 v0.1.1 手工建表）会报 P3005 并给出官方基线指引，不做自动处理（产品决策：不收编野外老库）。Prisma 8 GA 且 SQLite 转正后把命令换成 `db migrate`，调用点与迁移文件形态不变。
+- **出包门禁**：`verify-packaged.mjs` 从空数据目录启动产物，断言 vendored CLI 三件套（入口/WASM/迁移文件）在位、7 张业务表 + `_prisma_migrations` 记录由产物自身首启创建（v0.1.1 的自检曾预建表，掩盖了真机回归）。
 
 要点：
 
