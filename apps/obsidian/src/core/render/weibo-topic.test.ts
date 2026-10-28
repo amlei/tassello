@@ -4,7 +4,7 @@ import type { SourceDraft } from "/Users/amlei/Data/codespaces/projects/tassello
 
 function source(overrides: Partial<SourceDraft> = {}): SourceDraft {
   return {
-    filePath: "test.md", contentDigest: "abc", title: "标题", type: "image",
+    id: "note-id", filePath: "test.md", contentDigest: "abc", title: "标题", type: "image",
     body: "", html: "", plain: "", assets: [], platformIds: ["weibo"], options: {}, ...overrides,
   };
 }

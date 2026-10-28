@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>九漾 Onda</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main class="popup">
+    <header class="head">
+      <img class="mark" src="icons/icon48.png" alt="" width="28" height="28">
+      <span class="title">
+        <b>九漾 Onda</b>
+        <small>本机发布通道</small>
+      </span>
+      <span id="status" class="status">读取中</span>
+    </header>
+
+    <section id="state-card" class="state-card">
+      <i class="dot" aria-hidden="true"></i>
+      <span class="state-copy">
+        <b id="state-title">正在连接</b>
+        <span id="state-detail">正在查找本机应用。</span>
+      </span>
+    </section>
+
+    <section id="task-card" class="task-card" hidden>
+      <span class="task-label">任务通道</span>
+      <span class="task-value">可接收发布任务</span>
+    </section>
+
+    <div class="actions">
+      <button id="open-app" class="primary">打开发布队列</button>
+      <button id="retry" class="secondary" hidden>重新检查连接</button>
+    </div>
+  </main>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

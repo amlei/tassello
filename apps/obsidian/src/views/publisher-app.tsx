@@ -6,7 +6,6 @@ import { platformSupportsType, previewHtmlForPlatform, renderForPlatform } from 
 import {
   PLATFORMS,
   PLATFORM_BY_ID,
-  type BrowserStatus,
   type ContentType,
   type Finding,
   type PlatformCapability,
@@ -14,13 +13,11 @@ import {
   type PublishTask,
   type SourceDraft,
 } from "../core/types";
-import type { DefaultChromeManager } from "../core/browser/default-chrome";
-import type { TaskEngine } from "../core/tasks/task-engine";
-import { sharedAdapter } from "../core/platform/shared-registry";
+import type { BackendApi } from "../core/api/client";
 import { PlatformMark } from "@tassello/ui/platform-icons";
 import type { PublisherServices } from "./publisher-view";
 
-type ViewMode = "preview" | "publish" | "defaults";
+type ViewMode = "preview" | "defaults";
 type PublisherAppProps = { services: PublisherServices; host: HTMLElement };
 
 const CONTENT_TYPES: ContentType[] = ["article", "image", "video", "audio"];
@@ -37,46 +34,60 @@ const CONTENT_COLORS: Record<ContentType, string> = {
   audio: "#0EC3D4",
 };
 
+function platformCatalogSignature(platforms: PlatformCapability[]): string {
+  return platforms
+    .map((platform) => [
+      platform.id,
+      platform.syncPhase,
+      platform.syncReason ?? "",
+      platform.accountName ?? "",
+    ].join("\u0000"))
+    .join("\u0001");
+}
+
 function contentTypeLabel(type: ContentType): string {
   return CONTENT_LABELS[type];
 }
 
-function BrowserStatus({ browser }: { browser: DefaultChromeManager }) {
-  const [status, setStatus] = useState<BrowserStatus>(browser.getStatus());
-  const [detail, setDetail] = useState<string | undefined>(browser.getDetail());
-
-  useEffect(() => browser.onStatus((next, nextDetail) => {
-    setStatus(next);
-    setDetail(nextDetail);
-  }), [browser]);
-
-  const labels: Record<BrowserStatus, string> = {
-    disconnected: "默认 Chrome 未连接",
-    checking: "正在检查 Chrome…",
-    "waiting-approval": "等待 Chrome 授权…",
-    connected: "默认 Chrome · 已授权",
-    denied: "Chrome 拒绝了连接",
-    unsupported: "当前 Chrome 不支持审批模式",
-  };
-  const stateClass = status === "connected"
-    ? "on"
-    : status === "checking" || status === "waiting-approval"
-      ? "wait"
-      : status === "denied" ? "bad" : "";
-
+function RuntimeStatus({ api }: { api: BackendApi }) {
+  const [state, setState] = useState<"ready" | "waiting" | "unavailable">("waiting");
+  const [reason, setReason] = useState("正在检查发布服务");
+  useEffect(() => {
+    let disposed = false;
+    const refresh = async () => {
+      try {
+        const capability = await api.capability();
+        if (!disposed) {
+          setState(capability.state);
+          setReason(
+            capability.state === "ready"
+              ? "发布通道可用；桌面端和 Obsidian 共用同一扩展连接"
+              : capability.reason ?? "等待浏览器扩展连接",
+          );
+        }
+      } catch (error) {
+        if (!disposed) {
+          setState("unavailable");
+          setReason(error instanceof Error ? error.message : String(error));
+        }
+      }
+    };
+    void refresh();
+    const timer = window.setInterval(refresh, 3000);
+    return () => {
+      disposed = true;
+      window.clearInterval(timer);
+    };
+  }, [api]);
   return (
-    <div className={`conn ${stateClass}`} data-role="chrome-status">
+    <span
+      className={`conn-indicator ${state === "ready" ? "on" : state === "waiting" ? "wait" : "bad"}`}
+      title={reason}
+      aria-label={reason}
+      data-role="runtime-status"
+    >
       <span className="dot" />
-      <span>{labels[status]}</span>
-      {detail && status !== "connected" && <span className="conn-detail"> · {detail}</span>}
-      {status !== "connected" && (
-        <button onClick={() => void browser.connect().catch((error) => {
-          new Notice(error instanceof Error ? error.message : String(error));
-        })}>
-          连接
-        </button>
-      )}
-    </div>
+    </span>
   );
 }
 
@@ -206,11 +217,14 @@ function TaskList({
     "queued",
     "running",
     "awaiting_confirm",
+    "waiting_extension",
+    "unknown",
+    "success",
     "failed",
   ].includes(task.status)).slice(0, 50);
 
   if (!visible.length) {
-    return <div className="target disabled">暂无活跃任务；历史发布见发布库</div>;
+    return <div className="target disabled">暂无发布任务</div>;
   }
 
   return (
@@ -219,7 +233,7 @@ function TaskList({
         const platform = PLATFORM_BY_ID.get(task.platformId);
         const statusClass = task.status === "running"
           ? "running"
-          : task.status === "awaiting_confirm"
+          : task.status === "awaiting_confirm" || task.status === "waiting_extension" || task.status === "unknown"
             ? "waiting"
             : task.status === "failed" ? "failed" : "success";
         return (
@@ -230,11 +244,23 @@ function TaskList({
                 <span className={`status ${statusClass}`}>
                   {task.status === "queued" ? "排队"
                     : task.status === "running" ? "执行中"
-                    : task.status === "awaiting_confirm" ? "待确认"
+                    : task.status === "awaiting_confirm" ? "等待完成"
+                    : task.status === "waiting_extension" ? "等待扩展"
+                    : task.status === "unknown" ? "结果未知"
                     : task.status === "failed" ? "失败" : "完成"}
                 </span>
               </div>
-              <div className="target-desc">{task.message || task.failReason || task.filePath}</div>
+              <div className="target-desc">
+                {task.status === "success"
+                  ? task.url
+                    ? task.urlSource === "manual" ? "人工回填发布链接" : "自动回执已确认"
+                    : task.noPublicUrl ? "已确认发布，无公开链接" : "已确认发布"
+                  : task.status === "waiting_extension"
+                    ? "扩展重新连接后会继续执行"
+                    : task.status === "unknown"
+                      ? "已观察到提交动作，但未收到稳定回执"
+                      : task.message || task.failReason || task.filePath}
+              </div>
               {task.sourceChangedAfterStart && (
                 <div className="target-desc warning">源文件在发布开始后已修改；平台内容不会自动更新。</div>
               )}
@@ -242,8 +268,11 @@ function TaskList({
                 {task.pageUrl && (
                   <button className="mini" onClick={() => void services.engine.openPage(task.id)}>打开页面</button>
                 )}
-                {task.status === "awaiting_confirm" && (
-                  <button className="mini primary" onClick={() => onComplete(task)}>标记完成</button>
+                {task.status === "success" && task.url && (
+                  <button className="mini primary" onClick={() => window.open(task.url!, "_blank", "noopener,noreferrer")}>打开发布结果</button>
+                )}
+                {(task.status === "awaiting_confirm" || task.status === "unknown" || task.status === "waiting_extension") && (
+                  <button className="mini primary" onClick={() => onComplete(task)}>补充链接</button>
                 )}
                 {task.status === "queued" && (
                   <button className="mini" onClick={() => void services.engine.cancel(task.id)}>取消</button>
@@ -267,25 +296,40 @@ function CompletionModal({
 }: {
   task: PublishTask;
   onClose: () => void;
-  onSubmit: (url?: string) => void;
+  onSubmit: (url: string | null, noPublic: boolean) => void;
 }) {
   const [url, setUrl] = useState("");
+  const [noPublic, setNoPublic] = useState(false);
+  const normalized = url.trim();
+  const invalid = !!normalized && !/^https?:\/\/\S+$/i.test(normalized);
+  const canSubmit = !invalid && (!!normalized || noPublic);
   return (
     <div className="completion-backdrop" onClick={onClose}>
       <div className="completion-modal" onClick={(event) => event.stopPropagation()}>
-        <h3>标记完成</h3>
-        <div className="completion-desc">如果已在平台完成发布，可以粘贴最终链接。没有链接时也会标记完成。</div>
-        <label>发布链接（可选）</label>
+        <h3>补充发布结果</h3>
+        <div className="completion-desc">自动回执缺失时才需要手动处理。填写最终链接，或明确确认该结果没有公开链接。</div>
+        <label>发布链接</label>
         <input
           type="url"
           placeholder="https://..."
           value={url}
           onChange={(event) => setUrl(event.target.value)}
-          onKeyDown={(event) => event.key === "Enter" && onSubmit(url || undefined)}
         />
+        {invalid && <div className="completion-desc warning">请输入 http(s) 开头的完整链接。</div>}
+        <label className="completion-check">
+          <input
+            type="checkbox"
+            checked={noPublic}
+            onChange={(event) => {
+              setNoPublic(event.target.checked);
+              if (event.target.checked) setUrl("");
+            }}
+          />
+          <span>该结果没有公开链接，我已在平台确认完成</span>
+        </label>
         <div className="completion-actions">
           <button className="mini" onClick={onClose}>取消</button>
-          <button className="mini primary" onClick={() => onSubmit(url || undefined)}>保存到发布库</button>
+          <button className="mini primary" disabled={!canSubmit} onClick={() => onSubmit(normalized || null, noPublic)}>保存发布结果</button>
         </div>
       </div>
     </div>
@@ -293,7 +337,7 @@ function CompletionModal({
 }
 
 export function PublisherApp({ services, host }: PublisherAppProps) {
-  const { app, browser, engine } = services;
+  const { app, api, engine } = services;
   const [mode, setMode] = useState<ViewMode>("preview");
   const [sourceType, setSourceType] = useState<ContentType>("article");
   const [activePlatform, setActivePlatform] = useState<PlatformId>("zhihu");
@@ -305,6 +349,7 @@ export function PublisherApp({ services, host }: PublisherAppProps) {
   const [source, setSource] = useState<SourceDraft | null>(null);
   const [sourceError, setSourceError] = useState<string | null>(null);
   const [tasks, setTasks] = useState<PublishTask[]>([]);
+  const [platformCatalog, setPlatformCatalog] = useState<PlatformCapability[]>(PLATFORMS);
   const [completionTask, setCompletionTask] = useState<PublishTask | null>(null);
   const previewGeneration = useRef(0);
   const refreshTimer = useRef<number | null>(null);
@@ -316,26 +361,55 @@ export function PublisherApp({ services, host }: PublisherAppProps) {
   const acceptedSourceKey = useRef<string | null>(null);
 
   const supportedPlatforms = useMemo(
-    () => PLATFORMS.filter((platform) => platform.supports.includes(sourceType)),
-    [sourceType],
+    () => platformCatalog.filter((platform) => platform.supports.includes(sourceType)),
+    [platformCatalog, sourceType],
   );
   const availablePlatforms = useMemo(
-    () => supportedPlatforms.filter((platform) => sharedAdapter(platform.id) !== undefined),
+    () => supportedPlatforms.filter((platform) => platform.status === "active"),
     [supportedPlatforms],
   );
   const activeSupported = availablePlatforms.some((platform) => platform.id === activePlatform);
   const active = activeSupported
     ? activePlatform
     : availablePlatforms[0]?.id ?? "zhihu";
-  const platformById = useMemo(() => new Map(PLATFORMS.map((platform) => [platform.id, platform])), []);
   const availablePlatformIds = useMemo(
-    () => new Set(availablePlatforms.map((platform) => platform.id)),
+    () => new Set(availablePlatforms.filter((platform) => platform.syncPhase === "connected").map((platform) => platform.id)),
     [availablePlatforms],
   );
   const defaultTargets = (defaults[sourceType] ?? []).filter((platformId) => availablePlatformIds.has(platformId));
   const selectedPlatforms = selected.filter((platformId) => availablePlatformIds.has(platformId));
   const selectedCount = selectedPlatforms.length;
   const activeSource = source;
+
+  useEffect(() => {
+    let disposed = false;
+    const refresh = async () => {
+      try {
+        const live = await api.platforms();
+        if (disposed) return;
+        const next = PLATFORMS.map((base) => {
+          const remote = live.find((platform) => platform.id === base.id);
+          return remote
+            ? {
+              ...base,
+              syncPhase: remote.sync.phase,
+              syncReason: remote.sync.reason,
+              accountName: remote.account?.name ?? null,
+            }
+            : base;
+        });
+        setPlatformCatalog((previous) =>
+          platformCatalogSignature(previous) === platformCatalogSignature(next) ? previous : next,
+        );
+      } catch {}
+    };
+    void refresh();
+    const timer = window.setInterval(refresh, 3000);
+    return () => {
+      disposed = true;
+      window.clearInterval(timer);
+    };
+  }, [api]);
 
   const refreshSource = useCallback(async (requestedType?: ContentType) => {
     const type = requestedType ?? sourceType;
@@ -416,13 +490,13 @@ export function PublisherApp({ services, host }: PublisherAppProps) {
   useEffect(() => engine.subscribe(setTasks), [engine]);
   useEffect(() => {
     if (!activeSupported) setActivePlatform(availablePlatforms[0]?.id ?? "zhihu");
-  }, [activeSupported, supportedPlatforms]);
+  }, [activeSupported, availablePlatforms]);
 
   // 切换稿件类型时，用该类型的默认通道初始化发布选择。
   // 注意：默认配置变更不应覆盖发布页里用户刚刚手动调整的 selected。
   useEffect(() => {
     setSelected((defaults[sourceType] ?? []).filter((platformId) => availablePlatformIds.has(platformId)));
-  }, [sourceType]);
+  }, [availablePlatformIds, sourceType]);
 
   const changeSourceType = useCallback(async (type: ContentType) => {
     if (type === sourceType) return;
@@ -446,6 +520,7 @@ export function PublisherApp({ services, host }: PublisherAppProps) {
   }, [app, defaults, refreshSource, sourceType]);
 
   const toggleDefault = useCallback((type: ContentType, platformId: PlatformId) => {
+    if (!availablePlatformIds.has(platformId)) return;
     setDefaults((previous) => {
       const current = previous[type] ?? [];
       const next = current.includes(platformId)
@@ -455,14 +530,14 @@ export function PublisherApp({ services, host }: PublisherAppProps) {
       void services.setDefaultPlatforms(type, next);
       return updated;
     });
-  }, [services]);
+  }, [availablePlatformIds, services]);
 
   const toggleSelected = useCallback((platformId: PlatformId) => {
     if (!availablePlatformIds.has(platformId)) return;
     setSelected((previous) => previous.includes(platformId)
       ? previous.filter((value) => value !== platformId)
       : [...previous, platformId]);
-  }, []);
+  }, [availablePlatformIds]);
   const lastSelectEvent = useRef(0);
   // pointerdown 服务真实鼠标；click 服务辅助功能/键盘触发。用时间窗避免双重切换。
   const toggleSelectedFromEvent = useCallback((platformId: PlatformId) => {
@@ -474,7 +549,11 @@ export function PublisherApp({ services, host }: PublisherAppProps) {
 
   const publishCurrent = useCallback(async () => {
     const publishable = selected.filter((platformId) => availablePlatformIds.has(platformId));
-    if (!activeSource || !publishable.length) return;
+    if (!activeSource?.id) {
+      new Notice("当前 Markdown 缺少 tassello.id，无法创建发布快照");
+      return;
+    }
+    if (!publishable.length) return;
     await engine.enqueue(activeSource, publishable);
   }, [activeSource, availablePlatformIds, engine, selected]);
 
@@ -542,13 +621,9 @@ export function PublisherApp({ services, host }: PublisherAppProps) {
           <div className="mark"><i /><i /><i /><i /></div>
           <div className="panel-title">Publisher</div>
         </div>
-        <BrowserStatus browser={browser} />
+        <RuntimeStatus api={api} />
         <div className="mode">
           <button className={mode === "preview" ? "active" : ""} onClick={() => setMode("preview")}>预览</button>
-          <button className={mode === "publish" ? "active" : ""} onClick={() => setMode("publish")}>
-            发布
-            <span className="mode-count">{selectedCount}</span>
-          </button>
           <button className={mode === "defaults" ? "active" : ""} onClick={() => setMode("defaults")}>默认</button>
         </div>
       </div>
@@ -565,25 +640,51 @@ export function PublisherApp({ services, host }: PublisherAppProps) {
                 <span className="selector-label">平台</span>
                 <div className="platform-options">
                   {availablePlatforms.map((platform) => (
-                    <button
-                      key={platform.id}
-                      type="button"
-                      className={`platform-option ${active === platform.id ? "active" : ""}`}
-                      style={{ background: platform.color, color: platform.fg || "white" }}
-                      title={platform.name}
-                      aria-label={platform.name}
-                      aria-pressed={active === platform.id}
-                      onClick={() => setActivePlatform(platform.id)}
-                    >
-                      <PlatformMark
-                        id={platform.id}
-                        char={platform.glyph}
-                        size={19}
-                        tone="lit"
-                      />
-                    </button>
+                    (() => {
+                      const connected = availablePlatformIds.has(platform.id);
+                      return (
+                        <button
+                          key={platform.id}
+                          type="button"
+                          className={`platform-option ${selectedPlatforms.includes(platform.id) ? "selected" : ""}`}
+                          style={{
+                            background: connected ? platform.color : "var(--tp-hover)",
+                            color: connected ? (platform.fg || "white") : "var(--tp-ink3)",
+                            opacity: connected ? 1 : 0.55,
+                            cursor: connected ? "pointer" : "not-allowed",
+                          }}
+                          title={`${platform.name}${connected
+                            ? selectedPlatforms.includes(platform.id) ? " · 已选" : ""
+                            : ` · ${platform.syncReason ?? "账号未连接"}`}`}
+                          aria-label={`${selectedPlatforms.includes(platform.id) ? "移除" : "选择"} ${platform.name}`}
+                          aria-pressed={selectedPlatforms.includes(platform.id)}
+                          aria-disabled={!connected}
+                          onClick={() => {
+                            if (!connected) return;
+                            setActivePlatform(platform.id);
+                            toggleSelected(platform.id);
+                          }}
+                        >
+                          <PlatformMark
+                            id={platform.id}
+                            char={platform.glyph}
+                            size={19}
+                            tone={connected ? "lit" : "off"}
+                          />
+                        </button>
+                      );
+                    })()
                   ))}
                 </div>
+              </div>
+              <div className="selector-summary">
+                <span className="count">
+                  已选
+                  <strong>{selectedCount}</strong>
+                  <span className="total">/ {availablePlatforms.length}</span>
+                </span>
+                <span className="divider"></span>
+                <span className="summary-link" style={{ cursor: "default" }}>点击图标切换发布目标</span>
               </div>
             </div>
 
@@ -646,61 +747,11 @@ export function PublisherApp({ services, host }: PublisherAppProps) {
                 )}
               </div>
             </div>
-          </>
-        )}
-
-        {mode === "publish" && (
-          <>
-            <div className="selector-card">
-              <div className="selector-row">
-                <span className="selector-label">类型</span>
-                {sourcePicker()}
+            {tasks.length > 0 && (
+              <div className="targets" data-role="task-list">
+                <TaskList tasks={tasks} onComplete={(task) => setCompletionTask(task)} services={services} />
               </div>
-              <div className="selector-row">
-                <span className="selector-label">平台</span>
-                <div className="platform-options">
-                  {availablePlatforms.map((platform) => (
-                    <button
-                      key={platform.id}
-                      type="button"
-                      className={`platform-option ${selectedPlatforms.includes(platform.id) ? "active selected" : ""}`}
-                      style={{ background: platform.color, color: platform.fg || "white" }}
-                      title={platform.name}
-                      aria-label={`选择 ${platform.name}`}
-                      aria-pressed={selectedPlatforms.includes(platform.id)}
-                      onPointerDown={() => toggleSelectedFromEvent(platform.id)}
-                      onClick={() => toggleSelectedFromEvent(platform.id)}
-                    >
-                      <PlatformMark
-                        id={platform.id}
-                        char={platform.glyph}
-                        size={19}
-                        tone="lit"
-                      />
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="selector-summary">
-                <span className="count">
-                  已选
-                  <strong>{selectedCount}</strong>
-                  <span className="total">/ {availablePlatforms.length}</span>
-                </span>
-                <span className="divider"></span>
-                <button className="summary-link" onClick={() => void services.openPublicationBase().catch((error) => {
-                  new Notice(error instanceof Error ? error.message : String(error));
-                })}>
-                  发布库
-                  <span className="arrow">↗</span>
-                </button>
-              </div>
-            </div>
-
-            <div className="section-title"><span>任务</span></div>
-            <div className="targets" data-role="task-list">
-              <TaskList tasks={tasks} onComplete={(task) => setCompletionTask(task)} services={services} />
-            </div>
+            )}
           </>
         )}
 
@@ -715,23 +766,36 @@ export function PublisherApp({ services, host }: PublisherAppProps) {
                 <span className="selector-label">平台</span>
                 <div className="platform-options">
                   {availablePlatforms.map((platform) => (
-                    <button
-                      key={platform.id}
-                      type="button"
-                      className={`platform-option ${defaultTargets.includes(platform.id) ? "active selected" : ""}`}
-                      style={{ background: platform.color, color: platform.fg || "white" }}
-                      title={platform.name}
-                      aria-label={`保存 ${platform.name} 为默认平台`}
-                      aria-pressed={defaultTargets.includes(platform.id)}
-                      onPointerDown={() => toggleDefault(sourceType, platform.id)}
-                    >
-                      <PlatformMark
-                        id={platform.id}
-                        char={platform.glyph}
-                        size={19}
-                        tone="lit"
-                      />
-                    </button>
+                    (() => {
+                      const connected = availablePlatformIds.has(platform.id);
+                      return (
+                        <button
+                          key={platform.id}
+                          type="button"
+                          className={`platform-option ${defaultTargets.includes(platform.id) ? "active selected" : ""}`}
+                          style={{
+                            background: connected ? platform.color : "var(--tp-hover)",
+                            color: connected ? (platform.fg || "white") : "var(--tp-ink3)",
+                            opacity: connected ? 1 : 0.55,
+                            cursor: connected ? "pointer" : "not-allowed",
+                          }}
+                          title={`${platform.name}${connected ? "" : ` · ${platform.syncReason ?? "账号未连接"}`}`}
+                          aria-label={`保存 ${platform.name} 为默认平台`}
+                          aria-pressed={defaultTargets.includes(platform.id)}
+                          aria-disabled={!connected}
+                          onPointerDown={() => {
+                            if (connected) toggleDefault(sourceType, platform.id);
+                          }}
+                        >
+                          <PlatformMark
+                            id={platform.id}
+                            char={platform.glyph}
+                            size={19}
+                            tone={connected ? "lit" : "off"}
+                          />
+                        </button>
+                      );
+                    })()
                   ))}
                 </div>
               </div>
@@ -743,25 +807,14 @@ export function PublisherApp({ services, host }: PublisherAppProps) {
 
       {mode !== "defaults" && (
         <div className="panel-foot">
-          {mode === "preview" ? (
-            <button
-              className="primary-cta"
-              onClick={() => setMode("publish")}
-            >
-              把当前预览发送到 Publish
-            </button>
-          ) : (
-            <>
-              <button
-                className="primary-cta"
-                disabled={!activeSource || selectedCount === 0}
-                onClick={() => void publishCurrent()}
-              >
-                发布当前笔记到 {selectedCount} 个通道
-              </button>
-              <div className="foot-note">每个通道执行时读取 Obsidian 当前最新内容</div>
-            </>
-          )}
+          <button
+            className="primary-cta"
+            disabled={!activeSource?.id || selectedCount === 0}
+            onClick={() => void publishCurrent()}
+          >
+            发布到 {selectedCount} 个平台
+          </button>
+          <div className="foot-note">发布前会先保存当前 Markdown，再生成不可变发布快照</div>
         </div>
       )}
 
@@ -769,8 +822,8 @@ export function PublisherApp({ services, host }: PublisherAppProps) {
         <CompletionModal
           task={completionTask}
           onClose={() => setCompletionTask(null)}
-          onSubmit={(url) => {
-            void engine.markComplete(completionTask.id, url);
+          onSubmit={(url, noPublic) => {
+            void engine.markComplete(completionTask.id, url ?? undefined, noPublic);
             setCompletionTask(null);
           }}
         />

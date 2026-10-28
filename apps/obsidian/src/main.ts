@@ -1,24 +1,15 @@
-import { Notice, Plugin, PluginSettingTab, App, Setting, TAbstractFile, TFile, normalizePath } from "obsidian";
-import { DefaultChromeManager } from "./core/browser/default-chrome";
-import { TaskEngine } from "./core/tasks/task-engine";
-import { TaskStore } from "./core/tasks/task-store";
+import { Notice, Plugin, PluginSettingTab, App, Setting } from "obsidian";
+import { BackendApi } from "./core/api/client";
+import { RemoteTaskEngine } from "./core/tasks/remote-task-engine";
 import { PLATFORMS, type PlatformId, type PublishTask } from "./core/types";
-import { PublicationLedger } from "./core/publication-ledger/publication-ledger";
-import { DEFAULT_PUBLICATION_BASE_PATH } from "./core/publication-ledger/types";
 import { PUBLISHER_VIEW_TYPE, PublisherView, type PublisherServices } from "./views/publisher-view";
-
-type ChromeChannel = "stable" | "beta" | "canary" | "dev";
 
 type TasselloData = {
   settings?: {
-    chromeChannel?: ChromeChannel;
+    apiOrigin?: string;
     defaultPlatforms?: Partial<Record<import("./core/types").ContentType, PlatformId[]>>;
-    publicationBasePath?: string;
-    publicationAutoCreate?: boolean;
-    publicationIncludeFailReason?: boolean;
   };
   selectedPlatforms?: PlatformId[];
-  tasks?: PublishTask[];
 };
 
 type PluginServices = PublisherServices & {
@@ -30,7 +21,6 @@ class TasselloSettingTab extends PluginSettingTab {
   constructor(
     app: App,
     private readonly plugin: TasselloPublisherPlugin,
-    private readonly browser: DefaultChromeManager,
   ) {
     super(app, plugin);
   }
@@ -41,35 +31,15 @@ class TasselloSettingTab extends PluginSettingTab {
     containerEl.createEl("h2", { text: "Tassello Publisher" });
 
     new Setting(containerEl)
-      .setName("Chrome channel")
-      .setDesc("插件只读取该 Chrome 频道目录下的 DevToolsActivePort。")
-      .addDropdown((dropdown) => {
-        dropdown
-          .addOptions({
-            stable: "Chrome Stable",
-            beta: "Chrome Beta",
-            canary: "Chrome Canary",
-            dev: "Chrome Dev",
-          })
-          .setValue(this.plugin.settings.chromeChannel)
-          .onChange(async (value) => {
-            this.plugin.settings.chromeChannel = value as ChromeChannel;
-            this.browser.channel = this.plugin.settings.chromeChannel;
-            this.browser.disconnect();
-            await this.plugin.saveSettings();
-          });
-      });
-
-    new Setting(containerEl)
-      .setName("Open Chrome remote debugging")
-      .setDesc("在 Chrome 打开 chrome://inspect/#remote-debugging，开启开关，并在插件连接时选择允许。")
-      .addButton((button) => {
-        button.setButtonText("重新连接").onClick(() => {
-          void this.browser.connect().catch((error) => {
-            new Notice(error instanceof Error ? error.message : String(error));
-          });
-        });
-      });
+      .setName("本机发布服务")
+      .setDesc("Obsidian 与桌面端共用这个服务和同一条浏览器扩展连接。")
+      .addText((text) => text
+        .setValue(this.plugin.settings.apiOrigin)
+        .setPlaceholder("http://127.0.0.1:4311")
+        .onChange(async (value) => {
+          this.plugin.settings.apiOrigin = value.trim() || "http://127.0.0.1:4311";
+          await this.plugin.saveSettings();
+        }));
 
     containerEl.createEl("h3", { text: "默认发布目标" });
     for (const type of ["article", "image"] as const) {
@@ -105,69 +75,15 @@ class TasselloSettingTab extends PluginSettingTab {
       }
     }
 
-    containerEl.createEl("h3", { text: "发布库" });
-    new Setting(containerEl)
-      .setName("Publication base path")
-      .setDesc("插件只维护这个 Base 文件；发布状态写回各篇 Markdown 的 frontmatter。")
-      .addText((text) => {
-        text
-          .setValue(this.plugin.settings.publicationBasePath)
-          .onChange(async (value) => {
-            this.plugin.settings.publicationBasePath = value;
-            this.plugin.ledger.updateSettings({
-              basePath: value,
-              autoCreate: this.plugin.settings.publicationAutoCreate,
-              includeFailReason: this.plugin.settings.publicationIncludeFailReason,
-            });
-            await this.plugin.saveSettings();
-          });
-      });
-    new Setting(containerEl)
-      .setName("自动创建发布库")
-      .setDesc("路径不存在时创建默认 Tassello Publisher.base。")
-      .addToggle((toggle) => {
-        toggle
-          .setValue(this.plugin.settings.publicationAutoCreate)
-          .onChange(async (value) => {
-            this.plugin.settings.publicationAutoCreate = value;
-            this.plugin.ledger.updateSettings({
-              basePath: this.plugin.settings.publicationBasePath,
-              autoCreate: value,
-              includeFailReason: this.plugin.settings.publicationIncludeFailReason,
-            });
-            await this.plugin.saveSettings();
-          });
-      });
-    new Setting(containerEl)
-      .setName("保存失败原因")
-      .setDesc("把平台失败原因写入对应笔记的发布属性。")
-      .addToggle((toggle) => {
-        toggle
-          .setValue(this.plugin.settings.publicationIncludeFailReason)
-          .onChange(async (value) => {
-            this.plugin.settings.publicationIncludeFailReason = value;
-            this.plugin.ledger.updateSettings({
-              basePath: this.plugin.settings.publicationBasePath,
-              autoCreate: this.plugin.settings.publicationAutoCreate,
-              includeFailReason: value,
-            });
-            await this.plugin.saveSettings();
-          });
-      });
-    new Setting(containerEl)
-      .setName("打开发布库")
-      .setDesc("创建或刷新默认 Base，然后在主工作区打开。")
-      .addButton((button) => {
-        button.setButtonText("打开").onClick(() => {
-          void this.plugin.services.openPublicationBase().catch((error) => {
-            new Notice(error instanceof Error ? error.message : String(error));
-          });
-        });
-      });
-
     containerEl.createEl("h3", { text: "安全" });
     containerEl.createEl("p", {
-      text: "插件只读取当前 Vault 文件和本机 Chrome 的 DevToolsActivePort；发布始终停在人工确认，不会自动点击最终发布。",
+      text: "插件直接编辑当前 Vault 的 Markdown；发布任务与账号状态由本机后端统一管理，扩展不持有平台密码。",
+      cls: "setting-item-description",
+    });
+
+    containerEl.createEl("h3", { text: "附件" });
+    containerEl.createEl("p", {
+      text: "插件沿用 Obsidian 的「文件与链接 → 新附件的默认位置」，不覆盖其中设置的 files/ 等目录。",
       cls: "setting-item-description",
     });
   }
@@ -175,62 +91,39 @@ class TasselloSettingTab extends PluginSettingTab {
 
 export class TasselloPublisherPlugin extends Plugin {
   override settings: {
-    chromeChannel: ChromeChannel;
+    apiOrigin: string;
     defaultPlatforms: Partial<Record<import("./core/types").ContentType, PlatformId[]>>;
-    publicationBasePath: string;
-    publicationAutoCreate: boolean;
-    publicationIncludeFailReason: boolean;
   } = {
-    chromeChannel: "stable",
+    apiOrigin: "http://127.0.0.1:4311",
     defaultPlatforms: {
       article: ["zhihu"],
       image: ["xhs", "weibo"],
     },
-    publicationBasePath: DEFAULT_PUBLICATION_BASE_PATH,
-    publicationAutoCreate: true,
-    publicationIncludeFailReason: true,
   };
 
   private selectedPlatforms: PlatformId[] = ["weibo", "zhihu", "xhs"];
-  private browser!: DefaultChromeManager;
-  private store!: TaskStore;
-  private engine!: TaskEngine;
-  ledger!: PublicationLedger;
-  private dataTasks: PublishTask[] = [];
+  private api!: BackendApi;
+  private engine!: RemoteTaskEngine;
   private saveTimer: number | null = null;
   services!: PluginServices;
 
   override async onload(): Promise<void> {
     const data = await this.loadData() as TasselloData | null;
     this.settings = {
-      chromeChannel: data?.settings?.chromeChannel ?? "stable",
+      apiOrigin: data?.settings?.apiOrigin ?? "http://127.0.0.1:4311",
       defaultPlatforms: data?.settings?.defaultPlatforms ?? {
         article: ["zhihu"],
         image: ["xhs", "weibo"],
       },
-      publicationBasePath: data?.settings?.publicationBasePath ?? DEFAULT_PUBLICATION_BASE_PATH,
-      publicationAutoCreate: data?.settings?.publicationAutoCreate ?? true,
-      publicationIncludeFailReason: data?.settings?.publicationIncludeFailReason ?? true,
     };
     this.selectedPlatforms = data?.selectedPlatforms ?? ["weibo", "zhihu", "xhs"];
-    this.dataTasks = data?.tasks ?? [];
 
-    this.browser = new DefaultChromeManager(this.settings.chromeChannel);
-    this.store = new TaskStore(async (tasks) => {
-      this.dataTasks = tasks;
-      await this.scheduleSave();
-    });
-    this.store.load(this.dataTasks);
-    this.ledger = new PublicationLedger(this.app, {
-      basePath: this.settings.publicationBasePath,
-      autoCreate: this.settings.publicationAutoCreate,
-      includeFailReason: this.settings.publicationIncludeFailReason,
-    });
-    this.engine = new TaskEngine(this.app, this.browser, this.store, this.ledger);
+    this.api = new BackendApi(this.settings.apiOrigin);
+    this.engine = new RemoteTaskEngine(this.api);
 
     this.services = {
       app: this.app,
-      browser: this.browser,
+      api: this.api,
       engine: this.engine,
       getSelectedPlatforms: () => [...this.selectedPlatforms],
       getDefaultPlatforms: (type) => this.settings.defaultPlatforms[type] ?? [],
@@ -243,10 +136,6 @@ export class TasselloPublisherPlugin extends Plugin {
         await this.scheduleSave();
       },
       saveData: () => this.saveSettings(),
-      openPublicationBase: async () => {
-        const file = await this.ledger.ensureBase();
-        if (file) await this.app.workspace.getLeaf(false).openFile(file);
-      },
       publishCurrentFile: async () => {
         const view = this.getActivePublisherView();
         if (!view) {
@@ -266,43 +155,15 @@ export class TasselloPublisherPlugin extends Plugin {
     this.addRibbonIcon("send", "Tassello Publisher", () => void this.activateView());
     this.addCommand({ id: "open-publisher", name: "Open publisher", callback: () => void this.activateView() });
     this.addCommand({ id: "publish-current-note", name: "Publish current note", callback: () => void this.services.publishCurrentFile() });
-    this.addCommand({ id: "open-publication-base", name: "Open publication base", callback: () => void this.services.openPublicationBase() });
-    this.addCommand({
-      id: "connect-default-chrome",
-      name: "Connect default Chrome",
-      callback: () => {
-        void this.browser.connect().catch((error) => {
-          new Notice(error instanceof Error ? error.message : String(error));
-        });
-      },
-    });
-    this.addCommand({
-      id: "disconnect-default-chrome",
-      name: "Disconnect default Chrome",
-      callback: () => this.browser.disconnect(),
-    });
-    this.addSettingTab(new TasselloSettingTab(this.app, this, this.browser));
+    this.addSettingTab(new TasselloSettingTab(this.app, this));
 
     this.app.workspace.onLayoutReady(() => {
-      // 启动即自动连接默认 Chrome（approval 模式：Chrome 弹一次授权框，允许后整会话有效）
-      void this.browser.connect().catch(() => {
-        // 静默失败：状态条保持 disconnected + detail，用户可手动重连
-      });
       void this.activateView(false);
-      void (async () => {
-        await this.engine.markInterruptedOnLoad();
-        await this.initializePublicationLedger();
-      })();
     });
-
-    this.registerEvent(this.app.vault.on("rename", (file, oldPath) => {
-      if (file instanceof TFile) void this.engine.renamePath(oldPath, file.path);
-      this.followPublicationBaseRename(file, oldPath);
-    }));
   }
 
   override onunload(): void {
-    void this.engine.markInterruptedOnUnload();
+    this.engine.dispose();
   }
 
   private getActivePublisherView(): PublisherView | null {
@@ -317,40 +178,10 @@ export class TasselloPublisherPlugin extends Plugin {
     if (focus) this.app.workspace.revealLeaf(leaf);
   }
 
-  private followPublicationBaseRename(file: TAbstractFile, oldPath: string): void {
-    const previousPath = normalizePath(this.settings.publicationBasePath);
-    const old = normalizePath(oldPath);
-    let nextPath: string | null = null;
-    if (old === previousPath) {
-      nextPath = file.path;
-    } else if (previousPath.startsWith(`${old}/`)) {
-      nextPath = `${file.path}/${previousPath.slice(old.length + 1)}`;
-    }
-    if (!nextPath || normalizePath(nextPath) === previousPath) return;
-
-    this.settings.publicationBasePath = normalizePath(nextPath);
-    this.ledger.updateSettings({
-      basePath: this.settings.publicationBasePath,
-      autoCreate: this.settings.publicationAutoCreate,
-      includeFailReason: this.settings.publicationIncludeFailReason,
-    });
-    void this.saveSettings();
-  }
-
-  private async initializePublicationLedger(): Promise<void> {
-    try {
-      await this.ledger.ensureBase();
-    } catch (error) {
-      new Notice(error instanceof Error ? error.message : String(error));
-    }
-  }
-
   async saveSettings(): Promise<void> {
-    const tasks = this.dataTasks;
     await this.saveData({
       settings: this.settings,
       selectedPlatforms: this.selectedPlatforms,
-      tasks,
     });
   }
 

@@ -8,6 +8,9 @@ on:
     tags:
       - "v*"
 
+permissions:
+  contents: write
+
 jobs:
   desktop:
     strategy:
@@ -44,3 +47,39 @@ jobs:
           name: tassello-${{ matrix.name }}
           path: ${{ matrix.artifact }}
           if-no-files-found: error
+
+  extension:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: 安装依赖
+        run: bun install
+
+      - name: 构建并打包浏览器扩展
+        run: bun run package:extension
+
+      - name: 上传扩展产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: tassello-extension
+          path: release/*.zip
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [desktop, extension]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release
+          merge-multiple: true
+
+      - name: 发布下载产物
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/**/*
+          generate_release_notes: true

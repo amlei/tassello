@@ -93,6 +93,7 @@ export async function createSourceDraft(
   );
 
   return {
+    id: frontmatter.id ?? "",
     filePath: file.path,
     contentDigest,
     title,

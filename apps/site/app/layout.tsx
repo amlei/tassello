@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { ThemeScript } from "@tassello/site-ui/theme";
-import { DesktopChrome } from "../../../apps/web/components/desktop-chrome";
+import { DesktopChrome } from "../../../apps/web/adapters/desktop-chrome";
 import "./globals.css";
 
 export const metadata: Metadata = {

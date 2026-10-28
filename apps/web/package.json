@@ -1,6 +1,6 @@
 {
   "name": "@tassello/web",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -11,15 +11,8 @@
   "dependencies": {
     "@heroui/react": "^3.2.6",
     "@heroui/styles": "^3.2.6",
-    "@libsql/client": "^0.18.0",
     "@next/env": "16.3.5",
-    "@prisma/adapter-libsql": "^7.10.0",
-    "@prisma/client": "^7.10.0",
-    "@prisma/client-runtime-utils": "7.10.0",
-    "@prisma/driver-adapter-utils": "7.10.0",
     "@swc/helpers": "0.5.23",
-    "@tassello/db": "workspace:*",
-    "@tassello/server": "workspace:*",
     "@tassello/shared": "workspace:*",
     "@tassello/site-ui": "workspace:*",
     "@tassello/ui": "workspace:*",
@@ -29,7 +22,6 @@
     "@tiptap/pm": "^3.31.3",
     "@tiptap/react": "^3.31.3",
     "@tiptap/starter-kit": "^3.31.3",
-    "async-mutex": "^0.5.0",
     "lucide-react": "^1.48.0",
     "next": "16.3.5",
     "react": "19.2.8",

@@ -1,5 +1,5 @@
 /* 数据库路径解析：TASSELLO_DATA_DIR 优先；Windows 用 %APPDATA%\tassello，
- * macOS/Linux 沿用 ~/.local/share/tassello（与 docs/design.md 一致）。
+ * macOS/Linux 沿用 ~/.local/share/tassello（与 docs/architecture.md 一致）。
  * prisma.config.ts 里有同一套逻辑的镜像，改动时两处必须同步。 */
 import os from "node:os";
 import path from "node:path";

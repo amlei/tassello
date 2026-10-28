@@ -8,11 +8,16 @@
         {
           "path": "right-panel.html",
           "createdAt": "2026-10-03T05:06:12.732Z",
-          "status": "needs-review"
+          "status": "needs-review",
+          "subtitle": "预览内发布、自动扩展连接与紧凑状态",
+          "viewport": {
+            "width": 1920,
+            "height": 1080
+          }
         }
       ]
     }
   },
   "createdAt": "2026-10-03T05:06:12.733Z",
-  "updatedAt": "2026-10-05T05:59:31.005Z"
+  "updatedAt": "2026-10-26T23:46:37.324Z"
 }

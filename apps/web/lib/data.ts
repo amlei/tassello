@@ -1,13 +1,14 @@
-/* data —— Server Component 专用数据装载：直接走服务层，不经 HTTP */
-import { bootstrap, getPost, getSettings, listPlatforms, listPosts, listTasks } from "@tassello/server";
-import type { AppSettings, PlatformDTO, PostDTO, TaskDTO } from "@tassello/shared";
+/* data —— Server Component 通过本机 Elysia HTTP API 装载数据。 */
+import type { ApiResult, AppSettings, PlatformDTO, PostDTO, TaskDTO } from "@tassello/shared";
 
-let ready = false;
-function boot(): void {
-  if (!ready) {
-    bootstrap();
-    ready = true;
-  }
+const API_BASE = process.env.TASSELLO_API_URL ??
+  `http://127.0.0.1:${process.env.TASSELLO_API_PORT ?? "4311"}`;
+
+async function apiGet<T>(pathname: string): Promise<T> {
+  const response = await fetch(`${API_BASE}/api/v1${pathname}`, { cache: "no-store" });
+  const payload = await response.json() as ApiResult<T>;
+  if (!payload.ok) throw new Error(payload.error);
+  return payload.data;
 }
 
 /* 库列表给客户端的数据：正文 plain 保留（摘要用），bodyHtml 清空（体积大头） */
@@ -21,8 +22,11 @@ export async function loadLibraryData(type: string): Promise<{
   tasks: TaskDTO[];
   platforms: PlatformDTO[];
 }> {
-  boot();
-  const [all, tasks, platforms] = await Promise.all([listPosts({ scope: "all", query: "", sort: "recent" }), listTasks(), listPlatforms()]);
+  const [all, tasks, platforms] = await Promise.all([
+    apiGet<PostDTO[]>("/posts?scope=all&sort=recent"),
+    apiGet<TaskDTO[]>("/tasks"),
+    apiGet<PlatformDTO[]>("/platforms"),
+  ]);
   const counts: Record<string, number> = {};
   for (const p of all) counts[p.type] = (counts[p.type] ?? 0) + 1;
   const posts = all.filter((p) => p.type === type).map(slimForLibrary);
@@ -35,8 +39,11 @@ export async function loadQueueData(): Promise<{
   platforms: PlatformDTO[];
   counts: Record<string, number>;
 }> {
-  boot();
-  const [tasks, all, platforms] = await Promise.all([listTasks(), listPosts({ scope: "all", query: "", sort: "recent" }), listPlatforms()]);
+  const [tasks, all, platforms] = await Promise.all([
+    apiGet<TaskDTO[]>("/tasks"),
+    apiGet<PostDTO[]>("/posts?scope=all&sort=recent"),
+    apiGet<PlatformDTO[]>("/platforms"),
+  ]);
   const byId = new Map(all.map((p) => [p.id, p]));
   const postMins = tasks.map((t) => {
     const p = byId.get(t.postId);
@@ -52,21 +59,24 @@ export async function loadEditorData(id: string): Promise<{
   platforms: PlatformDTO[];
   settings: AppSettings;
   counts: Record<string, number>;
+  tasks: TaskDTO[];
 }> {
-  boot();
-  const [post, platforms, settings, all] = await Promise.all([
-    getPost(id),
-    listPlatforms(),
-    getSettings(),
-    listPosts({ scope: "all", query: "", sort: "recent" }),
+  const [post, platforms, settings, all, tasks] = await Promise.all([
+    apiGet<PostDTO>(`/posts/${encodeURIComponent(id)}`).catch(() => null),
+    apiGet<PlatformDTO[]>("/platforms"),
+    apiGet<AppSettings>("/settings"),
+    apiGet<PostDTO[]>("/posts?scope=all&sort=recent"),
+    apiGet<TaskDTO[]>("/tasks"),
   ]);
   const counts: Record<string, number> = {};
   for (const p of all) counts[p.type] = (counts[p.type] ?? 0) + 1;
-  return { post, platforms, settings, counts };
+  return { post, platforms, settings, counts, tasks };
 }
 
 export async function loadPlatformsWithSettings(): Promise<{ platforms: PlatformDTO[]; settings: AppSettings }> {
-  boot();
-  const [platforms, settings] = await Promise.all([listPlatforms(), getSettings()]);
+  const [platforms, settings] = await Promise.all([
+    apiGet<PlatformDTO[]>("/platforms"),
+    apiGet<AppSettings>("/settings"),
+  ]);
   return { platforms, settings };
 }

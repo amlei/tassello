@@ -1,23 +1,25 @@
 {
   "name": "@tassello/desktop",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "type": "module",
   "private": true,
   "main": "dist/main.js",
   "scripts": {
     "build": "bun build src/main.ts src/preload.ts --outdir dist --target node --external electron",
-    "desktop": "bun run build && electron dist/main.js",
-    "dist:mac": "cd ../web && bun run build && cd ../desktop && bun run build && bun scripts/prepare-web-resources.mjs && bun scripts/prepare-prisma-cli.mjs && electron-builder --mac --arm64 && bun scripts/verify-packaged.mjs --target mac-arm64",
-    "dist:win": "cd ../web && bun run build && cd ../desktop && bun run build && bun scripts/prepare-web-resources.mjs && bun scripts/prepare-prisma-cli.mjs && electron-builder --win --x64 && bun scripts/verify-packaged.mjs --target win-unpacked",
-    "dist:mac:dir": "cd ../web && bun run build && cd ../desktop && bun run build && bun scripts/prepare-web-resources.mjs && bun scripts/prepare-prisma-cli.mjs && electron-builder --mac --arm64 --dir && bun scripts/verify-packaged.mjs --target mac-arm64",
-    "dist:win:dir": "cd ../web && bun run build && cd ../desktop && bun run build && bun scripts/prepare-web-resources.mjs && bun scripts/prepare-prisma-cli.mjs && electron-builder --win --x64 --dir && bun scripts/verify-packaged.mjs --target win-unpacked",
+    "build:api": "cd ../api && bun run build",
+    "build:native": "cd ../native-host && bun run build",
+    "desktop": "bun run build:native && bun run build && electron dist/main.js",
+    "dist:mac": "bun run build:api && bun run build:native && cd ../web && bun run build && cd ../desktop && bun run build && bun scripts/prepare-web-resources.mjs && electron-builder --mac --arm64 && bun scripts/verify-packaged.mjs --target mac-arm64",
+    "dist:win": "bun run build:api && bun run build:native && cd ../web && bun run build && cd ../desktop && bun run build && bun scripts/prepare-web-resources.mjs && electron-builder --win --x64 && bun scripts/verify-packaged.mjs --target win-unpacked",
+    "dist:mac:dir": "bun run build:api && bun run build:native && cd ../web && bun run build && cd ../desktop && bun run build && bun scripts/prepare-web-resources.mjs && electron-builder --mac --arm64 --dir && bun scripts/verify-packaged.mjs --target mac-arm64",
+    "dist:win:dir": "bun run build:api && bun run build:native && cd ../web && bun run build && cd ../desktop && bun run build && bun scripts/prepare-web-resources.mjs && electron-builder --win --x64 --dir && bun scripts/verify-packaged.mjs --target win-unpacked",
     "verify:packaged": "bun scripts/verify-packaged.mjs"
   },
   "build": {
     "appId": "com.jiuyang.onda",
     "productName": "Tassello",
     "copyright": "Copyright © 九漾 Onda",
-    "afterPack": "scripts/pack-prisma-cli.cjs",
+    "electronDist": "node_modules/electron/dist",
     "directories": {
       "output": "../../release",
       "buildResources": "build"
@@ -38,6 +40,14 @@
       {
         "from": "../web/.next/static",
         "to": "web/apps/web/.next/static"
+      },
+      {
+        "from": "../api/dist",
+        "to": "api"
+      },
+      {
+        "from": "../native-host/dist",
+        "to": "native-host"
       }
     ],
     "mac": {
@@ -66,6 +76,10 @@
       "allowToChangeInstallationDirectory": true,
       "artifactName": "Tassello-Setup-${version}-x64.${ext}"
     }
+  },
+  "dependencies": {
+    "@tassello/native-host": "workspace:*",
+    "@tassello/shared": "workspace:*"
   },
   "devDependencies": {
     "electron": "^39.2.0",

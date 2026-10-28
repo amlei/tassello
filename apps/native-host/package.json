@@ -1,0 +1,19 @@
+{
+  "name": "@tassello/native-host",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./register": "./src/register.ts"
+  },
+  "scripts": {
+    "build": "bun run scripts/build.ts",
+    "register": "bun run scripts/register.ts"
+  },
+  "dependencies": {
+    "@tassello/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.2.0"
+  }
+}

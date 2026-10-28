@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>九漾 Onda 浏览器扩展 · Popup 原型</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='4' fill='%232383E2'/%3E%3C/svg%3E">
+<script>
+  (function () {
+    var saved = localStorage.getItem("tassello-extension-theme");
+    var pref = saved === "light" || saved === "dark" ? saved : "system";
+    document.documentElement.dataset.theme = pref;
+    document.documentElement.style.colorScheme = pref === "system" ? "light dark" : pref;
+  })();
+</script>
+<style>
+  :root {
+    color-scheme: light;
+    --ink: #37352f;
+    --ink2: #787672;
+    --ink3: #aba9a4;
+    --paper: #f7f7f5;
+    --card: #fff;
+    --line: #e7e5e0;
+    --hover: #f2f1ee;
+    --accent: #2383e2;
+    --accent-tint: #e9f3fb;
+    --green: #07b56f;
+    --green-tint: #eaf8f1;
+    --warn: #9a6700;
+    --warn-tint: #fff8e6;
+    --error: #c81e4e;
+    --error-tint: #fdf1f4;
+    --shadow: 0 18px 60px rgba(15, 15, 15, .18);
+    --font: -apple-system, "SF Pro Text", "PingFang SC", "Noto Sans SC", sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  [data-theme="dark"] {
+    color-scheme: dark;
+    --ink: #e6e5e3;
+    --ink2: #9b9a97;
+    --ink3: #6f6e69;
+    --paper: #171717;
+    --card: #232323;
+    --line: #343434;
+    --hover: #2b2b2b;
+    --accent: #4a9ee8;
+    --accent-tint: #20304a;
+    --green: #37c98c;
+    --green-tint: rgba(55, 201, 140, .12);
+    --warn: #d9a53f;
+    --warn-tint: rgba(217, 165, 63, .12);
+    --error: #e5484d;
+    --error-tint: rgba(229, 72, 77, .12);
+    --shadow: 0 18px 60px rgba(0, 0, 0, .5);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root[data-theme="system"] {
+      color-scheme: dark;
+      --ink: #e6e5e3;
+      --ink2: #9b9a97;
+      --ink3: #6f6e69;
+      --paper: #171717;
+      --card: #232323;
+      --line: #343434;
+      --hover: #2b2b2b;
+      --accent: #4a9ee8;
+      --accent-tint: #20304a;
+      --green: #37c98c;
+      --green-tint: rgba(55, 201, 140, .12);
+      --warn: #d9a53f;
+      --warn-tint: rgba(217, 165, 63, .12);
+      --error: #e5484d;
+      --error-tint: rgba(229, 72, 77, .12);
+      --shadow: 0 18px 60px rgba(0, 0, 0, .5);
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    overflow: hidden;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--font);
+    -webkit-font-smoothing: antialiased;
+  }
+  button, input { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  .stage {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    padding: 28px;
+  }
+  .prototype-bar {
+    width: min(720px, 100%);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--card);
+    box-shadow: 0 1px 2px rgba(15, 15, 15, .04);
+  }
+  .prototype-bar strong {
+    margin-right: auto;
+    padding-left: 5px;
+    font-size: 12px;
+    color: var(--ink2);
+    letter-spacing: -.1px;
+  }
+  .seg {
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    padding: 7px 10px;
+    color: var(--ink2);
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .seg:hover { background: var(--hover); color: var(--ink); }
+  .seg.active { background: var(--accent-tint); color: var(--accent); }
+  .theme-toggle {
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--card);
+    padding: 7px 11px;
+    font-size: 11.5px;
+    font-weight: 600;
+  }
+  .browser {
+    width: min(620px, 100%);
+    min-height: 600px;
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    overflow: hidden;
+    background: var(--paper);
+    box-shadow: var(--shadow);
+  }
+  .browser-bar {
+    height: 48px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 14px;
+    border-bottom: 1px solid var(--line);
+    background: var(--card);
+  }
+  .traffic { display: flex; gap: 6px; }
+  .traffic i { width: 10px; height: 10px; border-radius: 50%; display: block; }
+  .traffic i:nth-child(1) { background: #ff5f57; }
+  .traffic i:nth-child(2) { background: #febc2e; }
+  .traffic i:nth-child(3) { background: #28c840; }
+  .address {
+    flex: 1;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--paper);
+    color: var(--ink2);
+    font-family: var(--mono);
+    font-size: 10.5px;
+  }
+  .extension-slot {
+    width: 28px;
+    height: 28px;
+    object-fit: contain;
+  }
+  .popup-wrap {
+    height: 552px;
+    display: flex;
+    justify-content: flex-end;
+    align-items: flex-start;
+    padding: 18px;
+    background: color-mix(in srgb, var(--paper) 90%, var(--hover));
+  }
+  .popup {
+    width: 360px;
+    min-height: 400px;
+    display: flex;
+    flex-direction: column;
+    padding: 18px;
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    background: var(--card);
+    box-shadow: 0 16px 42px rgba(15, 15, 15, .2);
+  }
+  .popup-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding-bottom: 16px;
+  }
+  .mark {
+    width: 34px;
+    height: 34px;
+    flex: 0 0 auto;
+    object-fit: contain;
+  }
+  .popup-title { flex: 1; min-width: 0; }
+  .popup-title h1 { margin: 0; font-size: 15px; letter-spacing: -.25px; }
+  .popup-title p { margin: 3px 0 0; color: var(--ink2); font-family: var(--mono); font-size: 9.5px; }
+  .icon-btn {
+    width: 29px;
+    height: 29px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--card);
+    color: var(--ink2);
+    font-size: 14px;
+  }
+  .icon-btn:hover { background: var(--hover); color: var(--ink); }
+  .popup-head { position: relative; }
+  .popup-menu {
+    position: absolute;
+    top: 42px;
+    right: 0;
+    z-index: 5;
+    width: 190px;
+    padding: 5px;
+    border: 1px solid var(--line);
+    border-radius: 11px;
+    background: var(--card);
+    box-shadow: var(--shadow);
+  }
+  .popup-menu button {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    min-height: 34px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--ink);
+    text-align: left;
+    font-size: 11.5px;
+  }
+  .popup-menu button:hover { background: var(--hover); }
+  .popup-menu button.danger { color: var(--error); }
+  .status-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin-top: 16px;
+    padding: 12px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--hover);
+  }
+  .status-card.ok { border-color: color-mix(in srgb, var(--green) 30%, var(--line)); background: var(--green-tint); }
+  .status-card.warn { border-color: color-mix(in srgb, var(--warn) 35%, var(--line)); background: var(--warn-tint); }
+  .status-card.bad { border-color: color-mix(in srgb, var(--error) 35%, var(--line)); background: var(--error-tint); }
+  .dot {
+    width: 8px;
+    height: 8px;
+    flex: 0 0 auto;
+    margin-top: 5px;
+    border-radius: 50%;
+    background: var(--ink3);
+  }
+  .ok .dot { background: var(--green); }
+  .warn .dot { background: var(--warn); }
+  .bad .dot { background: var(--error); }
+  .status-copy { min-width: 0; }
+  .status-copy b { display: block; font-size: 12.5px; letter-spacing: -.1px; }
+  .status-copy span { display: block; margin-top: 3px; color: var(--ink2); font-size: 11px; line-height: 1.55; }
+  .section { margin-top: 18px; }
+  .section-label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    color: var(--ink3);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+  }
+  .meta-card {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .meta-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 36px;
+    padding: 0 11px;
+    border-top: 1px solid var(--line);
+    font-size: 11.5px;
+  }
+  .meta-row:first-child { border-top: 0; }
+  .meta-row span { color: var(--ink2); }
+  .meta-row b { margin-left: auto; max-width: 210px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono); font-size: 10.5px; font-weight: 600; }
+  .task-card {
+    padding: 12px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--card);
+  }
+  .task-top { display: flex; align-items: center; gap: 8px; }
+  .task-mark {
+    width: 22px;
+    height: 22px;
+    display: grid;
+    place-items: center;
+    border-radius: 7px;
+    background: #d52088;
+    color: #fff;
+    font-size: 10px;
+    font-weight: 800;
+  }
+  .task-top b { font-size: 12px; }
+  .task-state {
+    margin-left: auto;
+    padding: 2px 7px;
+    border-radius: 999px;
+    background: var(--accent-tint);
+    color: var(--accent);
+    font-family: var(--mono);
+    font-size: 9.5px;
+    font-weight: 700;
+  }
+  .task-copy { margin: 7px 0 0; color: var(--ink2); font-size: 11px; line-height: 1.5; }
+  .progress { height: 3px; margin-top: 10px; overflow: hidden; border-radius: 99px; background: var(--hover); }
+  .progress i { display: block; width: 68%; height: 100%; border-radius: inherit; background: var(--accent); }
+  .popup-foot { margin-top: auto; padding-top: 18px; }
+  .primary, .secondary {
+    width: 100%;
+    min-height: 40px;
+    border-radius: 11px;
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .primary { border: 0; background: var(--accent); color: #fff; }
+  .primary:hover { filter: brightness(1.05); }
+  .primary:disabled { opacity: .45; cursor: default; filter: none; }
+  .secondary { margin-top: 8px; border: 1px solid var(--line); background: var(--card); color: var(--ink); }
+  .secondary:hover { background: var(--hover); }
+  .toast {
+    margin-top: 12px;
+    padding: 9px 10px;
+    border-radius: 9px;
+    background: var(--green-tint);
+    color: var(--green);
+    font-size: 11px;
+    text-align: center;
+  }
+  .hidden { display: none !important; }
+  @media (max-width: 700px) {
+    .stage { padding: 12px; justify-content: flex-start; }
+    .prototype-bar { flex-wrap: wrap; }
+    .prototype-bar strong { width: 100%; }
+    .popup-wrap { justify-content: center; }
+  }
+</style>
+</head>
+<body>
+<main class="stage">
+  <div class="prototype-bar" aria-label="原型状态切换">
+    <strong>浏览器扩展 Popup · 连接状态</strong>
+    <button class="seg active" data-state="connected">已连接</button>
+    <button class="seg" data-state="waiting">等待应用</button>
+    <button class="seg" data-state="offline">应用离线</button>
+    <button class="seg" data-state="error">连接失败</button>
+    <button class="theme-toggle" id="theme-toggle">深色</button>
+  </div>
+
+  <section class="browser" aria-label="浏览器扩展 popup 上下文">
+    <header class="browser-bar">
+      <span class="traffic" aria-hidden="true"><i></i><i></i><i></i></span>
+      <span class="address">localhost:3000/queue</span>
+      <img class="extension-slot" src="assets/logo.svg" alt="" aria-hidden="true">
+    </header>
+
+    <div class="popup-wrap">
+      <div data-screen-label="扩展 Popup" class="popup">
+        <header class="popup-head">
+          <img class="mark" src="assets/logo.svg" alt="" aria-hidden="true">
+          <span class="popup-title">
+            <h1>九漾 Onda</h1>
+            <p>本机发布通道</p>
+          </span>
+          <button class="icon-btn" data-role="more" aria-label="更多操作" aria-expanded="false">···</button>
+          <div class="popup-menu hidden" data-role="menu" role="menu" aria-label="更多操作">
+            <button data-role="menu-settings" role="menuitem">打开 Onda 设置</button>
+            <button data-role="menu-reconnect" role="menuitem">重新检查连接</button>
+          </div>
+        </header>
+
+        <section class="status-card ok" data-role="connected">
+          <span class="dot"></span>
+          <span class="status-copy">
+            <b>浏览器扩展已连接</b>
+            <span>本机宿主已验证扩展身份，可以直接接收发布任务。</span>
+          </span>
+        </section>
+
+        <section class="status-card warn hidden" data-role="waiting">
+          <span class="dot"></span>
+          <span class="status-copy">
+            <b>正在连接本机应用</b>
+            <span>保持 Onda 运行，连接会自动完成，不需要配对码。</span>
+          </span>
+        </section>
+
+        <section class="status-card warn hidden" data-role="offline">
+          <span class="dot"></span>
+          <span class="status-copy">
+            <b>本机应用未运行</b>
+            <span>打开 Onda 后会自动连接；扩展会持续重试。</span>
+          </span>
+        </section>
+
+        <section class="status-card bad hidden" data-role="error">
+          <span class="dot"></span>
+          <span class="status-copy">
+            <b>连接失败</b>
+            <span>请确认应用已安装完整，然后重新检查连接。</span>
+          </span>
+        </section>
+
+        <section class="section" data-role="connected">
+          <div class="section-label"><span>正在执行</span><span>01</span></div>
+          <div class="task-card">
+            <div class="task-top">
+              <span class="task-mark">红</span>
+              <b>小红书 · 白露之后的云</b>
+              <span class="task-state">68%</span>
+            </div>
+            <p class="task-copy">正在填充正文，完成后会停在平台页面等待成功回执。</p>
+            <div class="progress"><i></i></div>
+          </div>
+        </section>
+
+        <div class="popup-foot">
+          <button class="primary" data-role="open-app">打开发布队列</button>
+          <button class="secondary hidden" data-role="retry">重新检查连接</button>
+          <div class="toast hidden" data-role="toast">连接已恢复。</div>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+  var currentState = "connected";
+  var root = document.documentElement;
+  var themeButton = document.getElementById("theme-toggle");
+  var moreButton = document.querySelector('[data-role="more"]');
+  var menu = document.querySelector('[data-role="menu"]');
+  var themeMedia = window.matchMedia("(prefers-color-scheme: dark)");
+
+  function isDarkTheme(theme) {
+    return theme === "dark" || (theme === "system" && themeMedia.matches);
+  }
+
+  function updateThemeLabel(theme) {
+    themeButton.textContent = isDarkTheme(theme) ? "浅色" : "深色";
+  }
+
+  function applyTheme(theme, persist) {
+    root.dataset.theme = theme;
+    root.style.colorScheme = theme === "system" ? "light dark" : theme;
+    if (persist) localStorage.setItem("tassello-extension-theme", theme);
+    updateThemeLabel(theme);
+  }
+
+  themeButton.addEventListener("click", function () {
+    var current = root.dataset.theme || "system";
+    applyTheme(isDarkTheme(current) ? "light" : "dark", true);
+  });
+  themeMedia.addEventListener("change", function () {
+    updateThemeLabel(root.dataset.theme || "system");
+  });
+  applyTheme(root.dataset.theme || "system", false);
+
+  function visible(selector, show) {
+    document.querySelectorAll(selector).forEach(function (el) {
+      el.classList.toggle("hidden", !show);
+    });
+  }
+
+  function render(state) {
+    currentState = state;
+    document.querySelectorAll("[data-state]").forEach(function (button) {
+      button.classList.toggle("active", button.dataset.state === state);
+    });
+
+    visible('[data-role="connected"]', state === "connected");
+    visible('[data-role="waiting"]', state === "waiting");
+    visible('[data-role="offline"]', state === "offline");
+    visible('[data-role="error"]', state === "error");
+    visible('[data-role="open-app"]', true);
+    visible('[data-role="retry"]', state !== "connected");
+    visible('[data-role="toast"]', false);
+    document.querySelector('[data-role="open-app"]').textContent = state === "connected"
+      ? "打开发布队列"
+      : "打开 Onda";
+    menu.classList.add("hidden");
+    moreButton.setAttribute("aria-expanded", "false");
+  }
+
+  function appUrl(params) {
+    var url = new URL("../onda-explore/directions/mosaic/index.html", location.href);
+    Object.entries(params || {}).forEach(function ([key, value]) { url.searchParams.set(key, value); });
+    return url.href;
+  }
+
+  function toggleMenu(force) {
+    var open = typeof force === "boolean" ? force : menu.classList.contains("hidden");
+    menu.classList.toggle("hidden", !open);
+    moreButton.setAttribute("aria-expanded", String(open));
+  }
+
+  document.querySelectorAll("[data-state]").forEach(function (button) {
+    button.addEventListener("click", function () { render(button.dataset.state); });
+  });
+
+  function reconnect() {
+    render("waiting");
+    window.setTimeout(function () {
+      render("connected");
+      visible('[data-role="toast"]', true);
+    }, 1100);
+  }
+
+  document.querySelector('[data-role="retry"]').addEventListener("click", reconnect);
+
+  moreButton.addEventListener("click", function (event) {
+    event.stopPropagation();
+    toggleMenu();
+  });
+
+  document.addEventListener("click", function (event) {
+    if (!menu.contains(event.target) && event.target !== moreButton) toggleMenu(false);
+  });
+
+  document.querySelector('[data-role="open-app"]').addEventListener("click", function () {
+    window.open(appUrl({ view: "queue" }), "_blank", "noopener,noreferrer");
+  });
+
+  document.querySelector('[data-role="menu-settings"]').addEventListener("click", function () {
+    window.open(appUrl({ settings: "1" }), "_blank", "noopener,noreferrer");
+    toggleMenu(false);
+  });
+
+  document.querySelector('[data-role="menu-reconnect"]').addEventListener("click", function () {
+    reconnect();
+  });
+
+  render(currentState);
+</script>
+</body>
+</html>

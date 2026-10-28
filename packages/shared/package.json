@@ -1,5 +1,7 @@
 {
-  "devDependencies": {},
+  "devDependencies": {
+    "@types/bun": "^1.2.0"
+  },
   "name": "@tassello/shared",
   "type": "module",
   "private": true,

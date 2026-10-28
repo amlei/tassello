@@ -6,7 +6,7 @@
 <title>九漾 Onda · 中性工作台 · Mosaic</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='4' fill='%232383E2'/%3E%3C/svg%3E">
 <script>
-/* 主题防闪烁：body 渲染前按偏好落 data-theme，并常驻跟随系统（与 apps/web/components/theme.tsx 同源） */
+/* 主题防闪烁：body 渲染前按偏好落 data-theme，并常驻跟随系统（与主题适配器同源） */
 (function(){try{var K="onda-theme";var pref=function(){var v=null;try{v=localStorage.getItem(K);}catch(e){}return v==="light"||v==="dark"?v:"system";};var apply=function(){var p=pref();var d=p==="dark"||(p==="system"&&window.matchMedia("(prefers-color-scheme: dark)").matches);document.documentElement.dataset.theme=d?"dark":"light";};apply();window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change",function(){if(pref()==="system")apply();});}catch(e){}})();
 </script>
 <style>

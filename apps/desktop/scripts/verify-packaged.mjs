@@ -1,314 +1,246 @@
-/* 出包自检：对 electron-builder 的 *-unpacked / .app 产物实跑一次内置 web server，
- * 验证依赖展平后模块可解析、页面可渲染、（同平台时）数据库可用。
- * v0.1.0 的教训：文件拷没拷看不出来了，必须运行时验证。
+/* 对 electron-builder 产物做实跑自检：独立 API 二进制能启动、文件状态库
+ * 能在全新数据目录建立、Next standalone 能通过 rewrite 访问 API。
  *
- * 用法: bun scripts/verify-packaged.mjs --root ../../release [--target win-unpacked|mac-arm64]
- *   宿主平台与产物平台一致 → 完整校验（页面 SSR + /api/platforms 走 DB）
- *   平台不一致（如在 mac 上验 win 包）→ 结构校验（server 能起、静态页 200、
- *     Windows 原生绑定文件在位）；DB 链路留给同平台机器（CI windows runner）跑完整校验。
+ * 用法: bun scripts/verify-packaged.mjs --root ../../release [--target mac-arm64|win-unpacked]
+ * 同平台产物做完整握手；跨平台产物只检查二进制和 Web 资源结构。
  */
-import { spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { existsSync, mkdtempSync, readdirSync, statSync } from "node:fs";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const EXPECTED_TABLES = ["Post", "Asset", "PlatformAccount", "PlatformAssetUpload", "PublishTask", "PublishLog", "Setting"];
-
 const args = process.argv.slice(2);
-function argValue(flag) {
-  const i = args.indexOf(flag);
-  return i >= 0 ? args[i + 1] : undefined;
-}
-
-let child = null;
+const argValue = (flag) => {
+  const index = args.indexOf(flag);
+  return index >= 0 ? args[index + 1] : undefined;
+};
 
 const desktopDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const repoRoot = path.resolve(desktopDir, "..", "..");
 const rootDir = path.resolve(repoRoot, argValue("--root") ?? "release");
-
 const target = argValue("--target");
 const candidates = target
   ? [target]
   : ["win-unpacked", path.join("mac-arm64", "Tassello.app"), path.join("mac-arm64", "Tasselo.app")];
 
 let appRoot = null;
-for (const c of candidates) {
-  const p = path.join(rootDir, c);
-  if (existsSync(p)) {
-    appRoot = p;
+for (const candidate of candidates) {
+  const value = path.join(rootDir, candidate);
+  if (existsSync(value)) {
+    appRoot = value;
     break;
   }
 }
 if (!appRoot) fail(`在 ${rootDir} 下没找到打包产物（${candidates.join(", ")}）`);
+
 const webDir = findWebDir(appRoot);
 if (!webDir) fail(`${appRoot} 下没有 apps/web/server.js`);
-log(`产物: ${appRoot}`);
-log(`web:  ${webDir}`);
-
-const artifactPlatform = /win-unpacked/.test(appRoot) || existsSync(path.join(appRoot, "Tassello.exe"))
+const resourcesDir = findResourcesDir(appRoot);
+const artifactPlatform = /win-unpacked/i.test(appRoot) || existsSync(path.join(appRoot, "Tassello.exe"))
   ? "win32"
   : "darwin";
+const apiBinary = path.join(resourcesDir, "api", artifactPlatform === "win32" ? "tassello-api.exe" : "tassello-api");
+const nativeHostBinary = path.join(resourcesDir, "native-host", artifactPlatform === "win32" ? "onda-native-host.exe" : "onda-native-host");
 const fullCheck = artifactPlatform === process.platform;
-log(fullCheck ? "模式: 完整校验（页面 + DB）" : "模式: 结构校验（跨平台，不验 DB）");
 
-/* 全新临时数据目录：建表必须由产物自身的启动流程完成（首启空库自愈）。
- * v0.1.1 教训：这里原先预先 prisma db push 建好表，掩盖了"真实用户首启
- * no such table: PlatformAccount → web server 起不来"的致命回归。 */
+log(`产物: ${appRoot}`);
+log(`Web:  ${webDir}`);
+log(`API:  ${apiBinary}`);
+log(fullCheck ? "模式: 完整运行时校验" : "模式: 跨平台结构校验");
+
+for (const required of [
+  path.join(webDir, "server.js"),
+  path.join(webDir, ".next", "server"),
+  path.join(webDir, "node_modules", "next", "package.json"),
+]) {
+  if (!existsSync(required)) fail(`Web 产物缺文件: ${required}`);
+}
+if (!existsSync(apiBinary)) fail(`API 二进制缺文件: ${apiBinary}`);
+if (!existsSync(nativeHostBinary)) fail(`Native Messaging Host 缺文件: ${nativeHostBinary}`);
+if (process.platform !== "win32" && (statSync(apiBinary).mode & 0o111) === 0) {
+  fail(`API 二进制没有执行权限: ${apiBinary}`);
+}
+if (artifactPlatform !== "win32" && (statSync(nativeHostBinary).mode & 0o111) === 0) {
+  fail(`Native Messaging Host 没有执行权限: ${nativeHostBinary}`);
+}
+
+if (!fullCheck) {
+  log("结构校验通过（跨平台产物需在目标系统执行完整校验）");
+  process.exit(0);
+}
+
 const dataDir = mkdtempSync(path.join(os.tmpdir(), "tassello-verify-"));
-const dbFile = path.join(dataDir, "tassello.db");
-log(`数据目录: ${dataDir}（空目录，验证产物自建 schema）`);
+const apiPort = 4400 + Math.floor(Math.random() * 250);
+const webPort = 4700 + Math.floor(Math.random() * 250);
+const apiUrl = `http://127.0.0.1:${apiPort}`;
+const webUrl = `http://127.0.0.1:${webPort}`;
+const children = [];
+const output = [];
 
-const port = 4400 + Math.floor(Math.random() * 400);
-
-/* 平台标识用的 exe 存在性检查（win 产物必须含注入的原生绑定） */
-if (artifactPlatform === "win32") {
-  const nm = path.join(webDir, "node_modules");
-  for (const required of [
-    path.join(nm, "@libsql", "win32-x64-msvc"),
-    path.join(nm, "libsql"),
-    path.join(nm, "@swc", "helpers"),
-  ]) {
-    if (!existsSync(required)) fail(`win 产物缺依赖: ${required}`);
-  }
-  const bindingDir = path.join(nm, "@libsql", "win32-x64-msvc");
-  if (!hasNativeFile(bindingDir)) fail(`${bindingDir} 下没有 .node 原生文件`);
-  log("win 原生绑定在位");
+function start(command, commandArgs, cwd, env = {}) {
+  const child = spawn(command, commandArgs, {
+    cwd,
+    stdio: ["ignore", "pipe", "pipe"],
+    env: { ...process.env, ...env },
+  });
+  children.push(child);
+  child.stdout.on("data", (chunk) => output.push(chunk));
+  child.stderr.on("data", (chunk) => output.push(chunk));
+  child.on("exit", (code) => {
+    if (!finished && code !== 0) fail(`子进程提前退出（code=${code}）\n${tail()}`);
+  });
+  return child;
 }
-
-/* vendored prisma CLI 在位（首启建表走它，缺了就是 v0.1.1 式首启回归） */
-{
-  const cliEntry = path.join(webDir, "prisma-cli", "node_modules", "prisma", "build", "index.js");
-  const engineWasm = path.join(webDir, "prisma-cli", "node_modules", "prisma", "build", "schema_engine_bg.wasm");
-  const migrationsSql = path.join(webDir, "prisma-cli", "prisma", "migrations", "0001_init", "migration.sql");
-  for (const f of [cliEntry, engineWasm, migrationsSql]) {
-    if (!existsSync(f)) fail(`产物缺迁移组件: ${f}`);
-  }
-  log("vendored prisma CLI + 迁移文件在位");
-}
-
-/* 与生产完全一致：用产物内的 Electron 二进制以 ELECTRON_RUN_AS_NODE=1 跑 server.js */
-/* 与生产完全一致：用产物内的 Electron 二进制以 ELECTRON_RUN_AS_NODE=1 跑 server.js。
- * 跨平台验包（如在 mac 上验 win 产物）时宿主跑不了对方 exe：
- *   1. 优先系统 node（Next 编译产物与 Node 完全兼容，bun 反而不兼容部分 compiled CJS）；
- *   2. 没有 node 才退化为 bun，此时只验"进程存活 + 模块解析"。 */
-let prodExecutable = artifactPlatform === process.platform ? findProdExecutable(webDir) : null;
-let fallbackRuntime = null;
-if (!prodExecutable) {
-  fallbackRuntime = (await which("node")) ?? "bun";
-}
-const runCmd = prodExecutable ?? fallbackRuntime;
-const runArgs = [path.join(webDir, "server.js")];
-log(`运行时: ${runCmd}${prodExecutable ? " (ELECTRON_RUN_AS_NODE 产物内)" : "（退化运行时）"}`);
-
-child = spawn(runCmd, runArgs, {
-  cwd: webDir,
-  stdio: ["ignore", "pipe", "pipe"],
-  env: {
-    ...process.env,
-    NODE_ENV: "production",
-    HOSTNAME: "127.0.0.1",
-    PORT: String(port),
-    TASSELLO_DESKTOP: "1",
-    TASSELLO_DATA_DIR: dataDir,
-    ...(prodExecutable ? { ELECTRON_RUN_AS_NODE: "1" } : {}),
-  },
-});
-const outChunks = [];
-child.stdout.on("data", (d) => outChunks.push(d));
-child.stderr.on("data", (d) => outChunks.push(d));
-child.on("exit", (code) => {
-  if (!finished) fail(`server 提前退出（code=${code}）\n${tail()}`);
-});
 
 let finished = false;
 try {
-  if (fullCheck) {
-    await expectOk(`${url()}/api/platforms`, 40_000, (status, body) => {
-      if (status !== 200) return `HTTP ${status}`;
-      try {
-        const json = JSON.parse(body);
-        if (json.ok !== true || !Array.isArray(json.data)) return "响应不是 {ok:true,data:[..]} 握手格式";
-        return null;
-      } catch {
-        return "响应不是 JSON";
-      }
-    });
-    log("/api/platforms 握手通过（DB + libsql 原生绑定工作正常）");
-    await assertSchemaCreated();
+  log(`全新数据目录: ${dataDir}`);
+  start(apiBinary, [], path.dirname(apiBinary), {
+    TASSELLO_API_PORT: String(apiPort),
+    TASSELLO_DATA_DIR: dataDir,
+  });
+  await expectJson(`${apiUrl}/api/v1/health`, 40_000, (json) => json.ok === true && json.data?.ready === true);
+  log("API 健康检查通过");
 
-    await expectOk(`${url()}/library/article`, 20_000, (status, body) => {
-      if (status !== 200) return `HTTP ${status}`;
-      if (!body.includes("<html")) return "响应不是 HTML 页面";
-      return null;
-    });
-    log("/library/article SSR 通过");
-  } else {
-    await expectOk(`${url()}/`, 40_000, (status, body) => {
-      if (status !== 200) return `HTTP ${status}`;
-      if (!body.includes("<html")) return "响应不是 HTML 页面";
-      return null;
-    });
-    log("静态页渲染通过");
+  const nodeExecutable = findProdExecutable(webDir);
+  if (!nodeExecutable) fail("找不到可复用为 Node runtime 的 Electron 二进制");
+  start(nodeExecutable, [path.join(webDir, "server.js")], webDir, {
+    ELECTRON_RUN_AS_NODE: "1",
+    NODE_ENV: "production",
+    HOSTNAME: "127.0.0.1",
+    PORT: String(webPort),
+    TASSELLO_API_PORT: String(apiPort),
+    TASSELLO_DESKTOP: "1",
+  });
+
+  await expectJson(`${webUrl}/api/platforms`, 40_000, (json) => json.ok === true && Array.isArray(json.data));
+  log("Next rewrite → Elysia API 握手通过");
+  await expectHtml(`${webUrl}/library/article`, 20_000);
+  log("内容库页面 SSR 通过");
+
+  for (const relative of [
+    path.join("state", "identity.json"),
+    path.join("state", "accounts"),
+    path.join("state", "extensions"),
+    path.join("state", "tasks"),
+  ]) {
+    if (!existsSync(path.join(dataDir, relative))) fail(`全新数据目录缺少: ${relative}`);
   }
+  log("文件状态库由产物自建通过");
+
   finished = true;
   log("✅ 打包产物自检通过");
 } finally {
-  child.kill();
+  for (const child of children) {
+    if (child.exitCode === null) child.kill();
+  }
   process.exit(finished ? 0 : 1);
 }
 
-function url() {
-  return `http://127.0.0.1:${port}`;
-}
-
-function findProdExecutable(webDir) {
-  // mac: <bundle>/Contents/Resources/web/apps/web → bundle 在上 5 级
-  const macOsDir = path.resolve(webDir, "..", "..", "..", "..", "..", "Contents", "MacOS");
+function findResourcesDir(root) {
+  const candidates = [
+    path.join(root, "resources"),
+    path.join(root, "Contents", "Resources"),
+    path.join(root, "Tassello.app", "Contents", "Resources"),
+  ];
   try {
-    for (const e of readdirSync(macOsDir)) {
-      const p = path.join(macOsDir, e);
-      if (statSync(p).isFile() && statSync(p).mode & 0o111) return p;
+    for (const entry of readdirSync(root)) {
+      if (entry.endsWith(".app")) candidates.push(path.join(root, entry, "Contents", "Resources"));
     }
   } catch {
-    /* 非 mac 布局 */
+    // root 本身可能是资源目录。
   }
-  // win: <unpacked>/resources/web/apps/web → unpacked 在上 4 级
-  const winExe = path.resolve(webDir, "..", "..", "..", "..", "Tassello.exe");
-  if (existsSync(winExe)) return winExe;
-  return null;
+  return candidates.find((candidate) => existsSync(path.join(candidate, "api"))) ?? candidates[0];
 }
 
 function findWebDir(root) {
+  const resources = findResourcesDir(root);
   const candidates = [
-    path.join(root, "resources", "web", "apps", "web"),
-    path.join(root, "Contents", "Resources", "web", "apps", "web"),
-    // root 本身是平台目录（mac-arm64/win-unpacked 的上层或同级）
-    path.join(root, "Tassello.app", "Contents", "Resources", "web", "apps", "web"),
+    path.join(resources, "web", "apps", "web"),
+    path.join(resources, "web"),
   ];
-  // root 下平铺的 .app bundle（如 release/mac-arm64 本身作为 root）
+  return candidates.find((candidate) => existsSync(path.join(candidate, "server.js"))) ?? null;
+}
+
+function findProdExecutable(webDir) {
+  const macOsDir = path.resolve(webDir, "..", "..", "..", "..", "..", "Contents", "MacOS");
   try {
-    for (const e of readdirSync(root)) {
-      if (e.endsWith(".app")) candidates.push(path.join(root, e, "Contents", "Resources", "web", "apps", "web"));
+    for (const entry of readdirSync(macOsDir)) {
+      const candidate = path.join(macOsDir, entry);
+      if (statSync(candidate).isFile() && (statSync(candidate).mode & 0o111) !== 0) return candidate;
     }
   } catch {
-    /* root 不可读则跳过 */
+    // 非 mac 布局。
   }
-  return candidates.find((c) => existsSync(path.join(c, "server.js"))) ?? null;
+  const winExe = path.resolve(webDir, "..", "..", "..", "..", "Tassello.exe");
+  return existsSync(winExe) ? winExe : null;
 }
 
-/** v0.1.1 回归门禁：7 张业务表 + 官方迁移记录必须由产物自身首启建出（数据目录启动前是空目录）。
- * 断言在 packages/db 上下文跑探针（@libsql/client 只在那里的依赖闭包里） */
-async function assertSchemaCreated() {
-  if (!existsSync(dbFile)) fail(`产物首启后数据库文件不存在: ${dbFile}`);
-  const packagesDbDir = path.resolve(repoRoot, "packages", "db");
-  const probe = `
-const { createClient } = require("@libsql/client");
-(async () => {
-  const c = createClient({ url: "file:" + process.env.TASSELLO_VERIFY_DB });
-  const t = await c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'");
-  const m = await c.execute("SELECT migration_name FROM _prisma_migrations");
-  console.log(JSON.stringify({ tables: t.rows.map((r) => String(r.name)), migrations: m.rows.map((r) => String(r.migration_name)) }));
-  c.close();
-})().catch((e) => { console.error(String(e)); process.exit(1); });
-`;
-  const res = spawnSync(process.execPath, ["-e", probe], {
-    cwd: packagesDbDir,
-    encoding: "utf8",
-    env: { ...process.env, TASSELLO_VERIFY_DB: dbFile },
-  });
-  if (res.status !== 0) fail(`schema 断言探针失败: ${`${res.stdout ?? ""}${res.stderr ?? ""}`.trim()}`);
-  let data;
-  try {
-    data = JSON.parse(res.stdout);
-  } catch {
-    fail(`schema 断言探针输出异常: ${res.stdout.trim()}`);
-  }
-  const missing = EXPECTED_TABLES.filter((t) => !data.tables.includes(t));
-  if (missing.length > 0) {
-    fail(`产物首启未建全表，缺: ${missing.join(", ")}（现有: ${data.tables.join(", ") || "无"}）`);
-  }
-  if (data.migrations.length < 1) fail(`官方迁移记录为空（_prisma_migrations 无记录），说明迁移未真正执行`);
-  log(`数据库 7 张表齐全，官方迁移记录: ${data.migrations.join(", ")}（由产物首启自建，非自检预建）`);
-}
-
-function hasNativeFile(dir) {
-  const stack = [dir];
-  while (stack.length) {
-    const cur = stack.pop();
-    let entries;
-    try {
-      entries = readdirSync(cur);
-    } catch {
-      continue;
-    }
-    for (const e of entries) {
-      const p = path.join(cur, e);
-      if (e.endsWith(".node")) return true;
-      if (statSync(p).isDirectory()) stack.push(p);
-    }
-  }
-  return false;
-}
-
-function get(url_, timeoutMs) {
+function get(url, timeoutMs) {
   return new Promise((resolve, reject) => {
-    const req = http.get(url_, (res) => {
+    const request = http.get(url, (response) => {
       const chunks = [];
-      res.on("data", (d) => chunks.push(d));
-      res.on("end", () => resolve({ status: res.statusCode ?? 0, body: Buffer.concat(chunks).toString("utf8") }));
+      response.on("data", (chunk) => chunks.push(chunk));
+      response.on("end", () => resolve({
+        status: response.statusCode ?? 0,
+        body: Buffer.concat(chunks).toString("utf8"),
+      }));
     });
-    req.on("error", reject);
-    req.setTimeout(timeoutMs, () => {
-      req.destroy(new Error(`请求超时 ${timeoutMs}ms`));
-    });
+    request.on("error", reject);
+    request.setTimeout(timeoutMs, () => request.destroy(new Error(`请求超时 ${timeoutMs}ms`)));
   });
 }
 
-async function expectOk(url_, timeoutMs, validate) {
-  const start = Date.now();
-  let lastReason = "无响应";
-  while (Date.now() - start < timeoutMs) {
+async function expectJson(url, timeoutMs, validate) {
+  await expect(url, timeoutMs, (status, body) => {
+    if (status !== 200) return `HTTP ${status}`;
     try {
-      const { status, body } = await get(url_, 5000);
-      const reason = validate(status, body);
+      const json = JSON.parse(body);
+      return validate(json) ? null : "响应内容不符合预期";
+    } catch {
+      return "响应不是 JSON";
+    }
+  });
+}
+
+async function expectHtml(url, timeoutMs) {
+  await expect(url, timeoutMs, (status, body) => {
+    if (status !== 200) return `HTTP ${status}`;
+    return body.includes("<html") ? null : "响应不是 HTML";
+  });
+}
+
+async function expect(url, timeoutMs, validate) {
+  const startedAt = Date.now();
+  let lastReason = "无响应";
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      const response = await get(url, 5000);
+      const reason = validate(response.status, response.body);
       if (!reason) return;
       lastReason = reason;
-    } catch (e) {
-      lastReason = e.message;
+    } catch (error) {
+      lastReason = error instanceof Error ? error.message : String(error);
     }
-    await sleep(700);
+    await new Promise((resolve) => setTimeout(resolve, 600));
   }
-  fail(`自检未通过: ${url_}\n原因: ${lastReason}\n${tail()}`);
-}
-
-function sleep(ms) {
-  return new Promise((r) => setTimeout(r, ms));
-}
-
-async function which(bin) {
-  const { execFile } = await import("node:child_process");
-  try {
-    await new Promise((resolve, reject) => execFile("which", [bin], (e) => (e ? reject(e) : resolve())));
-    return bin;
-  } catch {
-    return null;
-  }
+  fail(`自检未通过: ${url}\n原因: ${lastReason}\n${tail()}`);
 }
 
 function tail() {
-  const text = Buffer.concat(outChunks).toString("utf8");
-  const lines = text.split("\n");
-  return `--- server 输出（末尾 40 行）---\n${lines.slice(-40).join("\n")}`;
+  return `--- 输出末尾 ---\n${Buffer.concat(output).toString("utf8").split("\n").slice(-40).join("\n")}`;
 }
 
-function log(msg) {
-  console.log(`[verify-packaged] ${msg}`);
+function log(message) {
+  console.log(`[verify-packaged] ${message}`);
 }
 
-function fail(msg) {
-  console.error(`[verify-packaged] 失败: ${msg}`);
-  if (child && child.exitCode === null) child.kill();
+function fail(message) {
+  console.error(`[verify-packaged] 失败: ${message}`);
+  for (const child of children) {
+    if (child.exitCode === null) child.kill();
+  }
   process.exit(1);
 }

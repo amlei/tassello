@@ -3,18 +3,22 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Obsidian Publisher · 显式发布目标原型</title>
+<title>九漾 Onda · Obsidian 发布原型</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='4' fill='%232383E2'/%3E%3C/svg%3E">
 <script>
-  // 原型默认跟随系统主题，同时保留页面内切换，便于确认两种 Obsidian 环境。
+  // data-theme 保存偏好；system 交给 CSS 媒体查询解析，避免初始化时把系统偏好固化成 light/dark。
   (function(){
-    const saved = localStorage.getItem("obsidian-publisher-theme");
-    const dark = saved ? saved === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
-    document.documentElement.dataset.theme = dark ? "dark" : "light";
+    var key = "obsidian-publisher-theme";
+    var saved = localStorage.getItem(key);
+    var pref = saved === "light" || saved === "dark" ? saved : "system";
+    document.documentElement.dataset.theme = pref;
+    document.documentElement.style.colorScheme = pref === "system" ? "light dark" : pref;
   })();
 </script>
 <style>
   /* 视觉延续 onda-explore/mosaic：白底、发丝线、中性灰阶、功能色只做小面积信号。 */
   :root{
+  color-scheme:light;
     --blue:#2C6FF0;
     --magenta:#D52088;
     --orange:#FD8D11;
@@ -50,6 +54,7 @@
     --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
   }
   [data-theme="dark"]{
+  color-scheme:dark;
     --error:#E5484D;
     --error-soft:rgba(229,72,77,.12);
     --error-line:rgba(229,72,77,.38);
@@ -74,6 +79,34 @@
     --shadow-card:0 1px 2px rgba(0,0,0,.3);
     --shadow-pop:0 14px 40px rgba(0,0,0,.5);
   }
+  @media (prefers-color-scheme: dark){
+    :root[data-theme="system"]{
+      color-scheme:dark;
+      --error:#E5484D;
+      --error-soft:rgba(229,72,77,.12);
+      --error-line:rgba(229,72,77,.38);
+      --warn:#D9A53F;
+      --warn-soft:rgba(217,165,63,.12);
+      --warn-line:rgba(217,165,63,.34);
+      --ok-soft:rgba(7,181,111,.13);
+      --ok-line:rgba(7,181,111,.32);
+      --ink:#E6E5E3;
+      --ink2:#9B9A97;
+      --ink3:#6F6E69;
+      --paper:#191919;
+      --card:#252525;
+      --rail:#202020;
+      --line:#2F2F2F;
+      --hover:#2A2A2A;
+      --selected:#2F2F2F;
+      --accent:#4A9EE8;
+      --accent-tint:#20304A;
+      --plat-x:#E6E5E3;
+      --plat-x-fg:#191919;
+      --shadow-card:0 1px 2px rgba(0,0,0,.3);
+      --shadow-pop:0 14px 40px rgba(0,0,0,.5);
+    }
+  }
   *{margin:0;padding:0;box-sizing:border-box}
   html,body,#root{height:100%}
   body{font-family:var(--font);background:var(--paper);color:var(--ink);-webkit-font-smoothing:antialiased;overflow:hidden}
@@ -84,7 +117,7 @@
   .proto{height:100vh;display:flex;flex-direction:column;overflow:hidden}
   .proto-top{
     flex:0 0 auto;display:flex;align-items:center;gap:10px;
-    padding:9px 14px;border-bottom:1px solid var(--line);background:var(--rail);
+    padding:9px 14px;background:var(--rail);
     font-size:12.5px;color:var(--ink2);
   }
   .proto-top strong{font-size:13px;color:var(--ink);letter-spacing:-.1px}
@@ -108,12 +141,12 @@
   @media (max-width:900px){.icon-rail{display:none}.obsidian{grid-template-columns:minmax(130px,170px) minmax(160px,1fr) minmax(300px,356px)}}
   @media (max-width:660px){.obsidian{grid-template-columns:minmax(280px,1fr) minmax(300px,356px)}.vault{display:none}}
 
-  .icon-rail{border-right:1px solid var(--line);background:var(--rail);display:flex;flex-direction:column;align-items:center;gap:8px;padding:12px 0}
+  .icon-rail{background:var(--rail);display:flex;flex-direction:column;align-items:center;gap:8px;padding:12px 0}
   .rail-dot{width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;color:var(--ink2);font-size:15px}
   .rail-dot:hover{background:var(--hover);color:var(--ink)}
   .rail-dot.active{background:var(--selected);color:var(--ink)}
 
-  .vault{border-right:1px solid var(--line);background:var(--rail);padding:12px 10px;overflow:auto}
+  .vault{background:var(--rail);padding:12px 10px;overflow:auto}
   .vault h2{font-size:11px;color:var(--ink3);font-weight:600;letter-spacing:.08em;text-transform:uppercase;padding:0 6px 8px}
   .vault-group{font-size:11.5px;font-weight:700;color:var(--ink2);padding:8px 6px 5px}
   .file{display:flex;align-items:center;gap:7px;min-height:28px;padding:0 6px;border-radius:7px;color:var(--ink2);font-size:12.8px}
@@ -124,7 +157,7 @@
   .editor{min-width:0;display:flex;flex-direction:column;background:var(--paper)}
   .editor-bar{
     flex:0 0 auto;height:40px;display:flex;align-items:center;gap:8px;
-    padding:0 14px;border-bottom:1px solid var(--line);color:var(--ink3);font-size:11.5px;
+    padding:0 14px;color:var(--ink3);font-size:11.5px;
   }
   .editor-scroll{flex:1;overflow:auto;padding:24px 36px 60px}
   .note-title{font-size:27px;font-weight:700;letter-spacing:-.5px;line-height:1.3}
@@ -137,13 +170,37 @@
   .note-body blockquote{margin:0 0 12px;padding:3px 0 3px 11px;border-left:2px solid var(--line);color:var(--ink2)}
   .note-photos{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:8px 0 14px;max-width:560px}
   .photo{aspect-ratio:4/3;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:700}
+  .note-media-strip{display:flex;gap:9px;max-width:680px;margin:16px 0 4px;padding-bottom:3px;overflow-x:auto;scrollbar-width:none}
+  .note-media-strip::-webkit-scrollbar{display:none}
+  .note-media{flex:0 0 168px;margin:0}
+  .note-media>div{aspect-ratio:4/3;border-radius:9px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:700}
+  .note-media figcaption{margin-top:5px;color:var(--ink3);font-size:9.5px}
+  .note-video{max-width:680px;margin:16px 0 4px}
+  .note-video>div{position:relative;aspect-ratio:16/9;border-radius:11px;display:flex;align-items:center;justify-content:center;color:#fff;overflow:hidden}
+  .note-video .play{position:absolute;left:14px;bottom:12px}
+  .note-video b{font-size:15px}
+  .note-video small{position:absolute;right:13px;bottom:13px;font-family:var(--mono);font-size:10px}
+  .note-audio{display:flex;align-items:center;gap:10px;max-width:680px;margin:16px 0 4px;padding:12px 13px;border:1px solid var(--line);border-radius:10px;background:var(--card)}
+  .note-audio .play{width:24px;height:24px;border-radius:50%;background:var(--accent);color:#fff;display:grid;place-items:center;font-size:9px}
+  .note-audio .wave{display:flex;align-items:center;gap:2px;flex:1;height:20px}
+  .note-audio .wave i{width:2px;height:7px;border-radius:2px;background:var(--ink3)}
+  .note-audio .wave i:nth-child(3n){height:14px}
+  .note-audio .wave i:nth-child(4n){height:18px}
+  .note-audio .name{font-size:11px;font-weight:700}
+  .note-audio .time{font-family:var(--mono);font-size:9.5px;color:var(--ink3)}
+  .note-article-media{max-width:680px;margin:16px 0 4px}
+  .note-article-media figure{margin:0}
+  .note-article-media>figure>div{aspect-ratio:16/8;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:700}
+  .note-article-media figcaption{margin-top:5px;color:var(--ink3);font-size:9.5px}
+  .payload-audio{min-width:100%;display:flex;align-items:center;gap:9px;padding:12px;border-radius:9px;background:var(--rail);border:1px solid var(--line);font-size:10.5px}
+  .payload-audio .play{width:22px;height:22px;border-radius:50%;background:var(--accent);color:#fff;display:grid;place-items:center;font-size:8px}
+  .payload-audio .name{flex:1;min-width:0;font-weight:700}
+  .payload-audio .time{font-family:var(--mono);color:var(--ink3);font-size:9px}
+  .gallery .item.media-wide{flex-basis:100%}
 
   /* ---------- 右侧面板 ---------- */
-  .panel{
-    min-width:0;display:flex;flex-direction:column;gap:0;overflow:hidden;
-    border-left:1px solid var(--line);background:var(--rail);
-  }
-  .panel-head{flex:0 0 auto;padding:13px 14px 10px;border-bottom:1px solid var(--line);background:var(--card)}
+  .panel{min-width:0;display:flex;flex-direction:column;gap:0;overflow:hidden;background:var(--rail)}
+  .panel-head{flex:0 0 auto;padding:13px 14px 10px;background:var(--card)}
   .head-top{display:flex;align-items:center;gap:8px}
   .mark{
     width:26px;height:26px;border-radius:8px;display:grid;grid-template-columns:1fr 1fr;gap:2px;
@@ -156,19 +213,15 @@
   .panel-head h1{flex:1;font-size:15px;font-weight:700;letter-spacing:-.2px;line-height:1.2}
   .theme-btn{width:27px;height:27px;border-radius:8px;color:var(--ink2);display:flex;align-items:center;justify-content:center}
   .theme-btn:hover{background:var(--hover);color:var(--ink)}
-  .conn{
-    margin-top:10px;min-height:31px;display:flex;align-items:center;gap:8px;
-    padding:0 9px;border-radius:9px;border:1px solid var(--line);background:var(--rail);
-    font-size:11.5px;color:var(--ink2);
+  .conn-indicator{
+    width:28px;height:28px;border-radius:8px;display:grid;place-items:center;
+    color:var(--ink2);transition:background .15s;
   }
-  .conn .dot{width:7px;height:7px;border-radius:50%;background:var(--ink3);flex:0 0 auto}
-  .conn.on{color:var(--ink)}
-  .conn.on .dot{background:var(--green)}
-  .conn.wait .dot{background:var(--orange);animation:pulse 1.2s ease infinite}
-  .conn.bad{border-color:var(--error-line);background:var(--error-soft);color:var(--error)}
-  .conn.bad .dot{background:var(--error)}
-  .conn button{margin-left:auto;min-height:22px;padding:0 7px;border-radius:6px;background:var(--card);border:1px solid var(--line);font-size:11px;color:var(--ink)}
-  .conn button:hover{background:var(--hover)}
+  .conn-indicator:hover{background:var(--hover)}
+  .conn-indicator .dot{width:8px;height:8px;border-radius:50%;background:var(--ink3)}
+  .conn-indicator.on .dot{background:var(--green);box-shadow:0 0 0 3px rgba(7,181,111,.12)}
+  .conn-indicator.wait .dot{background:var(--orange);animation:pulse 1.2s ease infinite}
+  .conn-indicator.bad .dot{background:var(--error);box-shadow:0 0 0 3px var(--error-soft)}
   @keyframes pulse{50%{opacity:.28}}
 
   .mode{
@@ -191,9 +244,17 @@
   .source-type button{min-height:38px;padding:4px;border:1px solid var(--line);border-radius:11px;background:var(--card);color:var(--ink2);font-size:11px;font-weight:700;line-height:1.2;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px}
   .source-type button .dot{width:10px;height:10px;border-radius:3px}
   .source-type button.active{border-color:color-mix(in srgb,var(--accent) 45%,transparent);background:var(--accent-tint);color:var(--ink)}
-  .mode{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .mode{grid-template-columns:repeat(2,minmax(0,1fr))}
 
-  .panel-foot{flex:0 0 auto;padding:10px 14px 12px;border-top:1px solid var(--line);background:var(--card)}
+  .panel-foot{flex:0 0 auto;padding:10px 14px 12px;background:var(--card)}
+  .task-strip{display:flex;flex-wrap:wrap;gap:5px;padding:2px 0 4px}
+  .task-chip{min-height:27px;padding:0 8px;border-radius:8px;border:1px solid var(--line);background:var(--card);display:inline-flex;align-items:center;gap:6px;color:var(--ink2);font-size:10px;font-weight:650}
+  .task-chip:hover{background:var(--hover);color:var(--ink)}
+  .task-chip .glyph{width:16px;height:16px;border-radius:5px;color:#fff;display:grid;place-items:center;font-size:8px;font-weight:800}
+  .task-chip.running{color:var(--accent)}
+  .task-chip.waiting{color:var(--warn)}
+  .task-chip.success{color:var(--green)}
+  .task-chip.failed{color:var(--error)}
 
   .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r-md);box-shadow:var(--shadow-card)}
   .kv{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11px;color:var(--ink2)}
@@ -316,6 +377,8 @@
   .status.failed{background:var(--error-soft);color:var(--error)}
   .target-desc{margin-top:4px;font-size:10.8px;color:var(--ink2);line-height:1.45}
   .target-actions{display:flex;gap:5px;margin-top:7px}
+  .target-link{color:var(--accent);text-decoration:none;min-height:24px;display:inline-flex;align-items:center;font-size:10.5px;font-weight:700}
+  .target-link:hover{text-decoration:underline}
   .mini{min-height:24px;padding:0 8px;border-radius:7px;background:var(--hover);color:var(--ink);font-size:10.5px;font-weight:600}
   .mini:hover{background:var(--selected)}
   .mini.primary{background:var(--accent);color:#fff}
@@ -356,6 +419,8 @@
   .modal label{display:block;margin:14px 0 6px;font-size:11px;font-weight:600;color:var(--ink2)}
   .modal input{width:100%;height:32px;padding:0 10px;border:1px solid var(--line);border-radius:9px;background:var(--paper);color:var(--ink);font-size:12px;outline:none}
   .modal input:focus{border-color:color-mix(in srgb,var(--accent) 50%,transparent);box-shadow:0 0 0 2px var(--accent-tint)}
+  .completion-check{display:flex!important;align-items:flex-start;gap:7px;margin-top:10px!important;color:var(--ink2)!important;line-height:1.45;cursor:pointer}
+  .completion-check input{width:14px!important;height:14px!important;margin-top:1px;padding:0!important}
   .modal-actions{display:flex;justify-content:flex-end;gap:7px;margin-top:16px}
 
   .empty{
@@ -404,16 +469,60 @@ const PLATFORMS = [
 ];
 
 
-const PHOTOS = [
-  {name:"封面：跑步圣经更快更远更久", color:"#7A6FF0"},
-  {name:"科学训练体系", color:"#0EC3D4"},
-  {name:"负荷与恢复", color:"#FD8D11"},
-  {name:"马拉松备赛周期", color:"#2E963D"},
-  {name:"营养与恢复", color:"#D52088"},
-  {name:"力量训练动作", color:"#2383E2"},
+const NOTE_FIXTURES = [
+  {
+    id: "a1",
+    file: "发布插件结构假设",
+    title: "发布插件结构假设",
+    type: "article",
+    platforms: ["wechat", "xhs", "zhihu", "douban"],
+    body: "这一篇记录发布插件的结构假设：右侧面板只保留预览与默认。\n\n预览不是模仿平台官方 UI，而是展示即将交给适配器的 payload。这样能避免「Obsidian 里看着对，发布时结构变了」的偏差。\n\n文章按 Markdown 原文顺序发送，图片留在原来的段落位置。",
+    media: [{ name:"封面图", kind:"image", color:"#7A6FF0" }],
+  },
+  {
+    id: "a2",
+    file: "一个按钮的位置",
+    title: "一个按钮的位置，我们争论了三个星期",
+    type: "article",
+    platforms: ["wechat", "xhs", "zhihu"],
+    body: "争论的焦点是「新建」到底该放在左上角还是右上角。\n\n最后我们没有靠投票解决，而是去翻了两个月的点击热图：绝大多数人打开页面后第一眼看的是列表内容。\n\n按钮最后留在了右上角，我们把省下来的时间用来做搜索。",
+    media: [],
+  },
+  {
+    id: "i1",
+    file: "白露之后的云",
+    title: "白露之后的云",
+    type: "image",
+    platforms: ["wechat", "xhs", "weibo", "jike", "douban"],
+    body: "清晨六点的天空，云层从山脊后面慢慢铺开。\n\n没有顺序要求，所有图片按 Markdown 中出现的先后进入图集。",
+    media: [
+      { name:"封面", kind:"image", color:"#D52088" },
+      { name:"远景", kind:"image", color:"#FD8D11" },
+      { name:"云层", kind:"image", color:"#2C6FF0" },
+      { name:"细节", kind:"image", color:"#0EC3D4" },
+    ],
+  },
+  {
+    id: "v1",
+    file: "三分钟讲清公摊面积",
+    title: "三分钟讲清「公摊面积」",
+    type: "video",
+    platforms: ["wechat", "xhs", "weibo", "x", "zhihu"],
+    body: "一条三分多钟的视频，解释公摊面积的计算方式和常见误区。\n\n视频引用在 Markdown 中的位置不影响主媒体顺序。",
+    media: [{ name:"公摊面积.mp4", kind:"video", color:"#2C6FF0", duration:"03:18" }],
+  },
+  {
+    id: "p1",
+    file: "EP.12 夜班出租车",
+    title: "EP.12 和夜班出租车司机聊一座城市的背面",
+    type: "audio",
+    platforms: ["xiaoyuzhou", "ximalaya", "lizhi"],
+    body: "这一期从凌晨两点开始，跟着一位夜班出租车司机穿过城市。\n\n音频引用作为主媒体，节目和专辑在发布时选择。",
+    media: [{ name:"EP.12.mp3", kind:"audio", color:"#0EC3D4", duration:"42:16" }],
+  },
 ];
 
-const NOTE_BODY = `这一篇记录发布插件的结构假设：右侧面板只保留 Preview 和 Publish。\n\n预览不是模仿平台官方 UI，而是展示即将交给适配器的 payload。这样能避免「Obsidian 里看着对，发布时结构变了」的偏差。`;
+const NOTE_BY_ID = new Map(NOTE_FIXTURES.map(note => [note.id, note]));
 
 function icon(name){
   const size = name === "settings" ? 15 : 14;
@@ -429,7 +538,7 @@ function icon(name){
   return <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
 }
 
-function PayloadAttachments({compact=false}){
+function PayloadAttachments({items = [], compact=false}){
   const trackRef = useRef(null);
   const dragRef = useRef(null);
   const [dragging, setDragging] = useState(false);
@@ -452,6 +561,8 @@ function PayloadAttachments({compact=false}){
     setDragging(false);
   };
 
+  if (!items.length) return null;
+
   return (
     <div
       ref={trackRef}
@@ -463,9 +574,71 @@ function PayloadAttachments({compact=false}){
       onPointerCancel={endDrag}
       onPointerLeave={endDrag}
     >
-      {PHOTOS.map((p,i) => (
+      {items.filter(item => item.kind === "image").map((p,i) => (
         <figure key={p.name} className="item">
-          <div className="media" style={{background:p.color}}>fit · full</div>
+          <div className="media" style={{background:p.color}}>{p.name}</div>
+        </figure>
+      ))}
+      {items.filter(item => item.kind === "video").map(item => (
+        <figure key={item.name} className="item media-wide">
+          <div className="media" style={{background:item.color}}>
+            <span>视频 · {item.duration}</span>
+          </div>
+        </figure>
+      ))}
+      {items.filter(item => item.kind === "audio").map(item => (
+        <div key={item.name} className="payload-audio">
+          <span className="play">▶</span>
+          <span className="name">{item.name}</span>
+          <span className="time">{item.duration}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function NoteMedia({note}){
+  if(!note.media.length) return null;
+  if(note.type === "image"){
+    return (
+      <div className="note-media-strip" aria-label="按 Markdown 出现顺序排列的图片">
+        {note.media.map((item) => (
+          <figure key={item.name} className="note-media">
+            <div style={{background:item.color}}>{item.name}</div>
+            <figcaption>{item.name}</figcaption>
+          </figure>
+        ))}
+      </div>
+    );
+  }
+  const item = note.media[0];
+  if(note.type === "video"){
+    return (
+      <figure className="note-video">
+        <div style={{background:item.color}}>
+          <span className="play">▶</span>
+          <b>{item.name}</b>
+          <small>{item.duration}</small>
+        </div>
+      </figure>
+    );
+  }
+  if(note.type === "audio"){
+    return (
+      <div className="note-audio">
+        <span className="play">▶</span>
+        <span className="wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+        <span className="name">{item.name}</span>
+        <span className="time">{item.duration}</span>
+      </div>
+    );
+  }
+  return (
+    <div className="note-article-media">
+      {note.media.map((item) => (
+        <figure key={item.name}>
+          <div style={{background:item.color}}>{item.name}</div>
+          <figcaption>{item.name}</figcaption>
         </figure>
       ))}
     </div>
@@ -474,14 +647,15 @@ function PayloadAttachments({compact=false}){
 
 function initialTasks(){
   const map = {};
-  PLATFORMS.forEach(p => map[p.id] = {status:"idle", stage:0, progress:0, url:null});
+  PLATFORMS.forEach(p => map[p.id] = {status:"idle", stage:0, progress:0, url:null, urlSource:null, noPublic:false});
   return map;
 }
 
 function App(){
   const [theme, setTheme] = useState(document.documentElement.dataset.theme);
+  const [systemDark, setSystemDark] = useState(() => window.matchMedia("(prefers-color-scheme: dark)").matches);
   const [mode, setMode] = useState("preview");
-  const [sourceType, setSourceType] = useState("article");
+  const [activeNoteId, setActiveNoteId] = useState("a1");
   const [activePlatform, setActivePlatform] = useState("zhihu");
   const [selected, setSelected] = useState({wechat:true, xhs:true, zhihu:true});
   const [defaultTargets, setDefaultTargets] = useState({
@@ -490,49 +664,89 @@ function App(){
     video:["weibo","jike"],
     audio:["xiaoyuzhou","ximalaya","lizhi"],
   });
-  const [browser, setBrowser] = useState("disconnected");
+  const [backend, setBackend] = useState("connected");
+  const [extension, setExtension] = useState("connected");
   const [tasks, setTasks] = useState(initialTasks);
   const [running, setRunning] = useState(false);
   const [completion, setCompletion] = useState(null);
   const timers = useRef([]);
 
-  const body = NOTE_BODY;
+  const note = NOTE_BY_ID.get(activeNoteId) ?? NOTE_FIXTURES[0];
+  const sourceType = note.type;
+  const body = note.body;
   const supportedPlatforms = PLATFORMS.filter(p => p.supports.includes(sourceType));
   const supportedCount = supportedPlatforms.length;
   const selectedCount = supportedPlatforms.filter(p => selected[p.id]).length;
   const platform = PLATFORMS.find(p => p.id === activePlatform);
-  const blocked = browser !== "connected";
+  const blocked = backend !== "connected" || extension !== "connected";
+  const connectionState = backend !== "connected"
+    ? "bad"
+    : extension === "connected"
+      ? "on"
+      : extension === "waiting"
+        ? "wait"
+        : "bad";
+  const connectionLabel = backend !== "connected"
+    ? "本机发布服务未运行"
+    : extension === "connected"
+      ? "发布通道可用；扩展连接本机发布服务，桌面端和 Obsidian 共用"
+      : extension === "waiting"
+        ? "等待浏览器扩展自动连接"
+        : "浏览器扩展未连接，点击连接";
+  const dark = theme === "dark" || (theme === "system" && systemDark);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
-    localStorage.setItem("obsidian-publisher-theme", theme);
+    document.documentElement.style.colorScheme = theme === "system" ? "light dark" : theme;
   }, [theme]);
+
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const sync = (event) => setSystemDark(event.matches);
+    media.addEventListener("change", sync);
+    return () => media.removeEventListener("change", sync);
+  }, []);
 
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
 
   const findings = useMemo(() => {
+    const mediaText = note.type === "image"
+      ? `${note.media.length} 张图片将按出现顺序组成图集。`
+      : note.type === "video"
+        ? "视频引用已解析为主媒体。"
+        : note.type === "audio"
+          ? "音频引用已解析为主媒体。"
+          : note.media.length
+            ? `${note.media.length} 张图片保留在正文原位。`
+            : "正文没有媒体引用。";
     const common = [
-      {level:"warn", text:"Callout 会被转换为普通段落。"},
-      {level:"ok", text:"3 张附件均位于当前 vault，可直接上传。"},
-      {level:"ok", text:"图文混排图片已提取；payload 固定为附件区在正文顶部。"},
+      {level:"ok", text:`frontmatter 完整：${note.id} / ${note.type}`},
+      {level:"ok", text:mediaText},
+      {level:"warn", text:"仅支持 CommonMark + GFM；wiki link、callout 和专有语法不会发布。"},
     ];
     if(activePlatform === "jike") return [...common, {level:"ok", text:"即刻不支持独立文章；本篇自动降级为图文动态。"}];
     if(activePlatform === "xhs") return [...common, {level:"warn", text:"小红书正文是纯文本，不携带 Markdown 格式。"}];
     if(activePlatform === "weibo") return [...common, {level:"ok", text:"话题会转为 #话题#，图片作为附件上传。"}];
     if(activePlatform === "wechat") return [...common, {level:"ok", text:"图片将先进入公众号素材库，再替换正文引用。"}];
-    if(activePlatform === "zhihu") return [...common, {level:"bad", text:"公式块需要确认目标平台的渲染格式。"}];
     return common;
-  }, [activePlatform]);
+  }, [activePlatform, note]);
 
-  const payloadText = `标题：用 Obsidian 右侧面板完成多平台发布\n\n${body}`;
-  const weiboPayloadText = `标题：用 Obsidian 右侧面板完成多平台发布\n\n${body}\n\n#自媒体#`;
+  const payloadText = `标题：${note.title}\n\n${body}`;
+  const weiboPayloadText = `标题：${note.title}\n\n${body}\n\n#自媒体#`;
+
+  function selectNote(id){
+    const next = NOTE_BY_ID.get(id);
+    if(!next) return;
+    setActiveNoteId(id);
+    const first = PLATFORMS.find(p => next.platforms.includes(p.id));
+    setActivePlatform(first?.id ?? "");
+    setSelected(Object.fromEntries((defaultTargets[next.type] ?? []).filter(pid => next.platforms.includes(pid)).map(pid => [pid,true])));
+  }
 
   function selectSourceType(type){
     if(type === sourceType) return;
-    setSourceType(type);
-    const first = PLATFORMS.find(p => p.supports.includes(type));
-    setActivePlatform(first?.id ?? "");
-    setSelected(Object.fromEntries(defaultTargets[type].map(id => [id,true])));
+    const first = NOTE_FIXTURES.find(item => item.type === type);
+    if(first) selectNote(first.id);
   }
 
   function toggleDefault(type, id){
@@ -545,11 +759,19 @@ function App(){
     });
   }
 
-  function toggleTheme(){ setTheme(theme === "light" ? "dark" : "light"); }
+  function toggleTheme(){
+    const next = dark ? "light" : "dark";
+    setTheme(next);
+    localStorage.setItem("obsidian-publisher-theme", next);
+  }
 
-  function connectBrowser(){
-    setBrowser("waiting");
-    const t = setTimeout(() => setBrowser("connected"), 1500);
+  function connectExtension(){
+    if (extension === "waiting") {
+      setExtension("disconnected");
+      return;
+    }
+    setExtension("waiting");
+    const t = setTimeout(() => setExtension("connected"), 1100);
     timers.current.push(t);
   }
 
@@ -562,7 +784,11 @@ function App(){
       if(!selected[p.id]) return;
       const stages = p.id === "zhihu"
         ? [["queued",4],["running",38],["running",82],["success",100]]
-        : [["queued",6],["running",32],["running",68],["waiting",100]];
+        : p.id === "wechat"
+          ? [["queued",6],["running",32],["running",68],["waiting",100]]
+          : p.id === "xhs"
+            ? [["queued",6],["running",32],["running",68],["unknown",100]]
+            : [["queued",6],["running",32],["running",68],["waiting_extension",100]];
       stages.forEach(([status, progress], stageIndex) => {
         const t = setTimeout(() => {
           setTasks(prev => ({
@@ -571,7 +797,8 @@ function App(){
               status,
               stage:stageIndex,
               progress,
-              url: status === "success" ? "https://example.com/receipt" : null,
+              url: status === "success" ? "https://zhuanlan.zhihu.com/p/29018473" : null,
+              urlSource: status === "success" ? "auto" : null,
             },
           }));
         }, 350 + index*180 + stageIndex*680);
@@ -583,30 +810,32 @@ function App(){
   }
 
   function confirmTask(id){
-    setCompletion({id, url:""});
+    setCompletion({id, url:"", noPublic:false});
   }
 
   function submitCompletion(){
     if(!completion) return;
     const url = completion.url.trim();
-    setTasks(prev => ({...prev, [completion.id]:{...prev[completion.id], status:"success", progress:100, url:url || null}}));
+    if (!url && !completion.noPublic) return;
+    setTasks(prev => ({...prev, [completion.id]:{...prev[completion.id], status:"success", progress:100, url:url || null, urlSource:"manual", noPublic:!url}}));
     setCompletion(null);
   }
 
   const statusText = {
-    idle:"未发布", queued:"排队", running:"执行中", waiting:"待确认", success:"完成", failed:"失败"
+    idle:"未发布", queued:"排队", running:"执行中", waiting:"等待完成", waiting_extension:"等待扩展", unknown:"结果未知", success:"完成", failed:"失败"
   };
+  const visibleTasks = PLATFORMS.filter(p => tasks[p.id]?.status !== "idle");
 
   return (
     <div className="proto">
       <header className="proto-top">
-        <strong>Obsidian Publisher · 右侧面板结构原型</strong>
-        <span>Preview / Publish 共用同一份平台 payload</span>
+        <strong>九漾 Onda · Obsidian 右侧面板</strong>
+        <span>直接预览，底部一键发布</span>
         <div className="actions">
           <button className="ghost-btn active">右侧面板</button>
           <button className="ghost-btn" onClick={toggleTheme}>
-            {icon(theme === "light" ? "moon" : "sun")}
-            {theme === "light" ? "深色" : "浅色"}
+            {icon(dark ? "sun" : "moon")}
+            {dark ? "浅色" : "深色"}
           </button>
         </div>
       </header>
@@ -616,43 +845,45 @@ function App(){
           <nav className="icon-rail">
             <button className="rail-dot active">{icon("files")}</button>
             <button className="rail-dot">{icon("search")}</button>
-            <button className="rail-dot">{icon("publish")}</button>
             <button className="rail-dot">{icon("settings")}</button>
           </nav>
 
           <aside className="vault">
             <h2>Content</h2>
-            <div className="vault-group">发布</div>
-            <button className="file active"><span className="glyph">MD</span>发布插件结构假设</button>
-            <button className="file"><span className="glyph">MD</span>小红书图片贴</button>
-            <button className="file"><span className="glyph">MD</span>公众号长文草稿</button>
-            <div className="vault-group">Attachments</div>
-            <button className="file"><span className="glyph">IMG</span>cover.png</button>
-            <button className="file"><span className="glyph">IMG</span>detail.png</button>
-            <button className="file"><span className="glyph">IMG</span>final.png</button>
+            {TYPE_ORDER.map(type => {
+              const notes = NOTE_FIXTURES.filter(item => item.type === type);
+              return (
+                <React.Fragment key={type}>
+                  <div className="vault-group">{TYPE_META[type].zh}</div>
+                  {notes.map(item => (
+                    <button
+                      key={item.id}
+                      className={"file" + (item.id === note.id ? " active" : "")}
+                      onClick={() => selectNote(item.id)}
+                    >
+                      <span className="glyph">MD</span>{item.file}
+                    </button>
+                  ))}
+                </React.Fragment>
+              );
+            })}
           </aside>
 
           <section className="editor">
             <div className="editor-bar">
-              <span>Content / 发布 / 发布插件结构假设.md</span>
-              <span style={{marginLeft:"auto"}}>Markdown · 412 字</span>
+              <span>Content / {TYPE_META[note.type].zh} / {note.file}.md</span>
+              <span style={{marginLeft:"auto"}}>已保存到磁盘 · Markdown · {note.body.length} 字</span>
             </div>
             <div className="editor-scroll">
-              <h1 className="note-title">发布插件结构假设</h1>
+              <h1 className="note-title">{note.title}</h1>
               <div className="note-meta">
-                <span className="tag">type <b>image</b></span>
-                <span className="tag">platforms <b>xhs · weibo · wechat</b></span>
-                <span className="tag">status <b>draft</b></span>
+                <span className="tag">id <b>{note.id}</b></span>
+                <span className="tag">type <b>{note.type}</b></span>
+                <span className="tag">platforms <b>{note.platforms.map(id => PLATFORMS.find(p => p.id === id)?.name).filter(Boolean).join(" · ")}</b></span>
               </div>
               <article className="note-body">
-                <p>这一篇记录发布插件的结构假设：右侧面板只保留 Preview 和 Publish。</p>
-                <h3>为什么不是精确复刻平台</h3>
-                <blockquote>预览应该展示适配器实际收到的 payload，而不是试图在 Obsidian 里还原一个平台客户端。</blockquote>
-                <p>发布时由适配器打开平台编辑器并填充内容，最终确认留给用户。</p>
-                <div className="note-photos">
-                  {PHOTOS.map(p => <div key={p.name} className="photo" style={{background:p.color}}>{p.name}</div>)}
-                </div>
-                <p>预览不是模仿平台官方 UI，而是展示即将交给适配器的 payload。这样能避免「Obsidian 里看着对，发布时结构变了」的偏差。</p>
+                {note.body.split(/\n\n+/).map((paragraph, index) => <p key={index}>{paragraph}</p>)}
+                <NoteMedia note={note} />
               </article>
             </div>
           </section>
@@ -662,22 +893,19 @@ function App(){
               <div className="head-top">
                 <div className="mark"><i></i><i></i><i></i><i></i></div>
                 <h1>Publisher</h1>
-                <button className="theme-btn" onClick={toggleTheme} title="切换主题">{icon(theme === "light" ? "moon" : "sun")}</button>
-              </div>
-              <div className={`conn ${browser === "connected" ? "on" : browser === "waiting" ? "wait" : "bad"}`}>
-                <span className="dot"></span>
-                {browser === "connected" && <span>默认 Chrome · 已授权</span>}
-                {browser === "waiting" && <span>等待 Chrome 授权…</span>}
-                {browser === "disconnected" && <span>默认 Chrome 未连接</span>}
-                {browser !== "connected" && <button onClick={connectBrowser}>{browser === "waiting" ? "取消" : "连接"}</button>}
+                <button
+                  className={`conn-indicator ${connectionState}`}
+                  onClick={() => { if (backend === "connected" && extension !== "connected") connectExtension(); }}
+                  title={connectionLabel}
+                  aria-label={connectionLabel}
+                >
+                  <span className="dot"></span>
+                </button>
+                <button className="theme-btn" onClick={toggleTheme} title="切换主题">{icon(dark ? "sun" : "moon")}</button>
               </div>
               <div className="mode">
                 <button className={mode === "preview" ? "active" : ""} onClick={() => setMode("preview")}>
                   {icon("search")} 预览
-                </button>
-                <button className={mode === "publish" ? "active" : ""} onClick={() => setMode("publish")}>
-                  {icon("publish")} 发布
-                  <span className="mode-count">{selectedCount}</span>
                 </button>
                 <button className={mode === "defaults" ? "active" : ""} onClick={() => setMode("defaults")}>
                   默认
@@ -712,16 +940,29 @@ function App(){
                         {supportedPlatforms.map(p => (
                           <button
                             key={p.id}
-                            className={`platform-option ${activePlatform === p.id ? "active" : ""}`}
+                            className={`platform-option ${selected[p.id] ? "selected" : ""}`}
                             style={{background:p.color, color:p.fg || "#fff"}}
-                            title={p.name}
-                            aria-label={p.name}
-                            onClick={() => setActivePlatform(p.id)}
+                            title={`${p.name}${selected[p.id] ? " · 已选" : ""}`}
+                            aria-label={`${selected[p.id] ? "移除" : "选择"} ${p.name}`}
+                            aria-pressed={!!selected[p.id]}
+                            onClick={() => {
+                              setActivePlatform(p.id);
+                              setSelected(prev => ({...prev, [p.id]:!prev[p.id]}));
+                            }}
                           >
                             {p.short}
                           </button>
                         ))}
                       </div>
+                    </div>
+                    <div className="selector-summary">
+                      <span className="count">
+                        已选
+                        <strong>{selectedCount}</strong>
+                        <span className="total">/ {supportedCount}</span>
+                      </span>
+                      <span className="divider"></span>
+                      <span className="summary-link" style={{cursor:"default"}}>点击图标切换发布目标</span>
                     </div>
                   </div>
 
@@ -742,86 +983,50 @@ function App(){
 
                   <div className="preview-frame">
                     <div className="preview-content">
-                      <PayloadAttachments compact />
-                      {activePlatform === "wechat" || activePlatform === "zhihu" ? (
+                      <PayloadAttachments items={note.type === "article" ? [] : note.media} compact />
+                      {note.type === "article" ? (
                         <div className="rich">
-                          <h4>用 Obsidian 右侧面板完成多平台发布</h4>
-                          <p>{body}</p>
-                          <p>图片混排位置不会保留；所有附件统一在正文顶部上传。</p>
+                          <h4>{note.title}</h4>
+                          {note.body.split(/\n\n+/).map((paragraph, index) => <p key={index}>{paragraph}</p>)}
+                          <NoteMedia note={note} />
+                          <p>文章保留图片在 Markdown 原文中的位置。</p>
                         </div>
                       ) : activePlatform === "jike" ? (
                         <div className="rich">
-                          <h4>用 Obsidian 右侧面板完成多平台发布</h4>
+                          <h4>{note.title}</h4>
                           <p>{body}</p>
                           <p>有标题的想法平台使用 Markdown 首行 H1 作为平台标题。</p>
                         </div>
                       ) : (
                         <div className="plain">
-                          {activePlatform === "weibo" ? weiboPayloadText : `用 Obsidian 右侧面板完成多平台发布\n\n${body}`}
+                          {note.type === "image" && <p>图片按出现顺序组成图集，与所在段落无关。</p>}
+                          {note.type === "video" && <p>视频作为主媒体上传。</p>}
+                          {note.type === "audio" && <p>音频作为主媒体，发布时再选择节目或专辑。</p>}
+                          {activePlatform === "weibo" ? weiboPayloadText : payloadText}
                         </div>
                       )}
                     </div>
                   </div>
-                </React.Fragment>
-              ) : mode === "publish" ? (
-                <React.Fragment>
-                  <div className="selector-card">
-                    <div className="selector-row">
-                      <span className="selector-label">类型</span>
-                      <div className="type-options">
-                        {TYPE_ORDER.map(type => {
-                          const meta = TYPE_META[type];
-                          return (
-                            <button
-                              key={type}
-                              className={`type-option ${sourceType === type ? "active" : ""}`}
-                              onClick={() => selectSourceType(type)}
-                            >
-                              {meta.zh}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                    <div className="selector-row">
-                      <span className="selector-label">平台</span>
-                      <div className="platform-options">
-                        {supportedPlatforms.map(p => (
+                  {visibleTasks.length > 0 && (
+                    <div className="task-strip" aria-label="发布状态">
+                      {visibleTasks.map(p => {
+                        const task = tasks[p.id];
+                        const waiting = task.status === "waiting" || task.status === "waiting_extension" || task.status === "unknown";
+                        return (
                           <button
                             key={p.id}
-                            className={`platform-option ${selected[p.id] ? "active selected" : ""}`}
-                            style={{background:p.color, color:p.fg || "#fff"}}
-                            title={p.name}
-                            aria-label={`选择 ${p.name}`}
-                            aria-pressed={selected[p.id]}
-                            onClick={() => setSelected(prev => ({...prev, [p.id]:!prev[p.id]}))}
+                            className={`task-chip ${waiting ? "waiting" : task.status}`}
+                            onClick={() => {
+                              if (waiting) confirmTask(p.id);
+                              else if (task.status === "success" && task.url) window.open(task.url, "_blank", "noopener");
+                            }}
+                            title={waiting ? `补充 ${p.name} 的发布结果` : task.url || p.name}
                           >
-                            {p.short}
+                            <span className="glyph" style={{background:p.color,color:p.fg || "#fff"}}>{p.short}</span>
+                            {p.name} · {statusText[task.status] || task.status}
                           </button>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="selector-summary">
-                      <span className="count">
-                        已选
-                        <strong>{selectedCount}</strong>
-                        <span className="total">/ {supportedCount}</span>
-                      </span>
-                      <span className="divider"></span>
-                      <button
-                        className="summary-link"
-                        onClick={() => window.open("publishments-base.html", "_blank")}
-                      >
-                        发布库
-                        <span className="arrow">↗</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {browser !== "connected" && (
-                    <div className="notice approval">
-                      <b>Chrome 授权：</b>
-                      <span>插件会读取本机 <code>DevToolsActivePort</code> 并直连浏览器级 WebSocket；授权在 Chrome 内完成，不复制默认 Profile。</span>
+                        );
+                      })}
                     </div>
                   )}
                 </React.Fragment>
@@ -876,10 +1081,10 @@ function App(){
 
             {mode !== "defaults" && (
             <div className="panel-foot">
-              <button className="primary-cta" disabled={mode === "publish" && (blocked || running || selectedCount === 0)} onClick={startPublish}>
-                {mode === "preview" ? "把当前预览发送到 Publish" : blocked ? "先连接默认 Chrome" : running ? "发布任务执行中…" : `发布到 ${selectedCount} 个平台`}
+              <button className="primary-cta" disabled={blocked || running || selectedCount === 0} onClick={startPublish}>
+                {blocked ? "发布通道暂不可用" : running ? "发布任务执行中…" : `发布到 ${selectedCount} 个平台`}
               </button>
-              <div className="foot-note">{mode === "preview" ? "切换后保留当前平台选择" : "CDP 平台停在人工确认"}</div>
+              <div className="foot-note">{blocked ? "扩展连接后会自动继续" : "发布前会先保存当前 Markdown"}</div>
             </div>
             )}
           </aside>
@@ -888,20 +1093,27 @@ function App(){
       {completion && (
         <div className="modal-backdrop" onClick={() => setCompletion(null)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
-            <h3>标记完成</h3>
-            <p>如果你已经在平台页面完成发布，可以把最终内容链接粘贴到这里。没有链接时任务也会标记完成。</p>
-            <label htmlFor="publish-url">发布链接（可选）</label>
+            <h3>补充发布结果</h3>
+            <p>自动回执缺失时才需要手动处理。填写最终链接，或明确确认该结果没有公开链接。</p>
+            <label htmlFor="publish-url">发布链接</label>
             <input
               id="publish-url"
               value={completion.url}
               placeholder="https://..."
               autoFocus
               onChange={e => setCompletion({...completion, url:e.target.value})}
-              onKeyDown={e => e.key === "Enter" && submitCompletion()}
             />
+            <label className="completion-check">
+              <input
+                type="checkbox"
+                checked={completion.noPublic}
+                onChange={e => setCompletion({...completion, noPublic:e.target.checked, url:e.target.checked ? "" : completion.url})}
+              />
+              <span>该结果没有公开链接，我已在平台确认完成</span>
+            </label>
             <div className="modal-actions">
               <button className="mini" onClick={() => setCompletion(null)}>取消</button>
-              <button className="mini primary" onClick={submitCompletion}>保存到发布库</button>
+              <button className="mini primary" disabled={!completion.url.trim() && !completion.noPublic} onClick={submitCompletion}>保存发布结果</button>
             </div>
           </div>
         </div>
