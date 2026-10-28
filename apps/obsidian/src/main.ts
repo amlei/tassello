@@ -48,7 +48,9 @@ class TasselloSettingTab extends PluginSettingTab {
         .setDesc("frontmatter 未指定 platforms 时使用这些目标")
         .addButton((button) => {
           button.setButtonText("全选").onClick(async () => {
-            this.plugin.settings.defaultPlatforms[type] = PLATFORMS.map((platform) => platform.id);
+            this.plugin.settings.defaultPlatforms[type] = PLATFORMS
+              .filter((platform) => platform.authMode === "extension")
+              .map((platform) => platform.id);
             await this.plugin.saveSettings();
             this.display();
           });
@@ -61,7 +63,7 @@ class TasselloSettingTab extends PluginSettingTab {
           });
         });
       const row = containerEl.createDiv({ cls: "tassello-setting-chips" });
-      for (const platform of PLATFORMS) {
+      for (const platform of PLATFORMS.filter((candidate) => candidate.authMode === "extension")) {
         const selected = this.plugin.settings.defaultPlatforms[type]?.includes(platform.id) ?? false;
         const chip = row.createEl("button", { text: platform.name, cls: selected ? "active" : "" });
         chip.addEventListener("click", async () => {

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { Notice } from "obsidian";
+import { Notice, TFile } from "obsidian";
 import { createSourceDraft, readActiveSource } from "../core/source/source-resolver";
 import { parseImageEmbeds } from "../core/source/image-embeds";
 import { platformSupportsType, previewHtmlForPlatform, renderForPlatform } from "../core/render/renderers";
@@ -15,6 +15,7 @@ import {
 } from "../core/types";
 import type { BackendApi } from "../core/api/client";
 import { PlatformMark } from "@tassello/ui/platform-icons";
+import type { PodcastRssClaimDTO, PodcastRssDTO } from "@tassello/shared";
 import type { PublisherServices } from "./publisher-view";
 
 type ViewMode = "preview" | "defaults";
@@ -158,6 +159,102 @@ function SourceTypePicker({
           </button>
         );
       })}
+    </div>
+  );
+}
+
+const COVER_LABELS = {
+  article: { title: "文章封面", ratio: "16:9", scope: "微信公众号 · 知乎" },
+  audio: { title: "播客封面", ratio: "1:1", scope: "小红书必填 · 其他平台用专辑封面" },
+  video: { title: "视频封面", ratio: "多比例", scope: "比例随发布平台适配" },
+} as const;
+
+function CoverControl({
+  source,
+  onChoose,
+  onUpload,
+}: {
+  source: SourceDraft;
+  onChoose: (vaultPath: string) => void;
+  onUpload: (file: File) => void;
+}) {
+  const meta = COVER_LABELS[source.type as keyof typeof COVER_LABELS];
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const images = source.assets.filter((asset) => asset.kind === "image");
+  const cover = source.cover;
+  if (!meta) return null;
+  return (
+    <div className="cover-row" data-role="cover-row">
+      <span className={"cover-thumb " + source.type}>
+        {cover
+          ? <img src={cover.resourcePath} alt="" />
+          : <span className="cover-empty">封面</span>}
+      </span>
+      <span className="cover-copy">
+        <span className="cover-title">{meta.title}<em>{meta.ratio}</em></span>
+        <span className="cover-meta">{cover ? `${cover.alt} · 已加入稿件资产` : "尚未设置；上传后自动加入稿件资产"}</span>
+      </span>
+      <span className="cover-scope">{meta.scope}</span>
+      {images.length > 1 ? (
+        <select
+          className="cover-select"
+          aria-label="选择稿件封面"
+          value={cover?.vaultPath ?? ""}
+          onChange={(event) => onChoose(event.target.value)}
+        >
+          {images.map((image, index) => (
+            <option key={image.vaultPath} value={image.vaultPath}>第 {index + 1} 张 · {image.alt}</option>
+          ))}
+        </select>
+      ) : null}
+      <button type="button" className="cover-upload" onClick={() => inputRef.current?.click()}>
+        {cover ? "更换" : "选择"}
+      </button>
+      <input
+        ref={inputRef}
+        hidden
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          event.target.value = "";
+          if (file) onUpload(file);
+        }}
+      />
+    </div>
+  );
+}
+
+function RssSyncStrip({
+  rss,
+  targets,
+  open,
+  onToggle,
+}: {
+  rss: PodcastRssDTO;
+  targets: Array<{ claim: PodcastRssClaimDTO; platform: PlatformCapability }>;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <div className="rss-sync-strip" data-role="rss-sync">
+      <button type="button" className="rss-sync-head" aria-expanded={open} onClick={onToggle}>
+        <span className="rss-sync-badge">RSS</span>
+        <b>{rss.title}</b>
+        <span>{rss.episodeCount ?? 0} 期 · 自动同步 {targets.length} 个平台</span>
+        <i className={`rss-sync-chev ${open ? "open" : ""}`} aria-hidden="true">⌄</i>
+      </button>
+      {open && (
+        <div className="rss-sync-targets">
+          {targets.map(({ claim, platform }) => (
+            <span key={claim.platformId} className={`rss-sync-target ${claim.state}`} title={claim.evidenceUrl ?? platform.name}>
+              <PlatformMark id={platform.id} char={platform.glyph} size={14} tone={claim.state === "claimed" ? "lit" : "dim"} />
+              {platform.name}
+              <em>{claim.label}</em>
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -350,6 +447,8 @@ export function PublisherApp({ services, host }: PublisherAppProps) {
   const [sourceError, setSourceError] = useState<string | null>(null);
   const [tasks, setTasks] = useState<PublishTask[]>([]);
   const [platformCatalog, setPlatformCatalog] = useState<PlatformCapability[]>(PLATFORMS);
+  const [rss, setRss] = useState<PodcastRssDTO | null>(null);
+  const [rssOpen, setRssOpen] = useState(false);
   const [completionTask, setCompletionTask] = useState<PublishTask | null>(null);
   const previewGeneration = useRef(0);
   const refreshTimer = useRef<number | null>(null);
@@ -364,9 +463,17 @@ export function PublisherApp({ services, host }: PublisherAppProps) {
     () => platformCatalog.filter((platform) => platform.supports.includes(sourceType)),
     [platformCatalog, sourceType],
   );
-  const availablePlatforms = useMemo(
-    () => supportedPlatforms.filter((platform) => platform.status === "active"),
-    [supportedPlatforms],
+  const rssTargets = sourceType === "audio"
+    ? (rss?.claims ?? []).flatMap((claim) => {
+        const platform = platformCatalog.find((candidate) => candidate.id === claim.platformId);
+        return platform ? [{ claim, platform }] : [];
+      })
+    : [];
+  const rssClaimedIds = new Set(rssTargets.map(({ platform }) => platform.id));
+  const availablePlatforms = supportedPlatforms.filter((platform) =>
+    platform.status === "active"
+    && platform.authMode === "extension"
+    && !rssClaimedIds.has(platform.id)
   );
   const activeSupported = availablePlatforms.some((platform) => platform.id === activePlatform);
   const active = activeSupported
@@ -400,6 +507,11 @@ export function PublisherApp({ services, host }: PublisherAppProps) {
         });
         setPlatformCatalog((previous) =>
           platformCatalogSignature(previous) === platformCatalogSignature(next) ? previous : next,
+        );
+        const liveRss = await api.podcastRss();
+        if (disposed) return;
+        setRss((previous) =>
+          JSON.stringify(previous) === JSON.stringify(liveRss) ? previous : liveRss
         );
       } catch {}
     };
@@ -451,6 +563,38 @@ export function PublisherApp({ services, host }: PublisherAppProps) {
       setSourceError(error instanceof Error ? error.message : String(error));
     }
   }, [app, defaultTargets, sourceType]);
+
+  const setCover = useCallback(async (vaultPath: string) => {
+    const activeFile = app.workspace.getActiveFile();
+    if (!activeFile) return;
+    const attachment = app.vault.getAbstractFileByPath(vaultPath);
+    const reference = attachment instanceof TFile
+      ? app.metadataCache.fileToLinktext(attachment, activeFile.path, false)
+      : vaultPath;
+    try {
+      await app.fileManager.processFrontMatter(activeFile, (frontmatter) => {
+        const current = frontmatter.tassello && typeof frontmatter.tassello === "object" && !Array.isArray(frontmatter.tassello)
+          ? frontmatter.tassello as Record<string, unknown>
+          : {};
+        frontmatter.tassello = { ...current, cover: reference };
+      });
+      await refreshSource();
+    } catch (error) {
+      new Notice(error instanceof Error ? error.message : String(error));
+    }
+  }, [app, refreshSource]);
+
+  const uploadCover = useCallback(async (file: File) => {
+    const activeFile = app.workspace.getActiveFile();
+    if (!activeFile) return;
+    try {
+      const target = await app.fileManager.getAvailablePathForAttachment(file.name, activeFile.path);
+      await app.vault.createBinary(target, await file.arrayBuffer());
+      await setCover(target);
+    } catch (error) {
+      new Notice(error instanceof Error ? error.message : String(error));
+    }
+  }, [app, setCover]);
 
   // 输入/切文件防抖刷新。
   useEffect(() => {
@@ -688,6 +832,10 @@ export function PublisherApp({ services, host }: PublisherAppProps) {
               </div>
             </div>
 
+            {activeSource && <CoverControl source={activeSource} onChoose={(path) => void setCover(path)} onUpload={(file) => void uploadCover(file)} />}
+            {sourceType === "audio" && rss && rssTargets.length > 0 && (
+              <RssSyncStrip rss={rss} targets={rssTargets} open={rssOpen} onToggle={() => setRssOpen((open) => !open)} />
+            )}
             <FindingsPanel findings={findings} />
 
             <div className="preview-frame" data-role="preview-card">
@@ -741,7 +889,16 @@ export function PublisherApp({ services, host }: PublisherAppProps) {
                 }}
               >
                 {activeSource ? (
-                  <div className="rich" dangerouslySetInnerHTML={{ __html: previewHtml }} />
+                  <>
+                    {activeSource.type !== "image" && activeSource.cover && (
+                      <img
+                        className={"preview-cover " + activeSource.type}
+                        src={activeSource.cover.resourcePath}
+                        alt="封面预览"
+                      />
+                    )}
+                    <div className="rich" dangerouslySetInnerHTML={{ __html: previewHtml }} />
+                  </>
                 ) : (
                   <div className="plain">{sourceError ?? "没有活动 Markdown 文件"}</div>
                 )}
@@ -800,6 +957,10 @@ export function PublisherApp({ services, host }: PublisherAppProps) {
                 </div>
               </div>
             </div>
+            {activeSource && <CoverControl source={activeSource} onChoose={(path) => void setCover(path)} onUpload={(file) => void uploadCover(file)} />}
+            {sourceType === "audio" && rss && rssTargets.length > 0 && (
+              <RssSyncStrip rss={rss} targets={rssTargets} open={rssOpen} onToggle={() => setRssOpen((open) => !open)} />
+            )}
             <div className="notice">这里只保存各稿件类型的默认勾选，不创建发布任务。</div>
           </>
         )}

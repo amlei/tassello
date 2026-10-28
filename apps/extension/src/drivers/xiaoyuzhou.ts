@@ -1,6 +1,6 @@
 import type { ExtensionJobResult } from "@tassello/shared";
 import { plainBody } from "../driver-utils.ts";
-import { dropFiles, pasteInto, setControlValue, waitForText } from "../page-runtime.ts";
+import { executeInPage, pasteInto, setControlValue, setInputFiles, waitForSelector, waitForText } from "../page-runtime.ts";
 import type { PublishRuntime } from "../publish-runtime.ts";
 
 export async function publishXiaoyuzhou(runtime: PublishRuntime): Promise<ExtensionJobResult["result"]> {
@@ -11,8 +11,20 @@ export async function publishXiaoyuzhou(runtime: PublishRuntime): Promise<Extens
   const url = `https://podcaster.xiaoyuzhoufm.com/podcast/${encodeURIComponent(channel.id)}/episode/create`;
   const tabId = await runtime.open(url, true);
   await waitForText(tabId, "点击上传", 45_000);
-  if (!(await dropFiles(tabId, ".mantine-Dropzone-root", [audio]))) {
-    throw new Error("小宇宙音频没有进入上传区域");
+  const opened = await executeInPage(tabId, () => {
+    const upload = Array.from(document.querySelectorAll("div[aria-haspopup='dialog']"))
+      .find((element) => (element.textContent || "").replace(/\s+/g, "").includes("点击上传播客"));
+    const button = upload?.querySelector("button") as HTMLButtonElement | null;
+    if (!button) return false;
+    button.click();
+    return true;
+  }, []);
+  if (!opened) {
+    throw new Error("未找到小宇宙音频上传入口");
+  }
+  await waitForSelector(tabId, 'input[type="file"][accept*="audio"]', { visible: false, timeoutMs: 30_000 });
+  if (!(await setInputFiles(tabId, 'input[type="file"][accept*="audio"]', [audio]))) {
+    throw new Error("小宇宙音频没有进入上传控件");
   }
   runtime.report({ status: "uploading", stage: 1, progress: 45, message: "小宇宙音频上传中" });
   const titleSet = await setControlValue(tabId, 'input[placeholder="输入单集标题"]', runtime.job.snapshot.title);
@@ -22,6 +34,11 @@ export async function publishXiaoyuzhou(runtime: PublishRuntime): Promise<Extens
   await waitForText(tabId, "重新上传", 30 * 60_000).catch(async () => {
     await waitForText(tabId, "音频 ·", 30 * 60_000);
   });
+  await executeInPage(tabId, () => {
+    const button = Array.from(document.querySelectorAll("button"))
+      .find((element) => (element.textContent || "").trim() === "收起") as HTMLButtonElement | undefined;
+    button?.click();
+  }, []);
   return {
     status: "awaiting_confirm",
     url: null,

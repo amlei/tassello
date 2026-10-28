@@ -16,6 +16,7 @@ export * from "./documents";
 export * from "./extensions";
 export * from "./filesystem";
 export * from "./media-token";
+export * from "./podcast-rss";
 export * from "./state";
 export * from "./task-service";
 export * from "./upload-store";

@@ -4,6 +4,7 @@ import jikeImage from "../assets/platforms/jike.png";
 import xiaoyuzhouImage from "../assets/platforms/xiaoyuzhou.png";
 import ximalayaImage from "../assets/platforms/ximalaya.png";
 import lizhiImage from "../assets/platforms/lizhi.png";
+import qingtingImage from "../assets/platforms/qingting.png";
 
 export type PlatformImageSource = string | { src: string };
 
@@ -12,6 +13,7 @@ export const PLATFORM_IMAGE_MARKS: Record<string, PlatformImageSource> = {
   xiaoyuzhou: xiaoyuzhouImage,
   ximalaya: ximalayaImage,
   lizhi: lizhiImage,
+  qingting: qingtingImage,
 };
 
 export const PLATFORM_MARKS: Record<string, { viewBox: string; paths: { d: string; evenodd?: boolean; stroke?: boolean; width?: number }[] }> = {

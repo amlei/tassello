@@ -17,6 +17,7 @@
 | 文档 | 权威内容 |
 |---|---|
 | [design/architecture.md](./design/architecture.md) | 目标架构、模块边界、Vault、API、任务、扩展与迁移状态 |
+| [design/podcast-rss.md](./design/podcast-rss.md) | 播客 RSS 发现、认领缓存与音频分发规则 |
 | [design/design-language.md](./design/design-language.md) | UI 视觉语言、布局、分隔线、组件、文案和主题规则 |
 | [design/ui-components.md](./design/ui-components.md) | 组件术语、复用边界、原型目录、生产目录和拆分规则 |
 | [design/agents.md](./design/agents.md) | Agent 能力域、鉴权、任务来源、并发和资源边界 |

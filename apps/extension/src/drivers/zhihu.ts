@@ -1,6 +1,6 @@
 import type { ExtensionJobResult } from "@tassello/shared";
-import { articleHtml, mediaOfKind, plainBody, publishIntent } from "../driver-utils.ts";
-import { executeInPage, setControlValue, setInputFiles, waitForSelector, waitForText } from "../page-runtime.ts";
+import { articleHtml, coverMedia, mediaOfKind, plainBody, publishIntent } from "../driver-utils.ts";
+import { executeInPage, setControlValue, setInputFiles, waitForSelector } from "../page-runtime.ts";
 import type { LoadedMedia } from "../publish-runtime.ts";
 import type { PublishRuntime } from "../publish-runtime.ts";
 import { md5Base64 } from "../md5.ts";
@@ -155,6 +155,50 @@ async function uploadImage(runtime: PublishRuntime, tabId: number, image: Loaded
   return uploaded;
 }
 
+async function uploadArticleCover(tabId: number, cover: LoadedMedia): Promise<{
+  src: string;
+  width: number;
+  height: number;
+}> {
+  return executeInPage(tabId, async ({ base64, name, mime }) => {
+    const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
+    const form = new FormData();
+    form.append("picture", new File([bytes], name, { type: mime }));
+    form.append("source", "article");
+    const xsrf = document.cookie.match(/_xsrf=([^;]+)/)?.[1] ?? "";
+    const response = await fetch("https://zhuanlan.zhihu.com/api/uploaded_images", {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Accept": "application/json",
+        "x-requested-with": "fetch",
+        "x-xsrf-token": xsrf,
+      },
+      body: form,
+    });
+    const text = await response.text();
+    if (!response.ok) {
+      throw new Error(`知乎封面上传失败（HTTP ${response.status}）：${text.slice(0, 180)}`);
+    }
+    const payload = JSON.parse(text) as {
+      src?: unknown;
+      data_rawwidth?: unknown;
+      data_rawheight?: unknown;
+      dataRawwidth?: unknown;
+      dataRawheight?: unknown;
+    };
+    const src = typeof payload.src === "string" ? payload.src : "";
+    const width = Number(payload.data_rawwidth ?? payload.dataRawwidth ?? 0);
+    const height = Number(payload.data_rawheight ?? payload.dataRawheight ?? 0);
+    if (!src) throw new Error("知乎封面上传没有返回图片地址");
+    return { src, width, height };
+  }, {
+    base64: cover.base64,
+    name: cover.fileName || "cover.png",
+    mime: cover.mime,
+  }, 120_000);
+}
+
 function stripFigures(html: string): string {
   return html.replace(/<figure\b[\s\S]*?<\/figure>/gi, "");
 }
@@ -267,6 +311,33 @@ async function publishArticle(runtime: PublishRuntime): Promise<ExtensionJobResu
     });
     if (!response.ok) throw new Error(`知乎草稿正文保存失败（HTTP ${response.status}）`);
   }, { draftId, html });
+  const coverRef = coverMedia(runtime);
+  if (coverRef) {
+    const [cover] = await runtime.loadMedia([coverRef]);
+    if (!cover) throw new Error("知乎文章封面读取失败");
+    runtime.report({ status: "uploading", stage: 2, progress: 72, message: "上传知乎文章封面" });
+    const titleImage = await uploadArticleCover(tabId, cover);
+    const restored = await executeInPage(tabId, async ({ draftId: id, title, html, titleImage: image }) => {
+      const xsrf = document.cookie.match(/_xsrf=([^;]+)/)?.[1] ?? "";
+      const response = await fetch(`https://zhuanlan.zhihu.com/api/articles/${id}/draft`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json", "x-requested-with": "fetch", "x-xsrf-token": xsrf },
+        body: JSON.stringify({
+          content: html,
+          title,
+          titleImage: image.src,
+          titleImageSize: { width: image.width, height: image.height },
+          isTitleImageFullScreen: false,
+          table_of_contents: false,
+          delta_time: 1,
+          can_reward: true,
+        }),
+      });
+      return response.ok;
+    }, { draftId, title, html, titleImage }, 30_000);
+    if (!restored) throw new Error("知乎文章封面、标题和正文保存失败");
+  }
   if (intent === "draft") {
     return { status: "awaiting_confirm", url: `https://zhuanlan.zhihu.com/p/${draftId}/edit`, pageUrl: WRITE_URL, tabId, error: null };
   }

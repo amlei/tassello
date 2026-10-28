@@ -109,8 +109,13 @@ Routes → Screens → Features → UI package → Foundations
 
 - `ContentTile`、`ArticleTile`、`ImageTile`、`VideoTile`、`AudioTile`
 - `AccountRow`、`ExtensionInstallRow`、`VaultDirectoryRow`、`AttachmentDirectoryRow`
-- `PublishTargetPicker`、`TaskCard`、`PublishResultPanel`
+- `PublishTargetPicker`、`RssDestinationGroup`、`TaskCard`、`PublishResultPanel`
+- `PodcastRssRow`、`PodcastRssDialog`
+- `CoverRow`、`CoverPicker`
 - `RichTextEditor`、`EditorToolbar`、`MediaAssetStrip`、`PhonePreview`
+
+`CoverRow` 负责展示当前封面、默认图来源和平台适用范围；`CoverPicker` 只负责
+从稿件已有图片或新上传文件中选择封面。两者不得复制媒体条或内容卡片的样式。
 
 新项目可复制其交互模式，但不得把这些业务组件伪装成通用组件。
 

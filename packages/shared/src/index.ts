@@ -66,6 +66,15 @@ export type PlatformMeta = {
   /** 发布去向文案（账号卡渲染用，平台级静态） */
   lands: string;
   status: PlatformStatus;
+  /** 平台对封面的能力；未声明表示当前发布流程不处理独立封面。 */
+  cover?: Partial<Record<ContentType, CoverCapability>>;
+};
+
+export type CoverCapability = {
+  required: boolean;
+  /** 比例文案尚未统一到像素尺寸，由各平台接入时进一步细化。 */
+  ratio: string;
+  sources: Array<"post-asset" | "channel" | "platform-default">;
 };
 
 /* ---------- 发布任务 ---------- */
@@ -100,9 +109,12 @@ export type StageEvent = {
 export type AssetDTO = {
   id: string;
   kind: string;
+  /** frontmatter 可持久保存的资源引用，优先相对当前 Markdown。 */
+  reference: string;
   path: string;
   url?: string | null;
   color?: string | null;
+  role?: "body" | "cover";
 };
 
 export type DocumentStatus = "ready" | "missing" | "identity_conflict" | "invalid_frontmatter";
@@ -114,6 +126,8 @@ export type MediaRefDTO = {
   source: "relative" | "absolute" | "url";
   resolved: string;
   order: number;
+  /** cover = 只作为稿件封面，不参与正文媒体顺序。 */
+  role?: "body" | "cover";
 };
 
 export type PublishMediaRefDTO = MediaRefDTO & {
@@ -139,6 +153,7 @@ export type PostDTO = {
   platforms: string[];
   options: Record<string, unknown>;
   media: MediaRefDTO[];
+  cover: string | null;
   durationSec: number | null;
   updatedAt: string;
   manualOrder: number;
@@ -149,6 +164,34 @@ export type ChannelDTO = {
   id: string;
   name: string;
   coverUrl?: string | null;
+};
+
+export type RssFeedHintDTO = {
+  url: string;
+  title: string;
+  episodeCount: number | null;
+  status: string | null;
+};
+
+export type PodcastRssClaimDTO = {
+  platformId: string;
+  state: "claimed" | "indexed";
+  label: string;
+  evidenceUrl: string | null;
+  checkedAt: string;
+  accountUid: string | null;
+};
+
+export type PodcastRssDTO = {
+  feedUrl: string;
+  title: string;
+  episodeCount: number | null;
+  coverUrl: string | null;
+  sourcePlatformId: string | null;
+  sourceChannelId: string | null;
+  sourceChannelName: string | null;
+  claims: PodcastRssClaimDTO[];
+  checkedAt: string;
 };
 
 export const ACCOUNT_SYNC_PHASES = [
@@ -222,6 +265,7 @@ export const postCreateSchema = z.object({
 export const postUpdateSchema = z.object({
   title: z.string().max(200).optional(),
   markdown: z.string().optional(),
+  cover: z.string().trim().max(4096).nullable().optional(),
   durationSec: z.number().int().nonnegative().nullable().optional(),
   order: z.array(z.string()).optional(), // 拖拽排序：可见稿子的新顺序
   expectedFingerprint: z.string().optional(),
@@ -249,6 +293,13 @@ export const settingsUpdateSchema = z.object({
   attachmentPath: z.string().trim().min(1).max(4096).optional(),
   theme: z.enum(["light", "dark", "system"]).optional(),
 });
+
+export const podcastRssUpdateSchema = z.object({
+  feedUrl: z.string().trim().url().max(4096).refine(
+    (value) => /^https?:\/\//i.test(value),
+    "只接受 HTTP(S) RSS 地址",
+  ),
+}).strict();
 
 export const uploadCacheQuerySchema = z.object({
   platformId: z.string().trim().min(1).max(80),
@@ -306,10 +357,12 @@ export type PublishSnapshotDTO = {
   bodyHtml?: string;
   plainText?: string;
   media: PublishMediaRefDTO[];
+  /** 显式选择的封面；为空时驱动使用第一张有效图片。 */
+  cover: PublishMediaRefDTO | null;
   contentHash: string;
   platformId: string;
   accountUid: string | null;
-  targetChannel: { id: string; name: string } | null;
+  targetChannel: { id: string; name: string; coverUrl?: string | null } | null;
   options: Record<string, unknown>;
 };
 
@@ -368,6 +421,17 @@ const accountUrlSchema = z.string().trim().url().max(4096).refine(
   "只接受 HTTP(S) URL",
 ).nullable();
 
+export const extensionRssFeedSchema = z.object({
+  url: z.string().trim().url().max(4096).refine(
+    (value) => /^https?:\/\//i.test(value),
+    "只接受 HTTP(S) RSS 地址",
+  ),
+  title: z.string().trim().min(1).max(300),
+  episodeCount: z.number().int().nonnegative().nullable(),
+  status: z.string().trim().max(120).nullable(),
+}).strict();
+export type ExtensionRssFeedDTO = z.infer<typeof extensionRssFeedSchema>;
+
 export const extensionAccountChannelSchema = z.object({
   id: accountTextSchema,
   name: accountTextSchema,
@@ -387,6 +451,7 @@ export const extensionAccountRequestSchema = z.object({
   type: z.enum(["account.verify", "account.open-login"]),
   requestId: z.string().uuid(),
   platformId: z.string().trim().min(1).max(80),
+  includeRss: z.boolean().optional(),
 });
 export type ExtensionAccountRequest = z.infer<typeof extensionAccountRequestSchema>;
 
@@ -397,6 +462,7 @@ export const extensionAccountResultSchema = z.object({
   state: z.enum(["ok", "needs_login", "failed"]),
   error: z.string().trim().max(2000).nullable().default(null),
   profile: extensionAccountProfileSchema.nullable(),
+  rssFeeds: z.array(extensionRssFeedSchema).max(100).default([]),
 }).strict().superRefine((value, context) => {
   if (value.state === "ok" && !value.profile) {
     context.addIssue({ code: "custom", path: ["profile"], message: "登录成功结果必须包含账号资料" });
@@ -409,6 +475,9 @@ export const extensionAccountResultSchema = z.object({
     && new TextEncoder().encode(JSON.stringify(value.profile)).byteLength > 64 * 1024
   ) {
     context.addIssue({ code: "custom", path: ["profile"], message: "账号资料超过 64 KiB 限制" });
+  }
+  if (value.rssFeeds.length > 0 && value.state !== "ok") {
+    context.addIssue({ code: "custom", path: ["rssFeeds"], message: "未登录或失败结果不得携带 RSS 数据" });
   }
 });
 export type ExtensionAccountResult = z.infer<typeof extensionAccountResultSchema>;

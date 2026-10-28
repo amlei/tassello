@@ -321,7 +321,7 @@ export function SiteHome() {
           </div>
           <PlatformPhysics />
           <div className="platform-lists">
-            <p className="platform-list"><strong>已支持：</strong>微信公众号、微博、小红书、知乎、X、即刻、豆瓣、小宇宙、喜马拉雅、荔枝播客。</p>
+            <p className="platform-list"><strong>已支持：</strong>微信公众号、微博、小红书、知乎、X、即刻、豆瓣、小宇宙、喜马拉雅、蜻蜓 FM、荔枝播客。</p>
             <p className="platform-list"><span>规划中：抖音、B站、头条号、百家号。具体能力以设置页显示为准。</span></p>
           </div>
         </div>

@@ -1,15 +1,25 @@
 /* features/editor/publish.jsx — 发布目标与频道选择弹层。
    账号 → 频道：多频道的平台（小宇宙多个节目 / 喜马拉雅多个专辑）选中后，
    弹层里追加一行频道选择 —— 凭据在账号上，落点在频道上；单频道平台不用选。 */
-function PublishSheet({ post, platforms, extensionConnected, onToggle, onImport, onClose, onConfirm }) {
+function PublishSheet({ post, platforms, rss, extensionConnected, onToggle, onImport, onClose, onConfirm }) {
   const t = TYPES[post.type];
   /* 频道选择只在弹层内记账：platformId → channelId，确认时随任务带走 */
   const [chan, setChan] = React.useState({});
+  const [rssOpen, setRssOpen] = React.useState(false);
   /* 平台矩阵驱动：不支持当前类型的平台根本不出现 */
   const supported = platforms.filter((p) => supportsType(p, post.type));
-  const selected = supported.filter((p) => p.selected);
-  /* 选中且账号底下有多个频道的平台，才需要挑 */
-  const needChannel = selected.filter((p) => channelsOf(p) && channelsOf(p).length > 1);
+  const rssClaims = post.type === "audio" ? (rss && rss.claims) || [] : [];
+  const rssTargets = rssClaims.flatMap((claim) => {
+    const platform = platforms.find((p) => p.id === claim.platformId);
+    return platform ? [{ claim, platform }] : [];
+  });
+  const rssClaimedIds = new Set(rssTargets.map(({ platform }) => platform.id));
+  const directSupported = supported.filter((p) => !p.rssOnly && !rssClaimedIds.has(p.id));
+  const selected = directSupported.filter((p) => p.selected);
+  /* 多频道平台的发布去向始终展示；未选中时仍保留行，只置灰并禁用选择。 */
+  const channelTargets = directSupported.filter((p) => channelsOf(p) && channelsOf(p).length > 1);
+  const needChannel = channelTargets.filter((p) => p.selected);
+  const channelNoun = (p) => p.id === "xiaoyuzhou" ? "节目" : p.id === "lizhi" ? "播单" : "专辑";
   const bodyLen = post.body.length;
   /* 约束预检：发布前就算出哪个平台会拒稿（与任务页的失败归因同源） */
   const problemOf = (p) => {
@@ -32,10 +42,10 @@ function PublishSheet({ post, platforms, extensionConnected, onToggle, onImport,
             <span style={{ width: 8, height: 8, borderRadius: 2, background: "#fff", display: "inline-block" }}></span>
             {t.zh}
           </span>
-          <span className="sel">已选 {String(selected.length).padStart(2, "0")} / {supported.length}</span>
+          <span className="sel">直接发布 {String(selected.length).padStart(2, "0")} / {directSupported.length}</span>
         </div>
         <div className="m-platwall">
-          {supported.map((p) => {
+          {directSupported.map((p) => {
             const problem = problemOf(p);
             const failed = p.state !== "ok";
             return (
@@ -47,7 +57,12 @@ function PublishSheet({ post, platforms, extensionConnected, onToggle, onImport,
                 title={p.name + (failed ? " · 账号未连接，点一下可修复" : problem ? " · " + problem : "")}
                 aria-label={p.name}
               >
-                {p.char}
+                <PlatformMark
+                  id={p.id}
+                  char={p.char}
+                  size={24}
+                  tone={failed ? "off" : p.selected ? "lit" : "dim"}
+                />
                 {p.selected && !failed && <span className="m-platck"><IcCheck size={11} /></span>}
                 {failed && <span className="m-platretry"><IcRetry size={10} /></span>}
                 {problem && !failed && <span className="m-platdot"></span>}
@@ -55,24 +70,60 @@ function PublishSheet({ post, platforms, extensionConnected, onToggle, onImport,
             );
           })}
         </div>
+        {rssTargets.length > 0 && (
+          <div className="m-rssfanout">
+            <button className="m-rssfanout-head" onClick={() => setRssOpen((open) => !open)} aria-expanded={rssOpen}>
+              <span className="m-rssbadge">RSS</span>
+              <b>{rss.title}</b>
+              <span className="m-rssfanout-meta">{rss.episodeCount} 期 · 自动同步 {rssTargets.length} 个平台</span>
+              <span className={"m-rsschev" + (rssOpen ? " open" : "")} aria-hidden="true"><IcChevron size={11} /></span>
+            </button>
+            {rssOpen && (
+              <div className="m-rsshooks">
+                {rssTargets.map(({ claim, platform }) => (
+                  <span
+                    className={"m-rsshook " + claim.state}
+                    key={claim.platformId}
+                    title={`${platform.name} · ${claim.label} · ${claim.evidence}`}
+                  >
+                    <span className="m-rsshookicon">
+                      <PlatformMark
+                        id={platform.id}
+                        char={platform.char}
+                        size={16}
+                        tone={claim.state === "claimed" ? "lit" : "dim"}
+                      />
+                    </span>
+                    <span>{platform.name}</span>
+                    <em>{claim.label}</em>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
         {!extensionConnected && (
           <div className="m-extwarn">
             <span>浏览器扩展未连接，发布任务会停在队列里。</span>
             <button onClick={onImport}>安装或连接扩展</button>
           </div>
         )}
-        {needChannel.length > 0 && (
+        {channelTargets.length > 0 && (
           <div className="m-chrows">
-            {needChannel.map((p) => {
+            {channelTargets.map((p) => {
               const list = channelsOf(p);
               const cur = list.find((c) => c.id === chan[p.id]) || list[0];
+              const enabled = p.selected && p.state === "ok";
               return (
-                <div className="m-chrow" key={p.id}>
-                  <span className="m-chsq" style={{ background: p.color, color: p.fg || "#fff" }}>{p.char}</span>
-                  <span className="m-chlabel">发到「{p.name}」的哪个频道</span>
+                <div className={"m-chrow" + (enabled ? "" : " off")} key={p.id}>
+                  <span className="m-chsq" style={{ background: p.color, color: p.fg || "#fff" }}>
+                    <PlatformMark id={p.id} char={p.char} size={18} tone={enabled ? "lit" : "off"} />
+                  </span>
+                  <span className="m-chlabel">发到「{p.name}」的哪个{channelNoun(p)}</span>
                   <span className="w-selwrap">
                     <select
                       value={cur.id}
+                      disabled={!enabled}
                       onChange={(e) => setChan((m) => ({ ...m, [p.id]: e.target.value }))}
                       aria-label={p.name + " 发布频道"}
                     >

@@ -17,6 +17,7 @@ import {
   disconnectExtension,
   dispatchWaitingTasks,
   getPublishCapability,
+  getPodcastRss,
   getPost,
   getSettings,
   heartbeatExtension,
@@ -51,6 +52,8 @@ import {
   setExtensionAccountConnection,
   setExtensionAccountRequestDispatcher,
   setPostMedia,
+  setPostCover,
+  setPodcastRssFeed,
   setPreferredExtensionBrowser,
   setTaskControlDispatcher,
   setTaskDispatcher,
@@ -62,6 +65,7 @@ import {
   extensionAutoPairSchema,
   postCreateSchema,
   postUpdateSchema,
+  podcastRssUpdateSchema,
   publishRequestSchema,
   settingsUpdateSchema,
   uploadCacheQuerySchema,
@@ -249,6 +253,29 @@ export const app = new Elysia()
       return { ok: false, error: error instanceof Error ? error.message : String(error) };
     }
   })
+  .post("/api/v1/posts/:id/cover", async ({ params, body, set }) => {
+    const form = body as { file?: unknown } | null;
+    const file = form?.file;
+    if (!(file instanceof File)) {
+      set.status = 400;
+      return { ok: false, error: "缺少封面文件" };
+    }
+    try {
+      const post = await setPostCover(
+        params.id,
+        file.name,
+        new Uint8Array(await file.arrayBuffer()),
+      );
+      if (!post) {
+        set.status = 404;
+        return { ok: false, error: "稿子不存在" };
+      }
+      return ok(post);
+    } catch (error) {
+      set.status = 400;
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  })
   .get("/api/v1/assets/:assetId/raw", async ({ params, headers, set }) => {
     const rangeHeader = headers.range ?? null;
     if (rangeHeader) {
@@ -328,6 +355,20 @@ export const app = new Elysia()
     }
     try {
       return ok(await saveSettings(parsed.data));
+    } catch (error) {
+      set.status = 400;
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  })
+  .get("/api/v1/podcast-rss", async () => ok(await getPodcastRss()))
+  .put("/api/v1/podcast-rss", async ({ body, set }) => {
+    const parsed = podcastRssUpdateSchema.safeParse(body);
+    if (!parsed.success) {
+      set.status = 400;
+      return { ok: false, error: "RSS 地址不合法" };
+    }
+    try {
+      return ok(await setPodcastRssFeed(parsed.data.feedUrl));
     } catch (error) {
       set.status = 400;
       return { ok: false, error: error instanceof Error ? error.message : String(error) };

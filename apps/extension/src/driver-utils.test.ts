@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { articleHtml } from "./driver-utils";
+import { articleHtml, coverMedia, mediaOfKind } from "./driver-utils";
 import type { PublishRuntime } from "./publish-runtime";
 
 describe("扩展正文渲染", () => {
@@ -31,5 +31,34 @@ describe("扩展正文渲染", () => {
     expect(html).toContain("<ul>");
     expect(html).toContain('<figure data-onda-media="0" data-src="https://cdn.example.com/test.png">');
     expect(html).toContain('<img src="https://cdn.example.com/test.png" alt="配图">');
+  });
+
+  test("正文媒体不包含独立封面，封面从快照显式读取", () => {
+    const body = {
+      raw: "![正文](../files/body.png)",
+      alt: "正文",
+      kind: "image" as const,
+      source: "relative" as const,
+      resolved: "../files/body.png",
+      order: 0,
+      assetId: "body",
+      fileName: "body.png",
+    };
+    const cover = {
+      raw: "![封面](../files/cover.png)",
+      alt: "封面",
+      kind: "image" as const,
+      source: "relative" as const,
+      resolved: "../files/cover.png",
+      order: 1,
+      assetId: "cover",
+      fileName: "cover.png",
+      role: "cover" as const,
+    };
+    const runtime = {
+      job: { snapshot: { media: [body, cover], cover } },
+    } as unknown as PublishRuntime;
+    expect(mediaOfKind(runtime, "image")).toEqual([body]);
+    expect(coverMedia(runtime)).toEqual(cover);
   });
 });

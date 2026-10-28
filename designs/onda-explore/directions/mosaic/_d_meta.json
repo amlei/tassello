@@ -1,0 +1,18 @@
+{
+  "type": "design",
+  "designSystems": [],
+  "primaryDesignSystem": null,
+  "assets": {
+    "Onda Mosaic 编辑器封面原型": {
+      "versions": [
+        {
+          "path": "index.html",
+          "createdAt": "2026-10-29T00:18:43.419Z",
+          "status": "needs-review"
+        }
+      ]
+    }
+  },
+  "createdAt": "2026-10-29T00:18:43.420Z",
+  "updatedAt": "2026-10-29T00:19:10.342Z"
+}

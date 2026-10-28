@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 export default async function EditorPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { post, platforms, settings, counts, tasks } = await loadEditorData(id);
+  const { post, platforms, settings, rss, counts, tasks } = await loadEditorData(id);
   if (!post) notFound();
-  return <EditorScreen post={post} platforms={platforms} settings={settings} counts={counts} initialTasks={tasks} />;
+  return <EditorScreen post={post} platforms={platforms} settings={settings} rss={rss} counts={counts} initialTasks={tasks} />;
 }

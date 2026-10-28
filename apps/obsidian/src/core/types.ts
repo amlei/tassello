@@ -1,5 +1,5 @@
 import { PLATFORM_METAS } from "@tassello/platform-core";
-import type { AccountSyncPhase } from "@tassello/shared";
+import type { AccountSyncPhase, PlatformMeta } from "@tassello/shared";
 
 export type ContentType = "article" | "image" | "video" | "audio";
 export type PlatformId = string;
@@ -37,6 +37,7 @@ export type SourceDraft = {
   html: string;
   plain: string;
   assets: ResolvedAsset[];
+  cover?: ResolvedAsset | null;
   platformIds: PlatformId[];
   options: Record<string, unknown>;
 };
@@ -83,6 +84,7 @@ export type PlatformCapability = {
   supports: ContentType[];
   description: string;
   status: "active" | "planned";
+  authMode: PlatformMeta["authMode"];
   syncPhase: AccountSyncPhase;
   syncReason: string | null;
   accountName: string | null;
@@ -98,6 +100,7 @@ export const PLATFORMS: PlatformCapability[] = PLATFORM_METAS.map((meta) => ({
   supports: meta.supports,
   description: meta.lands,
   status: meta.status,
+  authMode: meta.authMode,
   syncPhase: "unverified",
   syncReason: null,
   accountName: null,

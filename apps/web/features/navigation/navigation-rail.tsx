@@ -4,7 +4,15 @@
 import React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { TYPE_META, TYPE_ORDER, type AppSettings, type ContentType, type PlatformDTO, type PublishCapabilityDTO } from "@tassello/shared";
+import {
+  TYPE_META,
+  TYPE_ORDER,
+  type AppSettings,
+  type ContentType,
+  type PlatformDTO,
+  type PodcastRssDTO,
+  type PublishCapabilityDTO,
+} from "@tassello/shared";
 import { api, connectClientEvents } from "../../adapters/api";
 import { MosaicLogo } from "../brand/mosaic-logo";
 import { SettingsSheet, type VaultViewState } from "../settings/settings-dialog";
@@ -137,6 +145,7 @@ function SettingsGate({ missing }: { missing: number }) {
   const [platforms, setPlatforms] = React.useState<PlatformDTO[] | null>(null);
   const [settings, setSettings] = React.useState<AppSettings | null>(null);
   const [capability, setCapability] = React.useState<PublishCapabilityDTO | null>(null);
+  const [rss, setRss] = React.useState<PodcastRssDTO | null | undefined>(undefined);
   const [vault, setVault] = React.useState<VaultViewState | null>(null);
   const [busyId, setBusyId] = React.useState<string | null>(null);
   const [accountActionError, setAccountActionError] = React.useState<{ platformId: string; message: string } | null>(null);
@@ -147,15 +156,17 @@ function SettingsGate({ missing }: { missing: number }) {
     setAccountActionError(null);
     setLoading(true);
     try {
-      const [ps, st, cap, vaultStatus] = await Promise.all([
+      const [ps, st, cap, vaultStatus, podcastRss] = await Promise.all([
         api.listPlatforms(),
         api.getSettings(),
         api.getPublishCapability(),
         api.getVaultStatus(),
+        api.getPodcastRss(),
       ]);
       setPlatforms(ps);
       setSettings(st);
       setCapability(cap);
+      setRss(podcastRss);
       setVault({
         status: vaultStatus.conflicts ? "conflict" : "ready",
         path: vaultStatus.path,
@@ -171,6 +182,9 @@ function SettingsGate({ missing }: { missing: number }) {
   };
   const refreshPlatforms = async () => {
     try { setPlatforms(await api.listPlatforms()); } catch {}
+  };
+  const refreshRss = async () => {
+    try { setRss(await api.getPodcastRss()); } catch {}
   };
   const refreshVault = async () => {
     try {
@@ -206,6 +220,7 @@ function SettingsGate({ missing }: { missing: number }) {
       setAccountActionError({ platformId: id, message: error instanceof Error ? error.message : String(error) });
     }
     await refreshPlatforms();
+    await refreshRss();
     setBusyId(null);
   };
   const openLogin = async (id: string) => {
@@ -232,6 +247,7 @@ function SettingsGate({ missing }: { missing: number }) {
       loginRetryCleanup.current?.();
       setAccountActionError({ platformId: id, message: error instanceof Error ? error.message : String(error) });
       await refreshPlatforms();
+      await refreshRss();
     }
   };
 
@@ -270,11 +286,12 @@ function SettingsGate({ missing }: { missing: number }) {
         <span>{loading ? "设置…" : "设置"}</span>
         {missing > 0 && <span className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-error px-1.5 font-mono text-[10.5px] font-bold text-white">{missing}</span>}
       </AppButton>
-      {open && platforms && settings && capability && vault && (
+      {open && platforms && settings && capability && vault && rss !== undefined && (
         <SettingsSheet
           platforms={platforms}
           settings={settings}
           capability={capability}
+          rss={rss}
           vault={vault}
           busyId={busyId}
           accountActionError={accountActionError}
@@ -282,6 +299,12 @@ function SettingsGate({ missing }: { missing: number }) {
           onVerify={(id) => void verify(id)}
           onOpenLogin={openLogin}
           onSaveSettings={persistSettings}
+          onSaveRss={async (feedUrl) => {
+            const saved = await api.savePodcastRss(feedUrl);
+            setRss(saved);
+            await Promise.all([refreshPlatforms(), api.getSettings().then(setSettings)]);
+            return saved;
+          }}
           onClose={() => setOpen(false)}
         />
       )}

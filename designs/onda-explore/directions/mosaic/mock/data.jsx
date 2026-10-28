@@ -79,7 +79,7 @@ function channelsOf(platform) {
  *
  * supports 的来源（逐条核对，2026-09 整理）：
  *  · 微信公众号 —— 图文消息 / 图片消息（小绿书）/ 视频 / 语音；dev 文档里草稿箱只管图文消息，但后台可直发图片与视频
- *  · 小红书 —— 图文笔记 / 视频笔记 / 长文笔记（内置长文编辑器，约 6000 字）；无独立音频发布
+ *  · 小红书 —— 图文笔记 / 视频笔记 / 长文笔记（内置长文编辑器，约 6000 字）/ 播客音频
  *  · 微博 —— 文字 + 多图 + 视频同帖；音频需转成视频，官方不支持直发音频
  *  · 即刻 —— 动态文字 / 图片 / 视频 / 音乐链接分享；不能上传音频文件
  *  · X —— 推文文字 / 图片 / 视频（语音推文只有 140 秒，音频出口不放在这里）
@@ -92,7 +92,7 @@ function channelsOf(platform) {
  *  · 小宇宙 / 喜马拉雅 / 荔枝播客 —— 音频出口：收声音（喜马拉雅在自家后台另有视频形态，
  *    但对本工作台只当音频目的地用），因此 supports 只写 audio
  *
- * 一条产品判断：音频＝播客，所以「audio」只留给播客平台与微信公众号（语音），
+ * 一条产品判断：音频＝播客，所以「audio」只留给微信公众号（语音）、小红书播客与播客平台，
  * 综合平台的音频能力（X 语音推文、头条音频、百家号音频）不在这里当出口。
  *
  * state：扩展校验状态 —— ok = 已连接，fail = 需要重新登录
@@ -105,7 +105,7 @@ function channelsOf(platform) {
 const PLATFORMS = [
   { id: "wechat",    name: "微信公众号", char: "微", color: "#07C160", state: "ok", syncPhase: "extension_offline", link: "mp.weixin.qq.com/s/",        supports: ["article", "image", "video", "audio"],
     account: { name: "九漾小记", kind: "订阅号", uid: "gh_3f9a2c7d", until: "2026-12-31", checked: "09-16 14:52", lands: "内容进这个号的草稿箱，群发要你去公众号后台点一次" } },
-  { id: "xhs",       name: "小红书",     char: "红", color: "#FF2442", state: "ok", syncPhase: "unverified", link: "www.xiaohongshu.com/explore/", supports: ["article", "image", "video"],
+  { id: "xhs",       name: "小红书",     char: "红", color: "#FF2442", state: "ok", syncPhase: "unverified", link: "www.xiaohongshu.com/explore/", supports: ["article", "image", "video", "audio"],
     account: { name: "九漾 Onda", kind: "个人号", uid: "小红书号 8823456712", until: "2026-11-30", checked: "09-16 09:12", lands: "直接发成一篇笔记，发完可以在小红书里继续改" } },
   { id: "weibo",     name: "微博",       char: "博", color: "#FF8200", state: "ok", syncPhase: "source_changed", link: "weibo.com/detail/",          supports: ["article", "image", "video"],
     account: { name: "九漾Onda", kind: "个人认证", uid: "UID 5f2c91a4", until: "2027-01-15", checked: "09-15 20:41", lands: "直接发一条微博（这个号没开长文，正文限 500 字）" } },
@@ -120,6 +120,8 @@ const PLATFORMS = [
     account: { name: "九漾 Onda", kind: "机构号授权", uid: "zhuanlan.zhihu.com/people/onda", until: "2026-12-08", checked: "09-16 08:30", lands: "存成一篇专栏草稿，发布按钮在知乎后台" } },
   { id: "douban",    name: "豆瓣",       char: "豆", color: "#2E963D", state: "ok",   link: "www.douban.com/note/",       supports: ["article", "image"],
     account: { name: "九漾", kind: "个人号", uid: "豆瓣 ID 197364821", until: "2026-11-11", checked: "09-13 19:22", lands: "直接发成一篇日记" } },
+  { id: "apple",     name: "Apple Podcasts", char: "", color: "#A855F7", state: "ok", rssOnly: true, link: "podcasts.apple.com/", supports: ["audio"], lands: "通过 RSS 自动收录",
+    account: { name: "青春列车", kind: "RSS", uid: "Apple Podcasts", until: "", checked: "账号检查时", lands: "通过 RSS 自动收录" } },
   { id: "toutiao",   name: "头条号",     char: "头", color: "#F04142", state: "ok",   link: "www.toutiao.com/article/",   supports: ["article", "image", "video"],
     account: { name: "九漾 Onda", kind: "头条号", uid: "头条号 ID 1736…", until: "2026-12-20", checked: "09-16 10:15", lands: "进创作栏草稿，需要你手动点发布" } },
   { id: "baijiahao", name: "百家号",     char: "百", color: "#2932E1", state: "ok",   link: "baijiahao.baidu.com/s?id=",  supports: ["article", "image", "video"],
@@ -145,12 +147,33 @@ const PLATFORMS = [
         { id: "xm-onda",  name: "九漾 Onda", uid: "专辑 ID 3f9c01", items: "128 条声音" },
         { id: "xm-noise", name: "白噪音收藏夹", uid: "专辑 ID 3f9c02", items: "34 条声音" },
       ] } },
+  { id: "qingting",  name: "蜻蜓 FM",     char: "蜻", color: "#F04438", state: "ok",   link: "www.qingting.fm/channels/",    supports: ["audio"],
+    account: { name: "Amlei", kind: "主播号", uid: "蜻蜓 ID 1c95f2…", until: "", checked: "账号检查时", lands: "上传到所选专辑，停在平台「发布」前",
+      channels: [
+        { id: "530120", name: "青春列车", uid: "专辑 ID 530120", items: "RSS · 24 期" },
+      ] } },
   { id: "lizhi",     name: "荔枝播客",     char: "荔", color: "#D6336C", state: "ok", syncPhase: "failed", link: "www.lizhi.fm/",                supports: ["audio"],
     account: { name: "九漾电台", kind: "播客号", uid: "荔枝 ID lz8823", until: "2026-11-20", checked: "09-16 11:08", lands: "进草稿箱，发布要你去荔枝后台点",
       channels: [
         { id: "lz-main", name: "九漾电台", uid: "荔枝播单 lz8823", items: "56 期" },
       ] } },
 ];
+
+const PODCAST_RSS = {
+  title: "青春列车",
+  feedUrl: "https://feed.xyzfm.space/9kawahhdv9tp",
+  episodeCount: 21,
+  sourcePlatformId: "xiaoyuzhou",
+  sourceChannelName: "青春列车",
+  checkedAt: "账号检查时获取",
+  claims: [
+    { platformId: "xhs", state: "claimed", label: "已同步", evidence: "20 期" },
+    { platformId: "wechat", state: "claimed", label: "已导入", evidence: "21 期" },
+    { platformId: "qingting", state: "claimed", label: "认领成功", evidence: "24 期" },
+    { platformId: "douban", state: "indexed", label: "已收录", evidence: "播客页" },
+    { platformId: "apple", state: "indexed", label: "已收录", evidence: "Apple Podcasts" },
+  ],
+};
 
 const POSTS = [
   /* ---------- 文章 · 18 ---------- */
@@ -393,6 +416,7 @@ const POSTS = [
     videoSrc: "../../../tassello-intro-canvas/export/tassello-intro-share.mp4",
     title: "三分钟讲清「公摊面积」",
     body: "电梯井、楼梯间、大堂、设备房——你买的每一平米里，都有一部分是这些。这条视频用一栋真实楼盘的竣工图，把公摊系数是怎么算出来的、哪些算得合理哪些是浑水摸鱼，一次讲清楚。\n\n片尾附了一张自测表，买房前对着户型图自己就能算个大概。#房产 #科普 #公摊面积",
+    images: shots([K_INK, K_ORANGE]),
   },
   {
     id: "v2", type: "video", updated: "09-08 22:03", duration: "05:47", durationSec: 347,
@@ -450,6 +474,7 @@ const POSTS = [
     id: "p1", type: "audio", updated: "09-11 23:51", duration: "38:20", durationSec: 2300,
     title: "EP.12 和夜班出租车司机聊一座城市的背面",
     body: "这期嘉宾是开了十九年夜班的出租车司机王师傅。我们聊了他眼中的城市时刻表：凌晨一点的代驾、三点的水产市场、四点半的第一班机场线。\n\n他说夜班司机有个不成文的默契，谁在机场排队区睡着了，后面的人会按两声喇叭把他叫醒，「不能让客人等」。#播客 #城市 #夜班",
+    images: shots([K_ORANGE, K_CYAN]),
   },
   {
     id: "p2", type: "audio", updated: "09-06 07:40", duration: "12:05", durationSec: 725,
@@ -484,6 +509,6 @@ const POSTS = [
 ];
 
 Object.assign(window, {
-  TYPES, TYPE_ORDER, PALETTE, PLATFORMS, STAGES, POSTS, DEFAULT_TARGETS,
+  TYPES, TYPE_ORDER, PALETTE, PLATFORMS, PODCAST_RSS, STAGES, POSTS, DEFAULT_TARGETS,
   asset, shots, platformLink, newToken, supportsType, channelsOf,
 });

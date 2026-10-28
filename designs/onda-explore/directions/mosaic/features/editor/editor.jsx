@@ -2,6 +2,7 @@
 function EditorView({ post, onChange, onBack, onPublish, onDirty }) {
   const t = TYPES[post.type];
   const [saveState, setSaveState] = React.useState("saved"); // saved | dirty | saving
+  const [coverOpen, setCoverOpen] = React.useState(false);
   const dirtyRef = React.useRef(false);
   const autoTimer = React.useRef(null);
 
@@ -69,6 +70,7 @@ function EditorView({ post, onChange, onBack, onPublish, onDirty }) {
   const cancelLink = () => { if (richRef.current && richRef.current.cancelLink) richRef.current.cancelLink(); };
   /* 移除一张正文配图：删掉那一行记号；没人再引用就顺手把素材也收走 */
   const removeImage = (id) => {
+    if (post.coverId === id) setField("coverId", null);
     setField("images", (post.images || []).filter((im) => im.id !== id));
   };
   /* 从素材区删除一张图：素材收走，正文里引用它的图块一并清掉 */
@@ -78,6 +80,7 @@ function EditorView({ post, onChange, onBack, onPublish, onDirty }) {
     const lineRe = new RegExp("^!\\[[^\\]]*\\]\\(asset://" + id + "\\)\\s*$", "gm");
     setField("bodyHtml", (post.bodyHtml || "").replace(figRe, ""));
     setField("body", (post.body || "").replace(lineRe, ""));
+    if (post.coverId === id) setField("coverId", null);
     setField("images", (post.images || []).filter((im) => im.id !== id));
   };
   /* 清空图片素材：最少保留一张（第一张），清掉的图在正文里的引用一并移除 */
@@ -92,6 +95,7 @@ function EditorView({ post, onChange, onBack, onPublish, onDirty }) {
     });
     setField("bodyHtml", html);
     setField("body", body);
+    if (post.coverId && list.slice(1).some((im) => im.id === post.coverId)) setField("coverId", null);
     setField("images", [list[0]]);
   };
   /* 新增图片素材：追加到末尾 —— 数组尾部插入是摊销 O(1)，第一格的「+」永远不动（其余格位也不变） */
@@ -119,6 +123,20 @@ function EditorView({ post, onChange, onBack, onPublish, onDirty }) {
     if (post.type === "video") { setField("duration", "02:18"); setField("durationSec", 138); }
     else { setField("duration", "12:05"); setField("durationSec", 725); }
   };
+  const chooseCover = (id) => setField("coverId", id);
+  const uploadCover = (file) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const image = {
+        id: "cover" + Date.now(),
+        color: PALETTE[(post.images || []).length % PALETTE.length],
+        src: String(reader.result || ""),
+      };
+      setField("images", (post.images || []).concat([image]));
+      setField("coverId", image.id);
+    };
+    reader.readAsDataURL(file);
+  };
 
   /* 两栏各自可滚：底部渐隐提示「下面还有」，滚到底自动收掉 */
   const writeRef = React.useRef(null);
@@ -137,7 +155,7 @@ function EditorView({ post, onChange, onBack, onPublish, onDirty }) {
     const t = setTimeout(syncMore, 260);
     window.addEventListener("resize", syncMore);
     return () => { cancelAnimationFrame(raf); clearTimeout(t); window.removeEventListener("resize", syncMore); };
-  }, [post.id, post.title, post.body, post.duration, syncMore]);
+  }, [post.id, post.title, post.body, post.duration, post.coverId, post.images?.length, syncMore]);
 
   return (
     <div className="m-editor">
@@ -171,6 +189,7 @@ function EditorView({ post, onChange, onBack, onPublish, onDirty }) {
               onDeleteMedia={deleteMedia}
               onUploadMedia={uploadMedia}
             />
+            {post.type !== "image" && <CoverRow post={post} onOpen={() => setCoverOpen(true)} />}
             {/* 标题上方的编辑工具栏 */}
             <EditToolbar onCommand={runCommand} onImage={insertImage} beginLink={beginLink} cancelLink={cancelLink} />
             <input
@@ -196,6 +215,14 @@ function EditorView({ post, onChange, onBack, onPublish, onDirty }) {
         </div>
         <PreviewColumn post={post} paneRef={phoneRef} onScroll={syncMore} more={more.prev} />
       </div>
+      {coverOpen && (
+        <CoverPicker
+          post={post}
+          onChoose={chooseCover}
+          onUpload={uploadCover}
+          onClose={() => setCoverOpen(false)}
+        />
+      )}
     </div>
   );
 }
@@ -1155,6 +1182,116 @@ function ImageAssets({ images, color, onAdd, onReorder, onDelete, onClear }) {
             <IcChevron size={14} dir={expanded ? "up" : "down"} />
           </button>
         )}
+      </div>
+    </div>
+  );
+}
+
+const COVER_COPY = {
+  article: { title: "文章封面", targets: "微信公众号 · 知乎", ratio: "16:9" },
+  audio: { title: "播客封面", targets: "小红书必填 · 其他平台用专辑封面", ratio: "1:1" },
+  video: { title: "视频封面", targets: "比例随发布平台适配", ratio: "多比例" },
+};
+
+function CoverArtwork({ image, className = "" }) {
+  if (!image) return <span className={className + " m-cover-empty"}><IcFormatImage size={17} /></span>;
+  return image.src
+    ? <img className={className} src={image.src} alt="" />
+    : <span className={className} style={{ background: image.color }} aria-hidden="true"></span>;
+}
+
+function CoverRow({ post, onOpen }) {
+  const copy = COVER_COPY[post.type];
+  if (!copy) return null;
+  const images = post.images || [];
+  const cover = coverOf(post);
+  const index = cover ? images.findIndex((image) => image.id === cover.id) : -1;
+  const automatic = cover && !post.coverId;
+  return (
+    <div className={"m-coverrow " + post.type} data-role="cover-row">
+      <button type="button" className="m-coverthumb" onClick={onOpen} aria-label={"选择" + copy.title}>
+        <CoverArtwork image={cover} className="m-coverthumb-art" />
+        <span className="m-coverthumb-tag">封面</span>
+      </button>
+      <span className="m-covercopy">
+        <span className="m-covertitle">
+          {copy.title}
+          <em>{copy.ratio}</em>
+        </span>
+        <span className="m-covermeta">
+          {cover
+            ? `${automatic ? "自动使用" : "已选择"}第 ${index + 1} 张图片 · 已加入稿件资产`
+            : "尚未设置；上传后自动加入稿件资产"}
+        </span>
+      </span>
+      <span className="m-coverscope">{copy.targets}</span>
+      <button type="button" className="m-coverchange" onClick={onOpen}>
+        {cover ? "更换" : "选择"}
+      </button>
+    </div>
+  );
+}
+
+function CoverPicker({ post, onChoose, onUpload, onClose }) {
+  const copy = COVER_COPY[post.type];
+  const images = post.images || [];
+  const current = coverOf(post);
+  const inputRef = React.useRef(null);
+  return (
+    <div className="m-overlay" onClick={onClose}>
+      <div
+        className={"m-mini m-coverpick " + post.type}
+        role="dialog"
+        aria-modal="true"
+        aria-label={"选择" + copy.title}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="m-coverpick-head">
+          <div>
+            <h3>{copy.title}</h3>
+            <p>默认使用第一张图片；从素材中选择或上传新图，都会归入当前稿件。</p>
+          </div>
+          <span className="m-coverpick-ratio">{copy.ratio}</span>
+        </div>
+        <div className="m-coverpick-grid">
+          {images.map((image, index) => {
+            const selected = current?.id === image.id;
+            return (
+              <button
+                key={image.id}
+                type="button"
+                className={"m-coverpick-item" + (selected ? " selected" : "")}
+                onClick={() => { onChoose(image.id); onClose(); }}
+                aria-pressed={selected}
+              >
+                <CoverArtwork image={image} className="m-coverpick-art" />
+                <span>第 {index + 1} 张</span>
+                {index === 0 && !post.coverId && <em>默认</em>}
+                {selected && <b><IcCheck size={9} /></b>}
+              </button>
+            );
+          })}
+          <button type="button" className="m-coverpick-add" onClick={() => inputRef.current?.click()}>
+            <IcPlus size={16} />
+            <span>上传封面</span>
+            <small>PNG / JPG</small>
+          </button>
+          <input
+            ref={inputRef}
+            type="file"
+            accept="image/*"
+            hidden
+            onChange={(event) => {
+              const file = event.target.files && event.target.files[0];
+              event.target.value = "";
+              if (file) { onUpload(file); onClose(); }
+            }}
+          />
+        </div>
+        <div className="m-coverpick-foot">
+          <span>封面会作为这张稿件的图片资产保存。</span>
+          <button type="button" className="m-btn-plain" onClick={onClose}>取消</button>
+        </div>
       </div>
     </div>
   );

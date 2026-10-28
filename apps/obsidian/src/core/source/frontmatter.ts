@@ -6,6 +6,7 @@ export type NoteFrontmatter = {
   title?: string;
   type?: ContentType;
   platforms?: PlatformId[];
+  cover?: string;
   options?: Record<string, unknown>;
 };
 
@@ -62,7 +63,8 @@ export function splitNote(raw: string): SplitNote {
       }
     }
     const title = typeof config.title === "string" ? config.title : undefined;
-    return { frontmatter: { id, title, type, platforms, options }, body: raw.slice(match[0]?.length ?? 0) };
+    const cover = typeof config.cover === "string" && config.cover.trim() ? config.cover.trim() : undefined;
+    return { frontmatter: { id, title, type, platforms, cover, options }, body: raw.slice(match[0]?.length ?? 0) };
   } catch {
     return {
       frontmatter: {},

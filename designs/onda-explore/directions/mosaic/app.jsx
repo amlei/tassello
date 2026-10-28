@@ -118,6 +118,7 @@ function App() {
   const [vault, setVault] = React.useState(VAULT);
   const [extensionOpen, setExtensionOpen] = React.useState(false);
   const [defaults, setDefaults] = React.useState(DEFAULT_TARGETS);
+  const [podcastRss, setPodcastRss] = React.useState(PODCAST_RSS);
   const [sheetOpen, setSheetOpen] = React.useState(false);
   const [settingsOpen, setSettingsOpen] = React.useState(initialQuery.get("settings") === "1");
   const [searchOpen, setSearchOpen] = React.useState(false);
@@ -369,7 +370,12 @@ function App() {
 
   const confirmPublish = (chanSel) => {
     const post = posts.find((p) => p.id === editingId);
-    const selected = platforms.filter((p) => p.selected);
+    const rssClaimed = new Set(
+      post && post.type === "audio" && podcastRss && podcastRss.feedUrl
+        ? podcastRss.claims.filter((claim) => claim.state === "claimed" || claim.state === "indexed").map((claim) => claim.platformId)
+        : []
+    );
+    const selected = platforms.filter((p) => p.selected && !p.rssOnly && !rssClaimed.has(p.id));
     /* 多频道平台的落点：chanSel 里存了用户挑的 channelId，没挑就落第一个 */
     const channelOf = (p) => {
       const list = channelsOf(p);
@@ -555,6 +561,7 @@ function App() {
         <PublishSheet
           post={editing}
           platforms={platforms}
+          rss={podcastRss}
           extensionConnected={extension.status === "connected"}
           onToggle={togglePlatform}
           onImport={() => setSettingsOpen(true)}
@@ -567,6 +574,8 @@ function App() {
         <SettingsSheet
           platforms={platforms}
           defaults={defaults}
+          rss={podcastRss}
+          onRssChange={setPodcastRss}
           onToggle={toggleDefault}
           extension={extension}
           extensionInstall={extensionInstall}

@@ -9,6 +9,7 @@ export type TasselloFrontmatter = {
   updatedAt: string;
   manualOrder?: number;
   platforms?: string[];
+  cover?: string;
   options?: Record<string, unknown>;
 };
 
@@ -76,6 +77,9 @@ export function splitFrontmatter(raw: string): ParsedFrontmatter {
   const platforms = Array.isArray(config.platforms)
     ? config.platforms.filter((item): item is string => typeof item === "string" && item.length > 0)
     : undefined;
+  const cover = typeof config.cover === "string" && config.cover.trim()
+    ? config.cover.trim()
+    : undefined;
   const options = config.options && typeof config.options === "object" && !Array.isArray(config.options)
     ? config.options as Record<string, unknown>
     : undefined;
@@ -97,6 +101,7 @@ export function splitFrontmatter(raw: string): ParsedFrontmatter {
       updatedAt,
       manualOrder,
       platforms,
+      cover,
       options,
     },
     rawData: root,
@@ -120,6 +125,7 @@ export function stringifyDocument(
       updatedAt: frontmatter.updatedAt,
       ...(frontmatter.manualOrder !== undefined ? { manualOrder: frontmatter.manualOrder } : {}),
       ...(frontmatter.platforms !== undefined ? { platforms: frontmatter.platforms } : {}),
+      ...(frontmatter.cover !== undefined ? { cover: frontmatter.cover } : {}),
       ...(frontmatter.options !== undefined ? { options: frontmatter.options } : {}),
     },
   };

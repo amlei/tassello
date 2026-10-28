@@ -7,6 +7,7 @@ const basePath = "/tassello";
 
 const nextConfig: NextConfig = {
   output: "export",
+  agentRules: false,
   experimental: { externalDir: true },
   outputFileTracingRoot: projectRoot,
   basePath,

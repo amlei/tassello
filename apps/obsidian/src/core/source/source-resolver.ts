@@ -1,6 +1,7 @@
 import { MarkdownView, normalizePath, TFile, type App } from "obsidian";
 import { splitNote } from "./frontmatter";
-import { digestText, resolveImageEmbeds } from "./assets";
+import { digestText, resolveCoverImage, resolveImageEmbeds } from "./assets";
+import { mergeCoverAsset } from "./cover-assets";
 import {
   markdownToHtml,
   plainFromMarkdown,
@@ -74,12 +75,20 @@ export async function createSourceDraft(
   const type = options?.sourceType ?? frontmatter.type ?? inferredType;
   const html = await markdownToHtml(bodyForPayload);
   const plain = plainFromMarkdown(bodyForPayload);
-  const { assets, findings } = await resolveImageEmbeds(app, file.path, bodyForPayload);
+  const coverReference = frontmatter.cover;
+  const { assets: resolvedAssets, findings } = await resolveImageEmbeds(app, file.path, bodyForPayload);
+  const resolvedCover = await resolveCoverImage(app, file.path, coverReference);
+  if (resolvedCover.finding) findings.push(resolvedCover.finding);
   if (findings.some((f) => f.level === "error")) {
     const error = findings.find((f) => f.level === "error");
     throw new Error(error?.message ?? "附件解析失败");
   }
 
+  const dedupedAssets = Array.from(new Map(resolvedAssets.map((asset) => [asset.vaultPath, asset])).values());
+  const { assets, cover } = mergeCoverAsset(
+    dedupedAssets,
+    resolvedCover.cover ?? dedupedAssets[0] ?? null,
+  );
   const supportedIds = PLATFORMS.filter((platform) => platform.supports.includes(type)).map((platform) => platform.id);
   const requested = frontmatter.platforms?.filter((id) => supportedIds.includes(id));
   const defaults = (defaultPlatformIds ?? []).filter((id) => supportedIds.includes(id));
@@ -89,6 +98,7 @@ export async function createSourceDraft(
       path: file.path,
       raw: input.raw,
       assets: assets.map((asset) => [asset.vaultPath, asset.alt]),
+      cover: cover?.vaultPath ?? null,
     }),
   );
 
@@ -102,6 +112,7 @@ export async function createSourceDraft(
     html,
     plain,
     assets,
+    cover,
     platformIds,
     options: frontmatter.options ?? {},
   };

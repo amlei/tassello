@@ -1,6 +1,6 @@
 import type { ExtensionJobResult } from "@tassello/shared";
 import { plainBody } from "../driver-utils.ts";
-import { executeInPage, setControlValue, setFrameEditableText, setInputFiles, waitForSelector, waitForText } from "../page-runtime.ts";
+import { executeInPage, setControlValue, setFrameEditableText, setInputFiles, waitForSelector, waitForUploadIdle } from "../page-runtime.ts";
 import type { PublishRuntime } from "../publish-runtime.ts";
 
 const UPLOAD_URL = "https://www.ximalaya.com/reform-upload/page/webCenter/upload";
@@ -22,7 +22,7 @@ export async function publishXimalaya(runtime: PublishRuntime): Promise<Extensio
   await waitForSelector(tabId, 'input[placeholder="请输入声音标题"]', { visible: true, timeoutMs: 180_000 });
   await setControlValue(tabId, 'input[placeholder="请输入声音标题"]', runtime.job.snapshot.title);
   const body = plainBody(runtime).trim();
-  if (body && !(await setFrameEditableText(tabId, "iframe.ke-edit-iframe", body))) {
+  if (body && !(await setFrameEditableText(tabId, "body.ke-content", body))) {
     throw new Error("喜马拉雅节目简介写入失败");
   }
   const album = runtime.job.snapshot.targetChannel?.name;
@@ -50,9 +50,7 @@ export async function publishXimalaya(runtime: PublishRuntime): Promise<Extensio
     }, { album, labels });
     if (!changed) throw new Error(`未能选择喜马拉雅专辑：${album}`);
   }
-  await waitForText(tabId, "上传成功", 30 * 60_000).catch(() => {
-    throw new Error("喜马拉雅音频上传未完成");
-  });
+  await waitForUploadIdle(tabId, 30 * 60_000);
   return {
     status: "awaiting_confirm",
     url: null,

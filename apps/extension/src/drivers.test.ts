@@ -9,6 +9,7 @@ describe("正式发布驱动注册表", () => {
       "xhs",
       "x",
       "zhihu",
+      "qingting",
       "douban",
       "jike",
       "xiaoyuzhou",

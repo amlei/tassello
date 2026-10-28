@@ -108,8 +108,9 @@ function figHtml(id, alt, color, src) {
   const image = src
     ? '<img src="' + escAttr(src) + '" alt="' + escAttr(alt || "配图") + '">'
     : '<span class="m-fig-placeholder" style="background:' + escAttr(color) + '">' + escHtml(alt || "配图") + "</span>";
+  const closeSquare = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.16998 14.83L14.83 9.17004"/><path d="M14.83 14.83L9.16998 9.17004"/><path d="M9 22H15C20 22 22 20 22 15V9C22 4 20 2 15 2H9C4 2 2 4 2 9V15C2 20 4 22 9 22Z"/></svg>';
   return '<figure class="m-fig" contenteditable="false" data-asset="' + id + '" data-alt="' + escHtml(alt || "配图") +
-    '">' + image + '<button type="button" class="m-fig-del" aria-label="移除这张图">×</button></figure>';
+    '">' + image + '<button type="button" class="m-fig-del" aria-label="移除这张图">' + closeSquare + "</button></figure>";
 }
 
 /* 纯文本正文 → HTML：段落 + #标签 + 独占一行的插图 */
@@ -230,8 +231,14 @@ function serializeBody(root, color) {
   return { html: clone.innerHTML, plain: htmlToPlain(root) };
 }
 
+/* 封面只是稿件图片资产的一种用途；未显式选择时沿用第一张图片。 */
+function coverOf(post) {
+  const images = post?.images || [];
+  return images.find((image) => image.id === post?.coverId) || images[0] || null;
+}
+
 Object.assign(window, {
   MosaicLogo, fmtTime, AudioBar, FloatingPill, ASSET_IMG_RE, plainSummary,
   mdToHtml, figHtml, htmlToPlain, highlightTags, serializeBody,
-  markdownifyInline,
+  markdownifyInline, coverOf,
 });

@@ -17,6 +17,7 @@ import { getDocument, listDocuments } from "@tassello/vault";
 import { getStoredAccount, type StoredAccount } from "./account-store";
 import { getPublishCapability } from "./extensions";
 import { createMediaToken } from "./media-token";
+import { podcastRssClaimsPlatform } from "./podcast-rss";
 import { readJsonFile, resolveVaultPath, statePath, writeJsonAtomic } from "./state";
 
 export type StoredTask = TaskDTO & {
@@ -31,7 +32,7 @@ export type TaskControlDispatcher = (message:
 ) => boolean;
 
 const taskDirectory = () => statePath("tasks");
-const AUDIO_CHANNEL_PLATFORMS = new Set(["xiaoyuzhou", "ximalaya", "lizhi"]);
+const AUDIO_CHANNEL_PLATFORMS = new Set(["xiaoyuzhou", "ximalaya", "qingting", "lizhi"]);
 let dispatcher: TaskDispatcher | null = null;
 let controlDispatcher: TaskControlDispatcher | null = null;
 const dispatching = new Set<string>();
@@ -139,10 +140,13 @@ async function buildSnapshot(postId: string, platformId: string, channelId?: str
   const accountChannels = account && Array.isArray(account.profile.channels)
     ? account.profile.channels.flatMap((raw) => {
         if (!raw || typeof raw !== "object") return [];
-        const value = raw as { id?: unknown; name?: unknown; title?: unknown };
+        const value = raw as { id?: unknown; name?: unknown; title?: unknown; coverUrl?: unknown };
         const id = typeof value.id === "string" ? value.id : typeof value.name === "string" ? value.name : null;
         const name = typeof value.name === "string" ? value.name : typeof value.title === "string" ? value.title : id;
-        return id && name ? [{ id, name }] : [];
+        const coverUrl = typeof value.coverUrl === "string" && /^https?:\/\//i.test(value.coverUrl)
+          ? value.coverUrl
+          : null;
+        return id && name ? [{ id, name, coverUrl }] : [];
       })
     : [];
   if (AUDIO_CHANNEL_PLATFORMS.has(platformId) && accountChannels.length === 0) {
@@ -154,6 +158,9 @@ async function buildSnapshot(postId: string, platformId: string, channelId?: str
   if (!targetChannel && accountChannels.length > 1) throw new Error(`请选择${meta.name}的发布频道`);
   // 产品默认只填充平台编辑页，最终发布始终由用户在平台内完成。
   const intent = "draft" as const;
+  const coverIndex = document.cover
+    ? document.media.findIndex((item) => item.kind === "image" && item.resolved === document.cover)
+    : document.media.findIndex((item) => item.kind === "image");
   const media = await Promise.all(document.media.map(async (item) => {
     const relative = item.source === "url" || item.source === "absolute"
       ? item.resolved
@@ -179,6 +186,10 @@ async function buildSnapshot(postId: string, platformId: string, channelId?: str
         })(),
     };
   }));
+  const cover = coverIndex >= 0 ? media[coverIndex] ?? null : null;
+  if (meta.cover?.[document.type]?.required && !cover) {
+    throw new Error(`${meta.name}${TYPE_META[document.type].zh}发布需要先设置封面`);
+  }
   const bodyHtml = markdownToHtml(document.bodyMarkdown, {
     renderImage: ({ href, alt, title }) => {
       const decoded = (() => {
@@ -207,6 +218,7 @@ async function buildSnapshot(postId: string, platformId: string, channelId?: str
     bodyHtml,
     plainText: markdownToPlain(document.bodyMarkdown),
     media,
+    cover,
     contentHash: contentHash(document.bodyMarkdown, media),
     platformId,
     accountUid: account?.uid ?? null,
@@ -265,6 +277,15 @@ export async function createTasks(
   const unique = [...new Set(platformIds)];
   if (!unique.length) throw new Error("至少选择一个发布平台");
   const snapshots = await Promise.all(unique.map((platformId) => buildSnapshot(postId, platformId, channelIds[platformId])));
+  const rssClaimed = await Promise.all(
+    snapshots.map((snapshot) => snapshot.type === "audio"
+      ? podcastRssClaimsPlatform(snapshot.platformId, snapshot.accountUid)
+      : false),
+  );
+  const blocked = snapshots.find((_, index) => rssClaimed[index]);
+  if (blocked) {
+    throw new Error(`${getPlatformMeta(blocked.platformId)?.name ?? blocked.platformId}已通过 RSS 同步，无需直传`);
+  }
   const tasks = await Promise.all(snapshots.map((snapshot) => createTask(snapshot)));
   return tasks.map(toTaskDTO);
 }

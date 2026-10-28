@@ -11,15 +11,15 @@
 |---|---|---|
 | 内容 | Vault Markdown + frontmatter；扫描、解析、fingerprint、原子写、迁移脚本 | watcher、软编辑锁与三方冲突副本 |
 | 运营状态 | `.onda` 命名空间下的 `TASSELLO_DATA_DIR/state/` 文件状态库、原子 JSON 写、稳定 installationId | 实例锁、保留期清理、损坏恢复页面 |
-| 后端 | Bun + ElysiaJS HTTP / WS、文档、媒体、账号、任务、扩展配对 | UI / Obsidian 能力域 token、媒体服务 SSRF 防护 |
+| 后端 | Bun + ElysiaJS HTTP / WS、文档、媒体、账号、任务、扩展配对；播客 Feed 解析、平台认领缓存与 RSS 直传拦截 | UI / Obsidian 能力域 token、媒体服务 SSRF 防护 |
 | 前端 | Next.js rewrite 调用 API；编辑器保存 Markdown + fingerprint | 外部修改实时提示 |
 | Obsidian | 远端 API 客户端、直接 Markdown 编辑、预览内发布、WebSocket 状态 | 插件 token 配对与完整冲突交互 |
 | 桌面 | Electron 托管 API 二进制与 Next standalone，动态端口与完整链路自检 | 目标平台安装包实跑 |
-| 浏览器执行 | MV3、Native Messaging 自动发现/配对、单连接、心跳、10 个 active 平台驱动、串行任务与断线恢复、结果确认回执、tab 聚焦/关闭、媒体传输与上传复用、账号自动发现/验证；微信公众号文章、微博贴图、小红书长文、即刻贴图、豆瓣图文草稿、知乎文章/视频、X 图文/视频已真机通过 | 音频/播客（本轮跳过）、微博与小红书视频、其余未列平台组合、账号与发布全平台回归、真机安装包验证 |
+| 浏览器执行 | MV3、Native Messaging 自动发现/配对、单连接、心跳、11 个 active 扩展平台驱动、串行任务与断线恢复、结果确认回执、tab 聚焦/关闭、媒体传输与上传复用、账号自动发现/验证；RSS 认领在账号检查时采集一次；微信公众号文章/短语音、微博贴图、小红书长文/播客、即刻贴图、豆瓣图文草稿、知乎文章/视频、X 图文/视频、小宇宙/喜马拉雅/蜻蜓 FM/荔枝单音频已真机通过 | 微信长播客改走 RSS、微博/小红书视频、其余未列平台组合、账号与发布全平台回归、真机安装包验证 |
 
 阅读和实现时必须区分“已落地”和“尚未完成”。未完成迁移的代码不得被描述为已满足目标契约。
 
-当前实施范围只包含浏览器扩展的正式发布迁移，见 [`publish-migration.md`](../todos/publish-migration.md)。网页生图与 Agent/CLI/MCP 明确延期，不作为本轮完成标准。
+当前实施范围包含浏览器扩展的正式发布迁移和播客 RSS 分发，见 [`publish-migration.md`](../todos/publish-migration.md) 与 [`podcast-rss.md`](./podcast-rss.md)。网页生图与 Agent/CLI/MCP 明确延期，不作为本轮完成标准。
 
 ## 目录
 
@@ -183,6 +183,7 @@ tassello:
   platforms:
     - wechat
     - weibo
+  cover: ../files/m5xk2q9f/cover.png
   options: {}
 ---
 # 标题
@@ -201,12 +202,16 @@ tassello:
 | `updatedAt` | 是 | 内容最后更新时间；Web 与 Obsidian 插件在正文变化时更新，缺失时以文件 mtime 兜底 |
 | `manualOrder` | 否 | 自定义排序值 |
 | `platforms` | 否 | 默认发布平台 |
+| `cover` | 否 | 稿件封面引用；相对路径、绝对路径或 HTTP(S) URL |
 | `options` | 否 | 平台参数 |
 
 约束：
 
 - 标题取第一个非代码块 H1；frontmatter 不重复存 title。
 - 未知 frontmatter 字段必须原样保留。
+- `cover` 是稿件级资产引用。没有显式封面时，任务快照默认使用第一张有效图片。
+- 上传的新封面写入当前稿件的资源目录，并以 `role: "cover"` 标记；独立封面不进入正文媒体顺序。
+- 文章发布只对声明了封面能力的平台执行封面设置；播客沿用节目/专辑封面，只有平台明确要求时才上传稿件封面；视频多比例适配在视频平台接入时完成。
 - `id` 重复时，所有重复文件标为 `identity_conflict`，禁止发布。
 - frontmatter 损坏、缺 ID 或类型非法时标为 `invalid_frontmatter`，不自动修复。
 - 发布状态、任务 ID、发布链接、失败原因不得写入 frontmatter。
@@ -254,6 +259,7 @@ type MediaRef = {
   resolved: string;
   contentHash: string | null;
   order: number;
+  role: "body" | "cover";
 };
 ```
 
@@ -262,7 +268,7 @@ type MediaRef = {
 1. 相对路径相对于当前 Markdown 文件解析。
 2. 绝对路径直接读取；HTTP(S) URL 由后端按需获取。
 3. 类型按扩展名与 MIME 签名共同判断，不能只相信文件名。
-4. 媒体顺序始终取 Markdown 中第一次出现的顺序。
+4. 正文媒体顺序始终取 Markdown 中第一次出现的顺序；`role: "cover"` 是稿件级封面，不参与正文媒体排序。
 5. 远程 URL 不加入扩展 `host_permissions`；后端下载或转发，避免扩展申请任意域名权限。
 6. URL 失效、MIME 非媒体、超过大小上限时，在预览和发布预检中明确报错。
 7. 远程 URL 只允许 `http` / `https`，限制重定向次数与响应大小；默认拒绝私网目标，避免同步来的 Markdown 触发本地 SSRF。
@@ -286,6 +292,7 @@ type PublishDocument = {
   html: string;
   plain: string;
   media: MediaRef[];
+  cover: string | null;
   contentHash: string;
 };
 ```
@@ -789,11 +796,12 @@ storage, scripting, tabs, alarms, nativeMessaging
 | 豆瓣 | 扩展 | 页面内 API、草稿、素材上传 |
 | 小宇宙 | 扩展 | 音频注入、节目频道、草稿语义 |
 | 喜马拉雅 | 扩展 | 音频 input、受控表单、专辑频道 |
+| 蜻蜓 FM | 扩展 + RSS | 账号/专辑、单音频上传、RSS 认领后停止直传 |
 | 荔枝 | 扩展 | 登录态恢复后重新验证驱动 |
 | 即刻 | 扩展 | 页面上下文账号验证、媒体注入与人工发送 |
 | 抖音 / B 站 / 头条 / 百家 | 扩展优先 | 新平台不再实现 CDP |
 
-全部 10 个 active 平台驱动已打包进扩展注册表。代码迁移完成不等于验收完成：当前逐平台、逐内容类型的真机结果以 [`platforms/README.md`](../platforms/README.md#0-1-浏览器扩展迁移状态) 为准。未验收组合不得描述为可用。
+全部 11 个 active 扩展平台驱动已打包进扩展注册表；Apple Podcasts 是第 12 个 active registry 条目，只消费 RSS 收录状态，没有扩展驱动。代码迁移完成不等于验收完成：当前逐平台、逐内容类型的真机结果以 [`platforms/README.md`](../platforms/README.md#0-1-浏览器扩展迁移状态) 为准。未验收组合不得描述为可用。
 
 <a id="resources"></a>
 ## 14. 算法与资源评估
@@ -802,9 +810,10 @@ storage, scripting, tabs, alarms, nativeMessaging
 
 - 1,000 篇稿件，平均 30 KB：列表扫描读取约 30 MB frontmatter/头部数据；搜索约 30 MB 文本。
 - 同时打开 1–3 篇稿件：编辑器 Buffer 通常小于几百 KB。
-- 10 个平台账号、1 个扩展连接：状态文件与 WS 开销可忽略。
+- 11 个平台账号、1 个扩展连接：状态文件与 WS 开销可忽略。
 - 发布连接状态查询、心跳与切换均为 `O(1)`；单连接 30 秒心跳约 24 KB/小时。
 - 每平台每次发布 1–20 张图片：网络与磁盘主要受媒体大小影响。
+- RSS 认领只缓存小型元数据；每个 Feed 典型小于 10 KiB，公开索引查询最多读取 1 MiB HTML/JSON。
 
 ### 14.2 最坏负载
 
@@ -812,6 +821,7 @@ storage, scripting, tabs, alarms, nativeMessaging
 - 同步盘或 git checkout 一次修改 1,000 个文件时，watcher 需要合批，避免逐文件重新渲染。
 - 1 GB 视频无法保证低内存注入；超阈值必须人工选择文件或使用平台分片接口。
 - 多个 verify 标签页不能并发打开；默认串行，最多 1–2 个。
+- RSS Feed 最坏响应限制为 2 MiB，并在完整读入内存前检查上限；不下载音频。
 - 扩展安装数量不参与调度；最坏情况仍只允许一个活跃扩展连接，避免重复发布和无界状态增长。
 
 ### 14.3 资源边界

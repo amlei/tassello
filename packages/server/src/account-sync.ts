@@ -17,6 +17,7 @@ import {
   type StoredAccount,
 } from "./account-store";
 import { getPublishCapability } from "./extensions";
+import { needsRssProbe, recordRssDiscovery } from "./podcast-rss";
 
 const VERIFY_TIMEOUT_MS = 45_000;
 const LOGIN_TIMEOUT_MS = 10_000;
@@ -99,10 +100,16 @@ function requestExtension<T extends ExtensionAccountResult | ExtensionLoginOpene
   type: "account.verify" | "account.open-login",
   platformId: string,
   timeoutMs: number,
+  includeRss = false,
 ): Promise<T> {
   assertConnected();
   const requestId = randomUUID();
-  const request: ExtensionAccountRequest = { type, requestId, platformId };
+  const request: ExtensionAccountRequest = {
+    type,
+    requestId,
+    platformId,
+    ...(includeRss ? { includeRss: true } : {}),
+  };
   const result = new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => {
       pending.delete(requestId);
@@ -187,9 +194,17 @@ export async function verifyAccountThroughExtension(platformId: string): Promise
   const task = enqueueVerification(async () => {
     try {
       assertConnected();
+      const previous = await getStoredAccount(platformId);
+      /* 首次验证和缺少 RSS 快照的旧账号各补一次；取得正向结果后不再重复请求。 */
+      const includeRss = await needsRssProbe(platformId, previous?.uid ?? "pending-account");
       let result: ExtensionAccountResult;
       try {
-        result = await requestExtension<ExtensionAccountResult>("account.verify", platformId, VERIFY_TIMEOUT_MS);
+        result = await requestExtension<ExtensionAccountResult>(
+          "account.verify",
+          platformId,
+          VERIFY_TIMEOUT_MS,
+          includeRss,
+        );
       } catch (error) {
         const current = connection;
         if (current) {
@@ -217,6 +232,13 @@ export async function verifyAccountThroughExtension(platformId: string): Promise
         extensionClientId: current.clientId,
         browserLabel: current.browserLabel,
       });
+      if (profile && result.rssFeeds.length > 0) {
+        try {
+          await recordRssDiscovery(platformId, profile.uid, result.rssFeeds);
+        } catch {
+          /* RSS 发现失败不能把一个已确认可登录的平台降级为失败。 */
+        }
+      }
       notifyAccountsChanged();
       return toAccountDTO(stored);
     } finally {

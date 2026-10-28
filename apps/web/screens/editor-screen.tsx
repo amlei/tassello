@@ -3,7 +3,15 @@
 
 import React from "react";
 import { useRouter } from "next/navigation";
-import type { AppSettings, AssetDTO, PlatformDTO, PostDTO, TaskDTO, ContentType } from "@tassello/shared";
+import type {
+  AppSettings,
+  AssetDTO,
+  PlatformDTO,
+  PodcastRssDTO,
+  PostDTO,
+  TaskDTO,
+  ContentType,
+} from "@tassello/shared";
 import { api, connectClientEvents } from "../adapters/api";
 import { WorkspaceShell } from "../adapters/workspace-shell";
 import { EditorView } from "../features/editor/editor-view";
@@ -13,17 +21,19 @@ import { setSidebarCollapsed } from "../adapters/sidebar-state";
 import { Button, Modal } from "@heroui/react";
 
 export function EditorScreen({
-  post: initialPost, platforms: initialPlatforms, settings: initialSettings, counts, initialTasks,
+  post: initialPost, platforms: initialPlatforms, settings: initialSettings, rss: initialRss, counts, initialTasks,
 }: {
   post: PostDTO;
   platforms: PlatformDTO[];
   settings: AppSettings;
+  rss: PodcastRssDTO | null;
   counts: Record<string, number>;
   initialTasks: TaskDTO[];
 }) {
   const router = useRouter();
   const [post, setPost] = React.useState(initialPost);
   const [platforms, setPlatforms] = React.useState(initialPlatforms);
+  const [rss, setRss] = React.useState(initialRss);
   const settings = initialSettings;
   const [saveState, setSaveState] = React.useState<"saved" | "dirty" | "saving">("saved");
   const [tasks, setTasks] = React.useState(initialTasks);
@@ -71,6 +81,7 @@ export function EditorScreen({
       const updated = await api.updatePost(pending.id, {
         title: typeof patch.title === "string" ? patch.title : undefined,
         markdown: typeof patch.markdown === "string" ? patch.markdown : undefined,
+        cover: typeof patch.cover === "string" || patch.cover === null ? patch.cover : undefined,
         durationSec: typeof patch.durationSec === "number" || patch.durationSec === null
           ? patch.durationSec
           : undefined,
@@ -183,6 +194,16 @@ export function EditorScreen({
       setPost((p) => (p && p.id === postId ? updated : p));
     } catch {}
   };
+  const uploadCover = async (postId: string, file: File): Promise<void> => {
+    if (dirtyRef.current && !(await saveNow())) return;
+    try {
+      const updated = await api.uploadCover(postId, file);
+      setPost(updated);
+      fingerprintRef.current = updated.fingerprint;
+      dirtyRef.current = false;
+      setSaveState("saved");
+    } catch {}
+  };
 
   /* 发布 */
   const activeRunningTasks = tasks.filter((t) => (
@@ -198,10 +219,28 @@ export function EditorScreen({
   const openPublishSheet = async () => {
     if (dirtyRef.current && !(await saveNow())) return;
     setPublishError(null);
+    let currentRss = rss;
+    try {
+      currentRss = await api.getPodcastRss();
+      setRss(currentRss);
+    } catch {}
+    const rssClaimed = new Set(
+      post.type === "audio"
+        ? (currentRss?.claims ?? [])
+          .filter((claim) => claim.state === "claimed" || claim.state === "indexed")
+          .map((claim) => claim.platformId)
+        : [],
+    );
     const want = settings.defaultTargets[post.type as ContentType] ?? [];
     setSelectedIds(
       platforms
-        .filter((p) => p.sync.phase === "connected" && p.supports.includes(post.type) && want.includes(p.id))
+        .filter((p) =>
+          p.sync.phase === "connected"
+          && p.supports.includes(post.type)
+          && p.authMode !== "rss-downstream"
+          && want.includes(p.id)
+          && !rssClaimed.has(p.id)
+        )
         .map((p) => p.id),
     );
     setChannelIds({});
@@ -269,6 +308,8 @@ export function EditorScreen({
           onRemoveAsset={(assetId) => removeAsset(post.id, assetId)}
           onMoveImage={(from, to) => moveImageAsset(post.id, from, to)}
           onUploadMedia={(kind, file) => uploadMedia(post.id, kind, file)}
+          onChooseCover={(reference) => patchPost(post.id, { cover: reference })}
+          onUploadCover={(file) => uploadCover(post.id, file)}
           onBack={() => leaveGuard(() => go(`/library/${post.type}`))}
           onPublish={() => void openPublishSheet()}
           onSave={() => void saveNow()}
@@ -279,6 +320,7 @@ export function EditorScreen({
         <PublishSheet
           post={post}
           platforms={platforms}
+          rss={rss}
           publishError={publishError}
           selectedIds={selectedIds}
           channelIds={channelIds}

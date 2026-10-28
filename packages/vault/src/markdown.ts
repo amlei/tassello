@@ -7,6 +7,7 @@ export type MediaRef = {
   source: "relative" | "absolute" | "url";
   resolved: string;
   order: number;
+  role?: "body" | "cover";
 };
 
 export function titleFromMarkdown(body: string, fallback: string): string {
@@ -111,5 +112,6 @@ export function extractMedia(markdown: string): MediaRef[] {
 
 export function normalizeMediaOrder(type: ContentType, media: MediaRef[]): MediaRef[] {
   if (type === "article" || type === "image") return media.filter((item) => item.kind === "image");
-  return media.filter((item) => item.kind === type);
+  /* 视频/音频的图片是平台封面等附加素材，不能被主媒体类型过滤掉。 */
+  return media.filter((item) => item.kind === type || item.kind === "image");
 }

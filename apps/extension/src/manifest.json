@@ -29,7 +29,10 @@
     "https://www.ximalaya.com/*",
     "https://studio.ximalaya.com/*",
     "https://passport.ximalaya.com/*",
-    "https://nj.lizhi.fm/*"
+    "https://nj.lizhi.fm/*",
+    "https://admin.qingting.fm/*",
+    "https://papi.qingting.fm/*",
+    "https://upload.qtfm.cn/*"
   ],
   "background": {
     "service_worker": "background.js",

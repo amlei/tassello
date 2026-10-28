@@ -10,7 +10,13 @@ function escAttr(value: string): string {
 }
 
 export function mediaOfKind(runtime: PublishRuntime, kind: string): PublishMediaRefDTO[] {
-  return runtime.job.snapshot.media.filter((media) => media.kind === kind);
+  return runtime.job.snapshot.media.filter((media) => media.kind === kind && media.role !== "cover");
+}
+
+export function coverMedia(runtime: PublishRuntime): PublishMediaRefDTO | null {
+  return runtime.job.snapshot.cover
+    ?? runtime.job.snapshot.media.find((media) => media.kind === "image")
+    ?? null;
 }
 
 export function articleHtml(

@@ -50,10 +50,43 @@ function IcRetry({ size = 13 }) {
     </svg>
   );
 }
+
+/* 平台品牌图标：图片型标记保留全彩，依靠透明度和去色表达未选中 / 失败。 */
+const PLATFORM_IMAGE_MARKS = {
+  xiaoyuzhou: "../../../site-home/assets/platforms/xiaoyuzhou.png",
+  ximalaya: "../../../site-home/assets/platforms/ximalaya.png",
+  lizhi: "../../../site-home/assets/platforms/lizhi.png",
+  qingting: "../../../site-home/assets/platforms/qingting.png",
+};
+
+function PlatformMark({ id, char, size = 18, tone = "lit" }) {
+  const src = PLATFORM_IMAGE_MARKS[id];
+  if (src) {
+    const style = { display: "block", width: size, height: size };
+    if (tone === "off") {
+      style.opacity = 0.35;
+      style.filter = "grayscale(1)";
+    } else if (tone === "dim") {
+      style.opacity = 0.55;
+    }
+    return <img src={src} alt="" aria-hidden="true" style={style} />;
+  }
+  return <span aria-hidden="true">{char}</span>;
+}
+
 function IcSend({ size = 15 }) {
   return (
     <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M14 2L7.5 8.5M14 2l-4.5 12-2-5.5L2 6.5 14 2z" />
+    </svg>
+  );
+}
+
+function IcRss({ size = 15 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
+      <path d="M3 3.2a9.8 9.8 0 0 1 9.8 9.8M3 7a6 6 0 0 1 6 6" />
+      <circle cx="3.8" cy="12.2" r="1.2" fill="currentColor" stroke="none" />
     </svg>
   );
 }

@@ -8,11 +8,13 @@ import {
   type AppSettings,
   type ContentType,
   type PlatformDTO,
+  type PodcastRssDTO,
   type PublishCapabilityDTO,
 } from "@tassello/shared";
 import { Button, Input, Link, Modal, Popover } from "@heroui/react";
 import { Alert, Check, FolderFiles, Puzzle, Refresh, X } from "reicon-react";
 import { ChevronLeft, ChevronRight } from "reicon-react";
+import { Rss } from "lucide-react";
 import { PLATFORM_IMAGE_MARKS, PLATFORM_MARKS, PlatformMark } from "@tassello/ui/platform-icons";
 import { SettingRow } from "@tassello/ui/patterns";
 import { ChromeIcon, EdgeIcon } from "@tassello/site-ui/browser-icons";
@@ -513,12 +515,130 @@ function AttachmentDirectoryDialog({
   );
 }
 
+function PodcastRssDialog({
+  rss,
+  platforms,
+  onSave,
+  onClose,
+}: {
+  rss: PodcastRssDTO | null;
+  platforms: PlatformDTO[];
+  onSave: (feedUrl: string) => Promise<PodcastRssDTO>;
+  onClose: () => void;
+}) {
+  const [url, setUrl] = React.useState(rss?.feedUrl ?? "");
+  const [saving, setSaving] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  const save = async () => {
+    const next = url.trim();
+    if (!next) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await onSave(next);
+      onClose();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal>
+      <Modal.Backdrop isOpen onOpenChange={(open) => { if (!open) onClose(); }}>
+        <Modal.Container>
+          <Modal.Dialog className="w-[520px] max-w-[90vw] rounded-[18px] bg-paper p-6" aria-label="播客 RSS">
+            <Modal.Heading className="text-[17px] font-bold">播客 RSS</Modal.Heading>
+            <p className="mt-2 text-[12.5px] leading-6 text-ink2">
+              优先从小红书、微信公众号和蜻蜓 FM 的已导入记录中发现；没有记录时再手动填写。
+            </p>
+            <div className="mt-4 flex items-center gap-3 rounded-[12px] border border-line bg-card px-3.5 py-3">
+              <span className="flex h-8 w-8 flex-none items-center justify-center rounded-[9px] bg-accent-tint text-accent">
+                <Rss size={15} strokeWidth={2.3} />
+              </span>
+              <span className="flex min-w-0 flex-col gap-0.5">
+                <b className="text-[12.5px]">
+                  {rss ? `已发现 ${rss.title}` : "等待账号检查发现 Feed"}
+                </b>
+                <small className="truncate text-[10.5px] text-ink2">
+                  {rss
+                    ? `${rss.episodeCount ?? 0} 期 · ${rss.claims.length} 个平台已同步或收录`
+                    : "在平台账号检查时自动读取，不需要重复操作"}
+                </small>
+              </span>
+            </div>
+            <label className="mt-4 flex flex-col gap-1.5 text-[11.5px] font-bold text-ink2">
+              <span>RSS 地址</span>
+              <Input
+                className="w-full"
+                aria-label="RSS 地址"
+                value={url}
+                onChange={(event) => setUrl(event.target.value)}
+                placeholder="https://example.com/podcast/feed.xml"
+                disabled={saving}
+              />
+            </label>
+            {rss && rss.claims.length > 0 && (
+              <div className="mt-4 flex flex-wrap gap-2">
+                {rss.claims.map((claim) => {
+                  const platform = platforms.find((candidate) => candidate.id === claim.platformId);
+                  return (
+                    <span
+                      key={claim.platformId}
+                      className={
+                        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10.5px] font-bold "
+                        + (claim.state === "claimed"
+                          ? "border-accent/25 bg-accent-tint text-ink"
+                          : "border-line bg-card text-ink2")
+                      }
+                    >
+                      <PlatformMark
+                        id={claim.platformId}
+                        char={platform?.char ?? ""}
+                        size={13}
+                        tone={claim.state === "claimed" ? "lit" : "dim"}
+                      />
+                      {platform?.name ?? claim.platformId}
+                      <em className="not-italic text-ink3">{claim.label}</em>
+                    </span>
+                  );
+                })}
+              </div>
+            )}
+            {error && <p className="mt-3 text-[12px] text-error" role="alert">{error}</p>}
+            <div className="mt-5 flex justify-end gap-2">
+              <Button
+                variant="ghost"
+                className="dialog-cancel rounded-full px-4 py-2 text-ink2 data-[hovered=true]:!bg-hover data-[hovered=true]:!text-ink"
+                isDisabled={saving}
+                onPress={onClose}
+              >
+                取消
+              </Button>
+              <Button
+                className="rounded-full bg-accent px-5 py-2 font-bold text-white data-[hovered=true]:brightness-105"
+                isDisabled={!url.trim() || saving}
+                onPress={() => void save()}
+              >
+                {saving ? "读取中…" : "保存"}
+              </Button>
+            </div>
+          </Modal.Dialog>
+        </Modal.Container>
+      </Modal.Backdrop>
+    </Modal>
+  );
+}
+
 export function SettingsSheet({
-  platforms, settings, capability, vault, busyId, accountActionError, onToggleDefault, onVerify, onOpenLogin, onSaveSettings, onClose,
+  platforms, settings, capability, rss, vault, busyId, accountActionError, onToggleDefault, onVerify, onOpenLogin, onSaveSettings, onSaveRss, onClose,
 }: {
   platforms: PlatformDTO[];
   settings: AppSettings;
   capability: PublishCapabilityDTO;
+  rss: PodcastRssDTO | null;
   vault: VaultViewState;
   busyId: string | null;
   accountActionError: { platformId: string; message: string } | null;
@@ -526,12 +646,14 @@ export function SettingsSheet({
   onVerify: (id: string) => void;
   onOpenLogin: (id: string) => void;
   onSaveSettings: (patch: Partial<AppSettings>) => Promise<void>;
+  onSaveRss: (feedUrl: string) => Promise<PodcastRssDTO>;
   onClose: () => void;
 }) {
   const [popId, setPopId] = React.useState<string | null>(null);
   const [section, setSection] = React.useState<"basic" | "accounts" | "defaults">("basic");
   const [vaultPickerOpen, setVaultPickerOpen] = React.useState(false);
   const [attachmentOpen, setAttachmentOpen] = React.useState(false);
+  const [rssPickerOpen, setRssPickerOpen] = React.useState(false);
   const sections = [
     { id: "basic" as const, label: "基础设置" },
     { id: "accounts" as const, label: "平台账号" },
@@ -601,7 +723,7 @@ export function SettingsSheet({
                 {section === "accounts" && (
                   <div className="flex flex-col gap-3">
                     <div className="grid grid-cols-[repeat(2,minmax(0,1fr))] gap-2.5">
-                      {platforms.map((p, i) => (
+                      {platforms.filter((p) => p.authMode === "extension").map((p, i) => (
                         <AccountRow
                           key={p.id}
                           p={p}
@@ -621,7 +743,18 @@ export function SettingsSheet({
                   <div className="flex flex-col">
                     {TYPE_ORDER.map((k) => {
                       const t = TYPE_META[k];
-                      const list = platforms.filter((p) => p.supports.includes(k));
+                      const rssClaimed = k === "audio" && rss
+                        ? new Set(
+                          rss.claims
+                            .filter((claim) => claim.state === "claimed" || claim.state === "indexed")
+                            .map((claim) => claim.platformId),
+                        )
+                        : new Set<string>();
+                      const list = platforms.filter((p) =>
+                        p.supports.includes(k)
+                        && p.authMode !== "rss-downstream"
+                        && !rssClaimed.has(p.id)
+                      );
                       const chosen = settings.defaultTargets[k] ?? [];
                       return (
                         <div className="flex items-center gap-4 py-[18px] first:pt-1 last:pb-1" key={k}>
@@ -654,6 +787,17 @@ export function SettingsSheet({
                               );
                             })}
                           </div>
+                          {k === "audio" && (
+                            <Button
+                              variant="ghost"
+                              isIconOnly
+                              className="ml-auto h-9 w-9 flex-none rounded-full border border-line bg-card text-ink2 data-[hovered=true]:bg-hover data-[hovered=true]:text-ink"
+                              aria-label="查看播客 RSS"
+                              onPress={() => setRssPickerOpen(true)}
+                            >
+                              <Rss size={16} strokeWidth={2.2} />
+                            </Button>
+                          )}
                         </div>
                       );
                     })}
@@ -682,6 +826,14 @@ export function SettingsSheet({
             await onSaveSettings({ attachmentPath: path });
             setAttachmentOpen(false);
           }}
+        />
+      )}
+      {rssPickerOpen && (
+        <PodcastRssDialog
+          rss={rss}
+          platforms={platforms}
+          onSave={onSaveRss}
+          onClose={() => setRssPickerOpen(false)}
         />
       )}
     </Modal>

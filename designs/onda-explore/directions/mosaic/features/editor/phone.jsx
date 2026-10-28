@@ -11,7 +11,7 @@ function mediaSec(post) {
 }
 
 /* 预览视频：点封面播放 / 暂停，底部一条进度随假播放推进 */
-function PreviewVideo({ post }) {
+function PreviewVideo({ post, cover }) {
   const total = mediaSec(post);
   const [playing, setPlaying] = React.useState(false);
   const [cur, setCur] = React.useState(0);
@@ -27,7 +27,8 @@ function PreviewVideo({ post }) {
   }, [playing, total]);
   return (
     <div
-      className="pcover"
+      className={"pcover" + (cover ? " has-cover" : "")}
+      style={cover?.src ? { backgroundImage: `url("${cover.src}")` } : cover ? { background: cover.color } : undefined}
       role="button"
       tabIndex={0}
       aria-label={playing ? "暂停视频" : "播放视频"}
@@ -39,6 +40,13 @@ function PreviewVideo({ post }) {
       <span className="track" aria-hidden="true"><i style={{ width: (cur / total * 100) + "%" }}></i></span>
     </div>
   );
+}
+
+function PreviewCover({ image, type }) {
+  if (!image) return null;
+  return image.src
+    ? <img className={"ppost-cover " + type} src={image.src} alt="封面预览" />
+    : <span className={"ppost-cover " + type} style={{ background: image.color }} aria-hidden="true"></span>;
 }
 
 /* 预览音频：点按钮播放 / 暂停，点进度条跳播（与真机听感一致的最小交互） */
@@ -116,6 +124,7 @@ function PreviewGallery({ images }) {
 function PhoneCard({ post, paneRef, onScroll, more }) {
   const t = TYPES[post.type];
   const assets = post.images || [];
+  const cover = coverOf(post);
   /* 预览与编辑用同一份富文本：编辑器里长什么样，发出去就长什么样 */
   const html = (post.bodyHtml && post.bodyHtml.trim()) ? post.bodyHtml : mdToHtml(post.body || "", t.color, assets);
   return (
@@ -126,6 +135,7 @@ function PhoneCard({ post, paneRef, onScroll, more }) {
           <div className="who">九漾小记</div>
         </div>
       </div>
+      {post.type === "article" && <PreviewCover image={cover} type="article" />}
       {/* 没有标题就不渲染占位：预览长得像发出去的样子，空标题不发出去 */}
       {post.title ? <h2 className="m-phone-title">{post.title}</h2> : null}
       {/* 只有正文这一块滚：素材与页脚留在屏内，长文不会把它们顶走。
@@ -153,8 +163,13 @@ function PhoneCard({ post, paneRef, onScroll, more }) {
       {((post.type === "video" || post.type === "audio") && post.media !== false || (post.type === "image" && post.images && post.images.length > 0)) && (
         <div className="m-phone-media">
           {post.type === "image" && post.images && post.images.length > 0 && <PreviewGallery images={post.images} />}
-          {post.type === "video" && post.media !== false && <PreviewVideo post={post} />}
-          {post.type === "audio" && post.media !== false && <PreviewAudio post={post} />}
+          {post.type === "video" && post.media !== false && <PreviewVideo post={post} cover={cover} />}
+          {post.type === "audio" && post.media !== false && (
+            <div className="paudio-with-cover">
+              <PreviewCover image={cover} type="audio" />
+              <PreviewAudio post={post} />
+            </div>
+          )}
         </div>
       )}
     </div>

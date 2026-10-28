@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, test } from "node:test";
 import { BUNDLED_EXTENSION_ID, extensionOrigin } from "@tassello/shared";
-import { createDocument } from "@tassello/vault";
+import { createDocument, getDocument, updateDocument } from "@tassello/vault";
 import {
   autoPairExtension,
   connectExtension,
@@ -12,6 +12,7 @@ import {
   getPublishCapability,
 } from "./extensions";
 import { saveAccountVerification } from "./account-store";
+import { recordRssDiscovery } from "./podcast-rss";
 import {
   cancelTask,
   closeTaskTab,
@@ -29,9 +30,11 @@ import {
 
 const originalDataDir = process.env.TASSELLO_DATA_DIR;
 const originalVaultDir = process.env.TASSELLO_VAULT_DIR;
+const originalFetch = globalThis.fetch;
 const tempDirs: string[] = [];
 
 afterEach(async () => {
+  globalThis.fetch = originalFetch;
   setTaskDispatcher(null);
   setTaskControlDispatcher(null);
   if (originalDataDir === undefined) delete process.env.TASSELLO_DATA_DIR;
@@ -144,6 +147,89 @@ test("音频账号没有发布频道时拒绝创建任务", async () => {
     createTasks(documentId, ["ximalaya"]),
     /没有可用的发布频道/,
   );
+});
+
+test("已通过 RSS 同步的平台拒绝重复创建直传任务", async () => {
+  const documentId = await setupVault("audio");
+  const document = await getDocument(process.env.TASSELLO_VAULT_DIR!, documentId);
+  assert.ok(document);
+  await updateDocument(process.env.TASSELLO_VAULT_DIR!, documentId, {
+    cover: "../files/cover.png",
+    expectedFingerprint: document.fingerprint,
+  });
+  const paired = await autoPairExtension({
+    origin: extensionOrigin(BUNDLED_EXTENSION_ID),
+    extensionId: BUNDLED_EXTENSION_ID,
+    clientId: "rss-guard-extension",
+    browserLabel: "Chrome",
+    userAgent: "test",
+    version: "0.1.0",
+  });
+  await connectExtension(paired.extension.clientId);
+  await saveAccountVerification({
+    platformId: "xhs",
+    outcome: "ok",
+    error: null,
+    profile: {
+      uid: "rss-user",
+      name: "九漾",
+      avatarUrl: null,
+      authExpiresAt: null,
+      channels: [],
+    },
+    extensionClientId: paired.extension.clientId,
+    browserLabel: paired.extension.browserLabel,
+  });
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    const url = input instanceof Request ? input.url : String(input);
+    if (url.startsWith("https://www.douban.com/search")) return new Response("", { status: 404 });
+    if (url.startsWith("https://itunes.apple.com/search")) return Response.json({ results: [] });
+    throw new Error(`未预期的测试请求：${url}`);
+  }) as typeof fetch;
+  await recordRssDiscovery("xhs", "rss-user", [{
+    url: "https://feed.example.com/show.xml",
+    title: "青春列车",
+    episodeCount: 20,
+    status: "已同步",
+  }]);
+
+  await assert.rejects(createTasks(documentId, ["xhs"]), /已通过 RSS 同步，无需直传/);
+});
+
+test("RSS 认领只拦截音频，不影响同一平台的图文内容", async () => {
+  const documentId = await setupVault("article");
+  const paired = await autoPairExtension({
+    origin: extensionOrigin(BUNDLED_EXTENSION_ID),
+    extensionId: BUNDLED_EXTENSION_ID,
+    clientId: "rss-article-extension",
+    browserLabel: "Chrome",
+    userAgent: "test",
+    version: "0.1.0",
+  });
+  await connectExtension(paired.extension.clientId);
+  await saveAccountVerification({
+    platformId: "xhs",
+    outcome: "ok",
+    error: null,
+    profile: {
+      uid: "rss-article-user",
+      name: "九漾",
+      avatarUrl: null,
+      authExpiresAt: null,
+      channels: [],
+    },
+    extensionClientId: paired.extension.clientId,
+    browserLabel: paired.extension.browserLabel,
+  });
+  await recordRssDiscovery("xhs", "rss-article-user", [{
+    url: "https://feed.example.com/show.xml",
+    title: "青春列车",
+    episodeCount: 20,
+    status: "已同步",
+  }]);
+
+  const tasks = await createTasks(documentId, ["xhs"]);
+  assert.equal(tasks[0]?.status, "queued");
 });
 
 test("等待任务发现平台账号 UID 变化后拒绝派发", async () => {
@@ -296,6 +382,11 @@ test("发布快照冻结统一 Markdown 渲染结果与有序媒体占位", asyn
     title: "渲染测试",
     markdown: "**加粗**\n\n![配图](../files/missing.png)",
   });
+  const covered = await updateDocument(process.env.TASSELLO_VAULT_DIR, document.id, {
+    cover: "../files/missing.png",
+    expectedFingerprint: document.fingerprint,
+  });
+  assert.equal(covered.cover, "../files/missing.png");
   const paired = await autoPairExtension({
     origin: extensionOrigin(BUNDLED_EXTENSION_ID),
     extensionId: BUNDLED_EXTENSION_ID,
@@ -324,6 +415,7 @@ test("发布快照冻结统一 Markdown 渲染结果与有序媒体占位", asyn
   assert.match(stored?.snapshot.bodyHtml ?? "", /<strong>加粗<\/strong>/);
   assert.match(stored?.snapshot.bodyHtml ?? "", /data-onda-media="0" data-alt="配图"/);
   assert.match(stored?.snapshot.plainText ?? "", /加粗/);
+  assert.match(stored?.snapshot.cover?.resolved ?? "", /files\/missing\.png$/);
 });
 
 test("即使平台具备自动提交能力，发布快照默认也只填充不提交", async () => {

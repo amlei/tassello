@@ -410,6 +410,16 @@ mark.m-mark {
 .m-fig:hover .m-fig-del {
   opacity: 1;
 }
+.m-fig-del svg {
+  display: block;
+  width: 13px !important;
+  height: 13px !important;
+  flex: none;
+  stroke: currentColor !important;
+}
+.m-fig-del path {
+  stroke: currentColor;
+}
 .m-fig-del:hover {
   background: var(--color-ink);
 }

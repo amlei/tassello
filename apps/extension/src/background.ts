@@ -346,7 +346,7 @@ async function executeAccountRequest(request: ExtensionAccountRequest): Promise<
         result = accountResult(
           request.requestId,
           request.platformId,
-          await verifyPlatformAccount(request.platformId),
+          await verifyPlatformAccount(request.platformId, request.includeRss === true),
         );
       } catch (error) {
         result = {
@@ -356,6 +356,7 @@ async function executeAccountRequest(request: ExtensionAccountRequest): Promise<
           state: "failed",
           error: error instanceof Error ? error.message : String(error),
           profile: null,
+          rssFeeds: [],
         };
       }
     }

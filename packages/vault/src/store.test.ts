@@ -9,6 +9,7 @@ import {
   extractMedia,
   getDocument,
   listDocuments,
+  normalizeMediaOrder,
   parseDocumentFile,
   splitFrontmatter,
   updateDocument,
@@ -36,6 +37,7 @@ tassello:
   type: article
   createdAt: 2026-10-26T10:00:00+08:00
   updatedAt: 2026-10-26T11:00:00+08:00
+  cover: ../files/cover.png
 ---
 # 标题
 
@@ -43,6 +45,7 @@ tassello:
     assert.equal(parsed.error, null);
     assert.equal(parsed.data.id, "abc");
     assert.equal(parsed.data.type, "article");
+    assert.equal(parsed.data.cover, "../files/cover.png");
     assert.equal(parsed.rawData.title, "保留字段");
     assert.match(parsed.body, /# 标题/);
   });
@@ -62,6 +65,12 @@ describe("markdown media", () => {
       ["video", "url"],
       ["audio", "relative"],
     ]);
+  });
+
+  test("音频和视频保留图片作为封面等附加素材", () => {
+    const media = extractMedia("![封面](../图/cover.png)\n![音频](../音频/episode.mp3)");
+    assert.deepEqual(normalizeMediaOrder("audio", media).map((item) => item.kind), ["image", "audio"]);
+    assert.deepEqual(normalizeMediaOrder("video", media).map((item) => item.kind), ["image"]);
   });
 });
 
@@ -112,6 +121,27 @@ tassello:
     const records = await listDocuments(vault);
     assert.equal(records.length, 2);
     assert.equal(records.every((record) => record.status === "identity_conflict"), true);
+  });
+
+  test("封面可作为稿件资产存在但不进入正文媒体顺序", async () => {
+    const vault = await tempVault();
+    const file = path.join(vault, "cover.md");
+    await fs.writeFile(file, `---
+tassello:
+  version: 1
+  id: cover-only
+  type: article
+  createdAt: 2026-10-26T10:00:00Z
+  updatedAt: 2026-10-26T10:00:00Z
+  cover: ../files/cover.png
+---
+# 标题
+
+正文`);
+    const document = await parseDocumentFile(vault, file);
+    assert.equal(document.cover, "../files/cover.png");
+    assert.equal(document.bodyMarkdown.includes("cover.png"), false);
+    assert.deepEqual(document.media.map((media) => [media.kind, media.role]), [["image", "cover"]]);
   });
 
   test("未知 frontmatter 字段保存后仍保留", async () => {

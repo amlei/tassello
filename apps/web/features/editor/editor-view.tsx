@@ -6,10 +6,10 @@ import { TYPE_META, type AssetDTO, type PostDTO } from "@tassello/shared";
 import { useLongPressReorder } from "../library/use-long-press-reorder";
 import { AudioBar } from "./audio-bar";
 import { fmtTime } from "../../lib/format";
-import { Button, Dropdown, Input, Popover } from "@heroui/react";
+import { Button, Dropdown, Input, Modal, Popover } from "@heroui/react";
 import { PreviewColumn } from "./phone-preview";
 import {
-  Add, ArrowLeft, ChevronDown, ChevronUp, Send, X,
+  Add, ArrowLeft, Check, ChevronDown, ChevronUp, Send, X,
   Bold, Italic, List, Minus, Link2, Image as ImageIcon, Undo, Redo,
 } from "reicon-react";
 import { Heading as HeadingIcon, Strikethrough, Highlighter, Quote, ListOrdered } from "lucide-react";
@@ -29,8 +29,13 @@ export const ASSET_IMG_RE = /^!\[([^\]]*)\]\(asset:\/\/([^)]+)\)$/;
 function escHtml(s: string): string {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
-/* reicon「X」outline 的同款 path：序列化富文本里挂不了 React 组件，内联保持视觉一致 */
-const X_PATH = "M18.4697 19.5303C18.7626 19.8232 19.2374 19.8232 19.5303 19.5303C19.8232 19.2374 19.8232 18.7626 19.5303 18.4697L13.0607 12L19.5303 5.53033C19.8232 5.23744 19.8232 4.76256 19.5303 4.46967C19.8232 4.17678 18.7626 4.17678 18.4697 4.46967L12 10.9393L5.53033 4.46967C5.23744 4.17678 5.23744 4.17678 5.53033 4.46967C4.17678 4.76256 4.17678 5.23744 4.46967 5.53033L10.9393 12L4.46967 18.4697C4.17678 18.7626 4.17678 19.2374 4.46967 19.5303C4.17678 19.8232 5.23744 19.8232 5.53033 19.5303L12 13.0607L18.4697 19.5303Z";
+/* reicon「CloseSquare」outline 的同款 path：序列化富文本里挂不了 React 组件，内联保持视觉一致 */
+const CLOSE_SQUARE_PATHS = [
+  "M9.16998 14.83L14.83 9.17004",
+  "M14.83 14.83L9.16998 9.17004",
+  "M9 22H15C20 22 22 20 22 15V9C22 4 20 2 15 2H9C4 2 2 4 2 9V15C2 20 4 22 9 22Z",
+];
+const CLOSE_SQUARE_SVG = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${CLOSE_SQUARE_PATHS.map((d) => `<path d="${d}"/>`).join("")}</svg>`;
 /* contenteditable="false"：标签是完整 token —— 预览/发布侧保持原子，不会被继续吞进文字里 */
 function wrapTags(escaped: string, color: string): string {
   return escaped.replace(/(#[^\s#，。！？；：,.!?;:]+)/g, (m) =>
@@ -48,7 +53,7 @@ function figHtml(id: string, alt: string, color: string, path?: string | null): 
     `<figure class="m-fig" contenteditable="false" data-asset="${id}" data-alt="${escHtml(alt || "配图")}" style="background:${color}">` +
     img +
     `<span class="m-fig-lb">${escHtml(alt || "配图")}</span>` +
-    `<button type="button" class="m-fig-del" aria-label="移除这张图"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="${X_PATH}" fill="currentColor"/></svg></button></figure>`
+    `<button type="button" class="m-fig-del" aria-label="移除这张图">${CLOSE_SQUARE_SVG}</button></figure>`
   );
 }
 function mdToHtmlLocal(body: string, color: string, assets: { id: string; color?: string | null; path?: string | null }[]): string {
@@ -233,8 +238,18 @@ const AssetFigure = TiptapNode.create({
     children.push(["span", { class: "m-fig-lb" }, alt || "配图"]);
     children.push([
       "button", { type: "button", class: "m-fig-del", "aria-label": "移除这张图" },
-      ["svg", { width: "12", height: "12", viewBox: "0 0 24 24", fill: "none", "aria-hidden": "true" },
-        ["path", { d: X_PATH, fill: "currentColor" }],
+      ["http://www.w3.org/2000/svg svg", {
+        width: "13",
+        height: "13",
+        viewBox: "0 0 24 24",
+        fill: "none",
+        stroke: "currentColor",
+        "stroke-width": "2.4",
+        "stroke-linecap": "round",
+        "stroke-linejoin": "round",
+        "aria-hidden": "true",
+      },
+        ...CLOSE_SQUARE_PATHS.map((d) => ["path", { d }] as DOMOutputSpec),
       ],
     ]);
     return ["figure", {
@@ -845,6 +860,166 @@ function MediaAssetSection({
   );
 }
 
+const COVER_META = {
+  article: { title: "文章封面", ratio: "16:9", platforms: "微信公众号 · 知乎" },
+  audio: { title: "播客封面", ratio: "1:1", platforms: "小红书必填 · 其他平台用专辑封面" },
+  video: { title: "视频封面", ratio: "多比例", platforms: "比例随发布平台适配" },
+} as const;
+
+function coverAssetFor(post: PostDTO): AssetDTO | null {
+  const images = post.assets.filter((asset) => asset.kind === "image");
+  if (post.cover) {
+    return images.find((asset) => asset.reference === post.cover) ?? null;
+  }
+  return images[0] ?? null;
+}
+
+function CoverThumbnail({ asset, square = false }: { asset: AssetDTO | null; square?: boolean }) {
+  return (
+    <span
+      className={"relative flex flex-none overflow-hidden rounded-[9px] " + (square ? "h-14 w-14" : "h-[42px] w-[72px]")}
+      style={{ background: asset?.color || "var(--color-hover)" }}
+    >
+      {asset?.path || asset?.url ? (
+        // eslint-disable-next-line @next/next/no-img-element -- 本机签名媒体地址，next/image 无增益
+        <img src={asset.url || `/api/assets/${asset.id}/raw`} alt="" className="h-full w-full object-cover" />
+      ) : (
+        <span className="grid h-full w-full place-items-center text-ink3"><ImageIcon size={16} /></span>
+      )}
+    </span>
+  );
+}
+
+function CoverRow({ post, onOpen }: { post: PostDTO; onOpen: () => void }) {
+  const meta = COVER_META[post.type as keyof typeof COVER_META];
+  if (!meta) return null;
+  const cover = coverAssetFor(post);
+  const images = post.assets.filter((asset) => asset.kind === "image");
+  const index = cover ? images.findIndex((asset) => asset.id === cover.id) : -1;
+  return (
+    <div className="mb-[22px] grid grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-3 rounded-[12px] border border-line bg-card px-3 py-2.5">
+      <Button isIconOnly variant="ghost" className="h-auto w-auto min-w-0 rounded-[9px] p-0" onPress={onOpen} aria-label={`选择${meta.title}`}>
+        <CoverThumbnail asset={cover} square={post.type === "audio"} />
+      </Button>
+      <span className="flex min-w-0 flex-col gap-[3px]">
+        <span className="flex items-center gap-[7px] text-[13px] font-black text-ink">
+          {meta.title}
+          <em className="rounded bg-hover px-[5px] py-[2px] font-mono text-[9px] font-bold not-italic text-ink3">{meta.ratio}</em>
+        </span>
+        <span className="truncate text-[11px] text-ink2">
+          {cover
+            ? `${post.cover ? "已选择" : "自动使用"}第 ${index + 1} 张图片 · 已加入稿件资产`
+            : "尚未设置；上传后自动加入稿件资产"}
+        </span>
+      </span>
+      <span className="whitespace-nowrap text-[10.5px] text-ink3">{meta.platforms}</span>
+      <Button
+        variant="ghost"
+        className="h-auto min-w-0 rounded-full border border-line bg-card px-3 py-1.5 text-[11px] font-bold text-ink2 data-[hovered=true]:bg-hover data-[hovered=true]:text-ink"
+        onPress={onOpen}
+      >
+        {cover ? "更换" : "选择"}
+      </Button>
+    </div>
+  );
+}
+
+function CoverPicker({
+  post, onChoose, onUpload, onClose,
+}: {
+  post: PostDTO;
+  onChoose: (asset: AssetDTO) => void;
+  onUpload: (file: File) => Promise<void>;
+  onClose: () => void;
+}) {
+  const meta = COVER_META[post.type as keyof typeof COVER_META];
+  const images = post.assets.filter((asset) => asset.kind === "image");
+  const current = coverAssetFor(post);
+  const inputRef = React.useRef<HTMLInputElement | null>(null);
+  const [busy, setBusy] = React.useState(false);
+  if (!meta) return null;
+  return (
+    <Modal>
+      <Modal.Backdrop isOpen onOpenChange={(open) => { if (!open) onClose(); }}>
+        <Modal.Container>
+          <Modal.Dialog className="w-[560px] max-w-[calc(100vw-40px)] rounded-[18px] bg-paper p-6" aria-label={`选择${meta.title}`}>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <Modal.Heading className="text-[17px] font-bold">{meta.title}</Modal.Heading>
+                <p className="mt-1.5 text-[11.5px] leading-6 text-ink2">默认使用第一张图片；从素材中选择或上传新图，都会归入当前稿件。</p>
+              </div>
+              <span className="flex-none rounded bg-hover px-[7px] py-1 font-mono text-[9.5px] font-bold text-ink2">{meta.ratio}</span>
+            </div>
+            <div className="mt-[18px] grid grid-cols-4 gap-2.5">
+              {images.map((asset, index) => {
+                const selected = current?.id === asset.id;
+                return (
+                  <Button
+                    key={asset.id}
+                    variant="ghost"
+                    className={
+                      "relative h-auto min-w-0 overflow-hidden rounded-[9px] border p-0 "
+                      + (post.type === "audio" ? "aspect-square " : "aspect-video ")
+                      + (selected ? "border-accent outline outline-2 outline-accent/35" : "border-line")
+                    }
+                    onPress={() => { onChoose(asset); onClose(); }}
+                    aria-label={`第 ${index + 1} 张图片`}
+                    aria-pressed={selected}
+                  >
+                    <span className="absolute inset-0" style={{ background: asset.color || "var(--color-hover)" }}>
+                      {(asset.path || asset.url) && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={asset.url || `/api/assets/${asset.id}/raw`} alt="" className="h-full w-full object-cover" />
+                      )}
+                    </span>
+                    <span className="absolute bottom-1 left-1 rounded bg-black/60 px-1.5 py-0.5 text-[8.5px] font-bold text-white">第 {index + 1} 张</span>
+                    {index === 0 && !post.cover && <em className="absolute right-1 top-1 rounded bg-white/90 px-1.5 py-0.5 font-mono text-[8px] font-bold not-italic text-ink">默认</em>}
+                    {selected && <span className="absolute bottom-1 right-1 grid h-4 w-4 place-items-center rounded-[5px] bg-accent text-white"><Check size={9} strokeWidth={4} /></span>}
+                  </Button>
+                );
+              })}
+              <Button
+                variant="ghost"
+                isDisabled={busy}
+                className={"h-auto min-w-0 flex-col gap-1 rounded-[9px] border border-dashed border-ink3 bg-card text-ink2 data-[hovered=true]:border-ink data-[hovered=true]:text-ink " + (post.type === "audio" ? "aspect-square" : "aspect-video")}
+                onPress={() => inputRef.current?.click()}
+              >
+                <Add size={16} strokeWidth={3.2} />
+                <span className="text-[10.5px] font-bold text-ink">{busy ? "上传中…" : "上传封面"}</span>
+                <small className="font-mono text-[8px] text-ink3">PNG / JPG</small>
+              </Button>
+              <input
+                ref={inputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={async (event) => {
+                  const file = event.target.files?.[0];
+                  event.target.value = "";
+                  if (!file) return;
+                  setBusy(true);
+                  try {
+                    await onUpload(file);
+                    onClose();
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              />
+            </div>
+            <div className="mt-5 flex items-center justify-between gap-3">
+              <span className="text-[10.5px] text-ink3">封面会作为这张稿件的图片资产保存。</span>
+              <Button variant="ghost" className="dialog-cancel rounded-full px-4 py-2 text-ink2 data-[hovered=true]:!bg-hover data-[hovered=true]:!text-ink" onPress={onClose}>
+                取消
+              </Button>
+            </div>
+          </Modal.Dialog>
+        </Modal.Container>
+      </Modal.Backdrop>
+    </Modal>
+  );
+}
+
 function AssetSection({
   post, color, onMoveImage, onRemoveImage, onClearImages, onRemoveMedia, onUploadMedia,
 }: {
@@ -1042,13 +1217,15 @@ function EditToolbar({ editor, onImage }: { editor: Editor | null; onImage: () =
 
 /* ---------- EditorView ---------- */
 export function EditorView({
-  post, saveState, onChangeField, onUploadImage, onRemoveAsset, onMoveImage, onUploadMedia, onBack, onPublish, onSave,
+  post, saveState, onChangeField, onUploadImage, onChooseCover, onUploadCover, onRemoveAsset, onMoveImage, onUploadMedia, onBack, onPublish, onSave,
 }: {
   post: PostDTO;
   saveState: "saved" | "dirty" | "saving";
   onChangeField: (k: "title" | "markdown" | "bodyHtml", v: string) => void;
   /** 上传图片并返回新素材（正文插图/粘贴：真实文件） */
   onUploadImage: (file: File) => Promise<{ id: string; color: string; path?: string | null; url?: string | null } | null>;
+  onChooseCover: (reference: string) => void;
+  onUploadCover: (file: File) => Promise<void>;
   onRemoveAsset: (id: string) => void;
   onMoveImage: (from: number, to: number) => void;
   onUploadMedia: (kind: "video" | "audio" | "image", file: File) => Promise<void>;
@@ -1058,6 +1235,7 @@ export function EditorView({
 }) {
   const t = TYPE_META[post.type];
   const wordCount = (post.title + post.markdown).length;
+  const [coverOpen, setCoverOpen] = React.useState(false);
 
   /* Tiptap 实例由 RichBody 创建后交上来，工具栏/素材区都通过它操作正文 */
   const [editor, setEditor] = React.useState<Editor | null>(null);
@@ -1122,7 +1300,7 @@ export function EditorView({
     const t2 = window.setTimeout(syncMore, 260);
     window.addEventListener("resize", syncMore);
     return () => { cancelAnimationFrame(raf); window.clearTimeout(t2); window.removeEventListener("resize", syncMore); };
-  }, [post.id, post.title, post.markdown, post.bodyHtml, post.durationSec, post.assets.length, syncMore]);
+  }, [post.id, post.title, post.markdown, post.bodyHtml, post.durationSec, post.cover, post.assets.length, syncMore]);
 
   return (
     <div
@@ -1194,6 +1372,7 @@ export function EditorView({
               onRemoveMedia={onRemoveAsset}
               onUploadMedia={onUploadMedia}
             />
+            {post.type !== "image" && <CoverRow post={post} onOpen={() => setCoverOpen(true)} />}
             {/* 格式工具栏：吸附在写作列顶部；undo/redo 走 Tiptap 历史 */}
             <EditToolbar editor={editor} onImage={() => imgInputRef.current?.click()} />
             <input
@@ -1240,6 +1419,14 @@ export function EditorView({
         </div>
         <PreviewColumn post={post} paneRef={phoneRef} onScroll={syncMore} more={more.prev} />
       </div>
+      {coverOpen && (
+        <CoverPicker
+          post={post}
+          onChoose={(asset) => onChooseCover(asset.reference)}
+          onUpload={onUploadCover}
+          onClose={() => setCoverOpen(false)}
+        />
+      )}
       {(dropping || uploading) && (
         <div className="pointer-events-none absolute inset-0 z-[60] flex items-center justify-center bg-[rgba(35,131,226,0.08)]" aria-live="polite">
           <span className="rounded-full bg-accent px-5 py-2.5 text-sm font-black text-white shadow-[0_10px_30px_rgba(35,131,226,0.35)]">

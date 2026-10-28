@@ -1,4 +1,4 @@
-import type { PlatformDTO } from "@tassello/shared";
+import type { PlatformDTO, PodcastRssDTO } from "@tassello/shared";
 import type { PublishStatus, PublishTask } from "../types";
 
 type ApiResult<T> = { ok: true; data: T } | { ok: false; error: string };
@@ -87,6 +87,10 @@ export class BackendApi {
 
   async platforms(): Promise<PlatformDTO[]> {
     return this.request<PlatformDTO[]>("/platforms");
+  }
+
+  async podcastRss(): Promise<PodcastRssDTO | null> {
+    return this.request<PodcastRssDTO | null>("/podcast-rss");
   }
 
   async publish(documentId: string, platformIds: string[]): Promise<PublishTask[]> {

@@ -14,6 +14,7 @@ describe("浏览器扩展账号验证器", () => {
       "xiaoyuzhou",
       "ximalaya",
       "zhihu",
+      "qingting",
     ];
     expect(new Set(ACCOUNT_PLATFORM_IDS)).toEqual(new Set(expected));
   });

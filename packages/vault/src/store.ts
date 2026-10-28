@@ -29,6 +29,7 @@ export type VaultDocument = {
   updatedAt: string;
   manualOrder: number;
   platforms: string[];
+  cover: string | null;
   options: Record<string, unknown>;
   markdown: string;
   bodyMarkdown: string;
@@ -93,6 +94,22 @@ export async function parseDocumentFile(vaultPath: string, filePath: string): Pr
     ...(parsed.error ? [parsed.error] : []),
     ...unsupportedMarkdownFeatures(markdown),
   ];
+  const bodyMedia = normalizeMediaOrder(type, extractMedia(markdown));
+  const cover = parsed.data.cover ?? null;
+  const media = [...bodyMedia];
+  if (cover) {
+    const coverRef = extractMedia(`![封面](${cover})`).find((item) => item.kind === "image");
+    if (
+      coverRef
+      && !media.some((item) =>
+        item.kind === "image"
+        && item.source === coverRef.source
+        && item.resolved === coverRef.resolved
+      )
+    ) {
+      media.push({ ...coverRef, order: media.length, role: "cover" });
+    }
+  }
   return {
     id,
     type,
@@ -103,11 +120,12 @@ export async function parseDocumentFile(vaultPath: string, filePath: string): Pr
     updatedAt,
     manualOrder: parsed.data.manualOrder ?? 0,
     platforms: parsed.data.platforms ?? [],
+    cover,
     options: parsed.data.options ?? {},
     markdown,
     bodyMarkdown,
     plain: plainFromMarkdown(bodyMarkdown),
-    media: normalizeMediaOrder(type, extractMedia(markdown)),
+    media,
     fingerprint: fingerprint(stat, raw),
     status: parsed.error ? "invalid_frontmatter" : "ready",
     issues,
@@ -225,6 +243,7 @@ export async function updateDocument(
     title?: string;
     markdown?: string;
     platforms?: string[];
+    cover?: string | null;
     options?: Record<string, unknown>;
     manualOrder?: number;
     expectedFingerprint?: string;
@@ -258,6 +277,7 @@ export async function updateDocument(
     updatedAt: patch.touch === false ? current.updatedAt : new Date().toISOString(),
     manualOrder: patch.manualOrder ?? current.manualOrder,
     platforms: patch.platforms ?? current.platforms,
+    cover: patch.cover === undefined ? current.cover ?? undefined : patch.cover ?? undefined,
     options: patch.options ?? current.options,
   };
   await atomicWrite(current.filePath, stringifyDocument(frontmatter, markdown, current.rawFrontmatter));

@@ -268,6 +268,120 @@
   box-shadow: 0 0 0 2px var(--tp-card), 0 0 0 4px var(--tp-accent);
 }
 
+.tassello-publisher .cover-row {
+  padding: 7px 8px;
+  border: 1px solid var(--tp-line);
+  border-radius: 9px;
+  background: var(--tp-card);
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: 7px;
+}
+.tassello-publisher .cover-thumb {
+  width: 58px;
+  height: 36px;
+  overflow: hidden;
+  border-radius: 7px;
+  background: var(--tp-hover);
+}
+.tassello-publisher .cover-thumb.audio { width: 44px; height: 44px; }
+.tassello-publisher .cover-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.tassello-publisher .cover-empty { height: 100%; display: grid; place-items: center; color: var(--tp-ink3); font-size: 9px; }
+.tassello-publisher .cover-copy { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.tassello-publisher .cover-title { display: flex; align-items: center; gap: 5px; color: var(--tp-ink); font-size: 10.5px; font-weight: 800; }
+.tassello-publisher .cover-title em { padding: 1px 4px; border-radius: 4px; background: var(--tp-hover); color: var(--tp-ink3); font-family: var(--font-monospace); font-size: 8px; font-style: normal; }
+.tassello-publisher .cover-meta { overflow: hidden; color: var(--tp-ink2); font-size: 8.5px; text-overflow: ellipsis; white-space: nowrap; }
+.tassello-publisher .cover-scope { color: var(--tp-ink3); font-size: 8.5px; white-space: nowrap; }
+.tassello-publisher .cover-select,
+.tassello-publisher .cover-upload {
+  max-width: 116px;
+  height: 24px;
+  border: 1px solid var(--tp-line);
+  border-radius: 999px;
+  background: var(--tp-card);
+  color: var(--tp-ink2);
+  font-size: 8.5px;
+  cursor: pointer;
+}
+.tassello-publisher .cover-select { padding: 0 7px; }
+.tassello-publisher .cover-upload { padding: 0 9px; font-weight: 700; }
+.tassello-publisher .preview-cover {
+  display: block;
+  width: 100%;
+  max-height: 170px;
+  object-fit: cover;
+  border-radius: 10px;
+  margin-bottom: 9px;
+}
+.tassello-publisher .preview-cover.audio {
+  width: 72px;
+  height: 72px;
+  margin: 0 0 9px;
+}
+
+.tassello-publisher .rss-sync-strip {
+  padding: 8px 9px;
+  border: 1px solid var(--tp-line);
+  border-radius: 9px;
+  background: var(--tp-card);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.tassello-publisher .rss-sync-head {
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--tp-ink2);
+  font-size: 10px;
+  text-align: left;
+  cursor: pointer;
+}
+.tassello-publisher .rss-sync-badge {
+  flex: 0 0 auto;
+  padding: 2px 5px;
+  border-radius: 5px;
+  background: var(--tp-accent-soft, color-mix(in srgb, var(--tp-accent) 12%, transparent));
+  color: var(--tp-accent);
+  font-family: var(--font-monospace);
+  font-size: 8.5px;
+  font-weight: 900;
+}
+.tassello-publisher .rss-sync-head b {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--tp-ink);
+  font-size: 10.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tassello-publisher .rss-sync-head > span:nth-of-type(2) { margin-left: auto; flex: 0 0 auto; }
+.tassello-publisher .rss-sync-chev { color: var(--tp-ink3); font-style: normal; transition: transform .16s ease; }
+.tassello-publisher .rss-sync-chev.open { transform: rotate(180deg); }
+.tassello-publisher .rss-sync-targets { display: flex; flex-wrap: wrap; gap: 5px; }
+.tassello-publisher .rss-sync-target {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px;
+  border: 1px solid var(--tp-line);
+  border-radius: 99px;
+  color: var(--tp-ink2);
+  font-size: 9px;
+}
+.tassello-publisher .rss-sync-target.claimed {
+  border-color: color-mix(in srgb, var(--tp-accent) 22%, var(--tp-line));
+  background: color-mix(in srgb, var(--tp-accent) 7%, var(--tp-card));
+}
+.tassello-publisher .rss-sync-target em { color: var(--tp-ink3); font-style: normal; }
+
 .tassello-publisher .notice {
   padding: 9px 10px; border: 1px solid var(--tp-line); border-radius: 9px;
   background: var(--tp-rail); color: var(--tp-ink2); font-size: 10.5px; line-height: 1.45;

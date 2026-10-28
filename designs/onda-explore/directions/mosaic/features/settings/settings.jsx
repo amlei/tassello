@@ -376,9 +376,63 @@ function AccountPop({ p, side, style, busy, onOpenLogin, onVerify, onClose }) {
   );
 }
 
-function SettingsSheet({ platforms, defaults, extension, extensionInstall, vault, onToggle, onOpenLogin, onVerify, onInstallExtension, onChooseVault, onClose }) {
+function RssFeedDialog({ rss, onSave, onClose }) {
+  const [url, setUrl] = React.useState(rss?.feedUrl || "");
+  const save = () => {
+    const next = url.trim();
+    if (!next) return;
+    onSave(rss ? { ...rss, feedUrl: next } : null);
+    onClose();
+  };
+  return (
+    <div className="m-overlay w-vaultpick-overlay" onClick={onClose}>
+      <div className="m-mini w-vaultpick w-rsspick" role="dialog" aria-modal="true" aria-label="播客 RSS" onClick={(event) => event.stopPropagation()}>
+        <h3>播客 RSS</h3>
+        <p>优先从小红书、微信公众号和蜻蜓 FM 的已导入记录中发现；没有记录时再手动填写。</p>
+        <div className="w-rssfound">
+          <span className="w-rssfoundicon"><IcRss size={14} /></span>
+          <span>
+            <b>自动发现 1 个 Feed</b>
+            <small>{rss ? `${rss.title} · 来自小宇宙 · ${rss.episodeCount} 期` : "在当前账号中未发现"}</small>
+          </span>
+        </div>
+        <label className="w-rssfield">
+          <span>RSS 地址</span>
+          <input
+            className="w-pathinput"
+            value={url}
+            onChange={(event) => setUrl(event.target.value)}
+            placeholder="https://example.com/podcast/feed.xml"
+            autoFocus
+          />
+        </label>
+        {rss && (
+          <div className="w-rssclaims">
+            {rss.claims.map((claim) => {
+              const platform = PLATFORMS.find((p) => p.id === claim.platformId);
+              return (
+                <span key={claim.platformId} className={"w-rssclaim " + (claim.state === "claimed" ? "on" : "")}>
+                  <PlatformMark id={claim.platformId} char={platform?.char} size={13} tone={claim.state === "claimed" ? "lit" : "dim"} />
+                  {platform?.name}
+                  <em>{claim.label}</em>
+                </span>
+              );
+            })}
+          </div>
+        )}
+        <div className="m-mini-foot">
+          <button type="button" className="m-btn-plain" onClick={onClose}>取消</button>
+          <button className="m-btn-primary" onClick={save} disabled={!url.trim()}>保存</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SettingsSheet({ platforms, defaults, rss, onRssChange, extension, extensionInstall, vault, onToggle, onOpenLogin, onVerify, onInstallExtension, onChooseVault, onClose }) {
   const [pop, setPop] = React.useState(null); // { id, side, top, left }
   const [vaultPicker, setVaultPicker] = React.useState(false);
+  const [rssPicker, setRssPicker] = React.useState(false);
   const [attachmentPath, setAttachmentPath] = React.useState("media");
   const [attachmentPicker, setAttachmentPicker] = React.useState(false);
   const [section, setSection] = React.useState("basic");
@@ -485,7 +539,7 @@ function SettingsSheet({ platforms, defaults, extension, extensionInstall, vault
                 {section === "accounts" && (
                   <section className="w-setsec">
                     <div className="w-accts">
-                      {platforms.map((p) => (
+                      {platforms.filter((p) => !p.rssOnly).map((p) => (
                         <AccountRow key={p.id} p={p} active={!!pop && pop.id === p.id} busy={false} onToggle={openPop(p)} />
                       ))}
                     </div>
@@ -497,7 +551,10 @@ function SettingsSheet({ platforms, defaults, extension, extensionInstall, vault
                     <div className="m-typerows">
                       {TYPE_ORDER.map((k) => {
                         const t = TYPES[k];
-                        const list = platforms.filter((p) => supportsType(p, k));
+                        const rssClaimed = k === "audio" && rss
+                          ? new Set(rss.claims.filter((claim) => claim.state === "claimed" || claim.state === "indexed").map((claim) => claim.platformId))
+                          : new Set();
+                        const list = platforms.filter((p) => supportsType(p, k) && !p.rssOnly && !rssClaimed.has(p.id));
                         const chosen = defaults[k] || [];
                         return (
                           <div className="m-typerow" key={k}>
@@ -530,6 +587,11 @@ function SettingsSheet({ platforms, defaults, extension, extensionInstall, vault
                                 );
                               })}
                             </div>
+                            {k === "audio" && (
+                              <button className="m-rssentry" onClick={() => setRssPicker(true)} aria-label="查看播客 RSS" title="播客 RSS">
+                                <IcRss size={16} />
+                              </button>
+                            )}
                           </div>
                         );
                       })}
@@ -574,6 +636,13 @@ function SettingsSheet({ platforms, defaults, extension, extensionInstall, vault
             setAttachmentPicker(false);
           }}
           onClose={() => setAttachmentPicker(false)}
+        />
+      )}
+      {rssPicker && (
+        <RssFeedDialog
+          rss={rss}
+          onSave={onRssChange}
+          onClose={() => setRssPicker(false)}
         />
       )}
     </>

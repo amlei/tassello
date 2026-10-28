@@ -2,17 +2,29 @@ import type {
   ExtensionAccountProfileDTO,
   ExtensionAccountResult,
   ExtensionLoginOpened,
+  ExtensionRssFeedDTO,
 } from "@tassello/shared";
 
 type Probe =
-  | { state: "ok"; profile: ExtensionAccountProfileDTO }
+  | { state: "ok"; profile: ExtensionAccountProfileDTO; rssFeeds?: ExtensionRssFeedDTO[] }
   | { state: "needs_login" | "pending" | "failed"; error?: string };
+
+type PageProbe = Probe | {
+  state: "identity";
+  uid?: unknown;
+  name?: unknown;
+  avatarUrl?: unknown;
+  channels?: unknown;
+  rssFeeds?: unknown;
+};
 
 type AccountPlatform = {
   verifyUrl: string;
   loginUrl: string;
+  rssProbeUrl?: string;
+  probeRss?: (tabId: number) => Promise<ExtensionRssFeedDTO[]>;
   visible?: boolean;
-  probe(tabId: number): Promise<Probe>;
+  probe(tabId: number, includeRss: boolean): Promise<Probe>;
 };
 
 const MAX_CHANNELS = 200;
@@ -49,35 +61,58 @@ function channelList(raw: unknown): ExtensionAccountProfileDTO["channels"] {
   }).slice(0, MAX_CHANNELS);
 }
 
-export function normalizeAccountProbe(raw: {
-  uid?: unknown;
-  name?: unknown;
-  avatarUrl?: unknown;
-  channels?: unknown;
-}): Probe {
-  const uid = typeof raw.uid === "string" || typeof raw.uid === "number" ? String(raw.uid).trim() : "";
+function rssFeedList(raw: unknown): ExtensionRssFeedDTO[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const value = item as { url?: unknown; title?: unknown; episodeCount?: unknown; status?: unknown };
+    const url = httpUrl(value.url);
+    const title = typeof value.title === "string" ? value.title.trim() : "";
+    if (!url || !title) return [];
+    const episodeCount = typeof value.episodeCount === "number" && Number.isFinite(value.episodeCount)
+      ? Math.max(0, Math.trunc(value.episodeCount))
+      : null;
+    const status = typeof value.status === "string" && value.status.trim()
+      ? value.status.trim().slice(0, 120)
+      : null;
+    return [{ url, title: title.slice(0, 300), episodeCount, status }];
+  }).slice(0, 50);
+}
+
+export function normalizeAccountProbe(raw: unknown): Probe {
+  const value = raw && typeof raw === "object"
+    ? raw as {
+      uid?: unknown;
+      name?: unknown;
+      avatarUrl?: unknown;
+      channels?: unknown;
+      rssFeeds?: unknown;
+    }
+    : {};
+  const uid = typeof value.uid === "string" || typeof value.uid === "number" ? String(value.uid).trim() : "";
   if (!uid) return { state: "failed", error: "平台已登录但没有返回账号标识" };
   return {
     state: "ok",
     profile: {
       uid: uid.slice(0, 200),
-      name: typeof raw.name === "string" && raw.name.trim() ? raw.name.trim().slice(0, 200) : null,
-      avatarUrl: httpUrl(raw.avatarUrl),
+      name: typeof value.name === "string" && value.name.trim() ? value.name.trim().slice(0, 200) : null,
+      avatarUrl: httpUrl(value.avatarUrl),
       authExpiresAt: null,
-      channels: channelList(raw.channels),
+      channels: channelList(value.channels),
     },
+    rssFeeds: rssFeedList(value.rssFeeds),
   };
 }
 
-async function runInPage<T>(
+async function runInPage<T, Args extends unknown[] = []>(
   tabId: number,
-  func: (...args: never[]) => T | Promise<T>,
-  args: unknown[] = [],
+  func: (...args: Args) => T | Promise<T>,
+  args: Args = [] as unknown as Args,
 ): Promise<T> {
-  const [execution] = await chrome.scripting.executeScript({
+  const [execution] = await chrome.scripting.executeScript<Args, T | Promise<T>>({
     target: { tabId },
     world: "MAIN",
-    func: func as (...args: unknown[]) => T,
+    func,
     args,
   });
   if (!execution) throw new Error("平台页面没有返回检查结果");
@@ -109,12 +144,43 @@ async function waitForTab(tabId: number): Promise<void> {
   });
 }
 
-async function probeUntilReady(tabId: number, platform: AccountPlatform): Promise<Probe> {
+async function waitForTabUrl(tabId: number, expectedPrefix: string): Promise<void> {
+  const deadline = Date.now() + TAB_READY_TIMEOUT_MS;
+  const matches = async () => {
+    const current = await chrome.tabs.get(tabId).catch(() => null);
+    return !!current
+      && current.status === "complete"
+      && (current.url ?? "").startsWith(expectedPrefix);
+  };
+  if (await matches()) return;
+  await new Promise<void>((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      chrome.tabs.onUpdated.removeListener(listener);
+      chrome.tabs.onRemoved.removeListener(removed);
+      resolve();
+    };
+    const listener = (updatedTabId: number, change: { status?: string }) => {
+      if (updatedTabId !== tabId || change.status !== "complete") return;
+      void matches().then((matched) => { if (matched) finish(); });
+    };
+    const removed = (removedTabId: number) => {
+      if (removedTabId === tabId) finish();
+    };
+    chrome.tabs.onUpdated.addListener(listener);
+    chrome.tabs.onRemoved.addListener(removed);
+    setTimeout(finish, Math.max(0, deadline - Date.now()));
+  });
+}
+
+async function probeUntilReady(tabId: number, platform: AccountPlatform, includeRss: boolean): Promise<Probe> {
   const deadline = Date.now() + VERIFY_TIMEOUT_MS;
   let last: Probe = { state: "pending" };
   while (Date.now() < deadline) {
     try {
-      last = await platform.probe(tabId);
+      last = await platform.probe(tabId, includeRss);
       if (last.state === "ok" || last.state === "needs_login" || last.state === "failed") return last;
     } catch (error) {
       last = { state: "pending", error: error instanceof Error ? error.message : String(error) };
@@ -131,8 +197,8 @@ const ACCOUNT_PLATFORMS: Record<string, AccountPlatform> = {
   wechat: {
     verifyUrl: "https://mp.weixin.qq.com/",
     loginUrl: "https://mp.weixin.qq.com/",
-    async probe(tabId) {
-      const raw = await runInPage(tabId, () => {
+    async probe(tabId, includeRss) {
+      const raw = await runInPage<PageProbe, [{ includeRss: boolean }]>(tabId, async ({ includeRss }): Promise<PageProbe> => {
         const global = globalThis as typeof globalThis & {
           wx?: { commonData?: { data?: Record<string, unknown> } };
         };
@@ -152,6 +218,34 @@ const ACCOUNT_PLATFORMS: Record<string, AccountPlatform> = {
             : (document.querySelector("img.weui-desktop-account__img, img.weui-desktop-account__thumb") as HTMLImageElement | null)?.src;
         if (scanning && !token) return { state: "needs_login" as const };
         if (!nickname && !token) return { state: "pending" as const };
+        const rssFeeds: Array<Record<string, unknown>> = [];
+        const tokenValue = typeof data.t === "string" || typeof data.t === "number"
+          ? String(data.t)
+          : token;
+        if (includeRss && tokenValue) {
+          try {
+            const response = await fetch(
+              `/cgi-bin/filepage?type=3&begin=0&count=20&token=${encodeURIComponent(tokenValue)}&lang=zh_CN`,
+              { credentials: "include" },
+            );
+            if (response.ok) {
+              const document = new DOMParser().parseFromString(await response.text(), "text/html");
+              for (const row of Array.from(document.querySelectorAll("tr"))) {
+                const text = (row.textContent ?? "").replace(/\s+/g, " ").trim();
+                const url = text.match(/https?:\/\/\S+/)?.[0]?.replace(/[，,;；]+$/, "");
+                if (!url) continue;
+                const title = text.slice(0, text.indexOf(url)).trim();
+                const count = Number(text.match(/(\d+)\s*期/)?.[1] ?? "");
+                rssFeeds.push({
+                  url,
+                  title: title || "微信公众号导入播客",
+                  episodeCount: Number.isFinite(count) ? count : null,
+                  status: text.includes("已完成") ? "已完成" : null,
+                });
+              }
+            }
+          } catch {}
+        }
         return {
           state: "identity" as const,
           uid: typeof data.user_name === "string" && data.user_name.startsWith("gh_")
@@ -159,8 +253,9 @@ const ACCOUNT_PLATFORMS: Record<string, AccountPlatform> = {
             : data.uin ? String(data.uin) : `wechat:${token ?? "session"}`,
           name: nickname,
           avatarUrl: avatar?.replace(/\/\d+$/, "/0") ?? null,
+          rssFeeds,
         };
-      });
+      }, [{ includeRss }]);
       if (raw.state === "needs_login") return raw;
       if (raw.state === "pending") return raw;
       return normalizeAccountProbe(raw);
@@ -205,8 +300,8 @@ const ACCOUNT_PLATFORMS: Record<string, AccountPlatform> = {
   xhs: {
     verifyUrl: "https://creator.xiaohongshu.com/publish/publish?source=official",
     loginUrl: "https://creator.xiaohongshu.com/publish/publish?source=official",
-    async probe(tabId) {
-      const raw = await runInPage(tabId, async () => {
+    async probe(tabId, includeRss) {
+      const raw = await runInPage<PageProbe, [{ includeRss: boolean }]>(tabId, async ({ includeRss }): Promise<PageProbe> => {
         try {
           const response = await fetch("/api/galaxy/user/info", {
             credentials: "include",
@@ -216,16 +311,48 @@ const ACCOUNT_PLATFORMS: Record<string, AccountPlatform> = {
           if (!response.ok || payload.code !== 0 || !payload.data) {
             return { state: response.status === 401 || response.status === 403 ? "needs_login" : "pending" } as const;
           }
+          const rssFeeds: Array<Record<string, unknown>> = [];
+          if (includeRss) {
+            const rssPath = "/api/galaxy/v2/creator/rss/get_rss_subscription/page?page=1&page_size=10";
+            const signer = (globalThis as typeof globalThis & {
+              _webmsxyw?: (url: string, data?: unknown) => Record<string, unknown>;
+            })._webmsxyw;
+            const signature = signer?.(rssPath);
+            if (signature?.["X-s"] && signature?.["X-t"]) {
+              try {
+                const rssResponse = await fetch(rssPath, {
+                  credentials: "include",
+                  headers: {
+                    Accept: "application/json, text/plain, */*",
+                    "X-s": String(signature["X-s"]),
+                    "X-t": String(signature["X-t"]),
+                  },
+                });
+                const rssPayload = await rssResponse.json() as {
+                  data?: { subscription_list?: Array<Record<string, unknown>> };
+                };
+                for (const item of rssPayload.data?.subscription_list ?? []) {
+                  rssFeeds.push({
+                    url: item.rss_url,
+                    title: item.title ?? item.collection_name,
+                    episodeCount: item.audio_total,
+                    status: "已同步",
+                  });
+                }
+              } catch {}
+            }
+          }
           return {
             state: "identity" as const,
             uid: payload.data.userId,
             name: payload.data.userName,
             avatarUrl: payload.data.userAvatar,
+            rssFeeds,
           };
         } catch {
           return { state: "pending" as const };
         }
-      });
+      }, [{ includeRss }]);
       if (raw.state === "needs_login") return raw;
       if (raw.state === "pending") return raw;
       return normalizeAccountProbe(raw);
@@ -462,6 +589,85 @@ const ACCOUNT_PLATFORMS: Record<string, AccountPlatform> = {
     },
   },
 
+  qingting: {
+    verifyUrl: "https://admin.qingting.fm/content/channels",
+    loginUrl: "https://admin.qingting.fm/login",
+    rssProbeUrl: "https://admin.qingting.fm/content/rss",
+    async probeRss(tabId) {
+      await chrome.tabs.update(tabId, { url: "https://admin.qingting.fm/content/rss" });
+      await waitForTabUrl(tabId, "https://admin.qingting.fm/content/rss");
+      return await runInPage<ExtensionRssFeedDTO[]>(tabId, async () => {
+        const deadline = Date.now() + 10_000;
+        for (;;) {
+          const rows = Array.from(document.querySelectorAll("tr"));
+          if (rows.length > 1) {
+            return rows.slice(1).flatMap((row) => {
+              const cells = Array.from(row.querySelectorAll("td"));
+              const title = (cells[0]?.textContent ?? "").replace(/\s+/g, " ").trim();
+              const url = (cells[1]?.textContent ?? "").trim();
+              const status = (cells[4]?.textContent ?? "").replace(/\s+/g, " ").trim();
+              return url.startsWith("http")
+                ? [{ url, title: title || "蜻蜓 FM RSS", episodeCount: null, status: status || null }]
+                : [];
+            });
+          }
+          if (Date.now() >= deadline) return [];
+          await new Promise((resolve) => setTimeout(resolve, 300));
+        }
+      });
+    },
+    async probe(tabId) {
+      const raw = await runInPage<PageProbe>(tabId, async (): Promise<PageProbe> => {
+        if (location.pathname.includes("/login")) return { state: "needs_login" as const };
+        const authed = performance.getEntriesByType("resource")
+          .map((entry) => entry.name)
+          .find((url) => url.includes("papi.qingting.fm") && url.includes("user_token="));
+        if (!authed) return { state: "pending" as const };
+        try {
+          const parsed = new URL(authed);
+          const uid = parsed.searchParams.get("user_id") ?? "";
+          const token = parsed.searchParams.get("user_token") ?? "";
+          const deviceId = parsed.searchParams.get("device_id") ?? "";
+          if (!uid || !token) return { state: "failed" as const, error: "蜻蜓 FM 登录参数不完整" };
+          const common = "device_type=unknown&client_type=pod_web&wv=unknown&ut=1";
+          const getJson = async (url: string) => {
+            const response = await fetch(url, { credentials: "include", headers: { Accept: "application/json" } });
+            if (!response.ok) throw new Error(String(response.status));
+            return await response.json() as { errcode?: number; data?: Record<string, unknown> };
+          };
+          const info = await getJson(
+            `https://papi.qingting.fm/papi/podcasters/${uid}/info?filter=${encodeURIComponent(JSON.stringify({ details: 1 }))}&${common}&user_id=${uid}&device_id=${deviceId}&user_token=${token}`,
+          );
+          const list = await getJson(
+            `https://papi.qingting.fm/papi/podcasters/${uid}/channels_for_page?order=${encodeURIComponent("create_time desc")}&page=1&pagesize=100&filter=${encodeURIComponent(JSON.stringify({ channel_type: "" }))}&${common}&user_id=${uid}&device_id=${deviceId}&user_token=${token}`,
+          );
+          if (info.errcode !== 0 || list.errcode !== 0) {
+            return { state: "failed" as const, error: "蜻蜓 FM 账号或专辑读取失败" };
+          }
+          const items = (list.data?.items ?? []) as Array<Record<string, unknown>>;
+          return {
+            state: "identity" as const,
+            uid: String(info.data?.id ?? uid),
+            name: typeof info.data?.nick_name === "string" ? info.data.nick_name : null,
+            avatarUrl: typeof info.data?.avatar === "string" ? info.data.avatar : null,
+            channels: items.map((item) => ({
+              id: item.id,
+              name: item.title,
+              coverUrl: item.cover,
+            })),
+          };
+        } catch (error) {
+          return {
+            state: "failed" as const,
+            error: `蜻蜓 FM 账号读取失败：${error instanceof Error ? error.message : String(error)}`,
+          };
+        }
+      });
+      if (raw.state === "needs_login" || raw.state === "pending" || raw.state === "failed") return raw;
+      return normalizeAccountProbe(raw);
+    },
+  },
+
   lizhi: {
     verifyUrl: "https://nj.lizhi.fm/static/newsite/#/index",
     loginUrl: "https://nj.lizhi.fm/account/login",
@@ -524,14 +730,22 @@ const ACCOUNT_PLATFORMS: Record<string, AccountPlatform> = {
 
 export const ACCOUNT_PLATFORM_IDS = Object.keys(ACCOUNT_PLATFORMS);
 
-export async function verifyPlatformAccount(platformId: string): Promise<Probe> {
+export async function verifyPlatformAccount(platformId: string, includeRss = false): Promise<Probe> {
   const platform = ACCOUNT_PLATFORMS[platformId];
   if (!platform) return { state: "failed", error: `平台账号验证尚未实现：${platformId}` };
   const tab = await chrome.tabs.create({ url: platform.verifyUrl, active: platform.visible === true });
   if (tab.id == null) return { state: "failed", error: "无法创建平台检查标签页" };
   try {
     await waitForTab(tab.id);
-    return await probeUntilReady(tab.id, platform);
+    const probe = await probeUntilReady(tab.id, platform, includeRss);
+    if (probe.state === "ok" && includeRss && platform.rssProbeUrl && platform.probeRss) {
+      try {
+        return { ...probe, rssFeeds: await platform.probeRss(tab.id) };
+      } catch {
+        /* RSS 管理页读取失败不影响已经确认的账号登录态。 */
+      }
+    }
+    return probe;
   } finally {
     await chrome.tabs.remove(tab.id).catch(() => undefined);
   }
@@ -571,6 +785,7 @@ export function accountResult(
       state: "ok",
       error: null,
       profile: probe.profile,
+      rssFeeds: probe.rssFeeds ?? [],
     };
   }
   return {
@@ -580,5 +795,6 @@ export function accountResult(
     state: probe.state === "pending" ? "failed" : probe.state,
     error: probe.error ?? (probe.state === "needs_login" ? "需要在浏览器中登录该平台" : "账号检查失败"),
     profile: null,
+    rssFeeds: [],
   };
 }

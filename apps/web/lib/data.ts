@@ -1,5 +1,12 @@
 /* data —— Server Component 通过本机 Elysia HTTP API 装载数据。 */
-import type { ApiResult, AppSettings, PlatformDTO, PostDTO, TaskDTO } from "@tassello/shared";
+import type {
+  ApiResult,
+  AppSettings,
+  PlatformDTO,
+  PodcastRssDTO,
+  PostDTO,
+  TaskDTO,
+} from "@tassello/shared";
 
 const API_BASE = process.env.TASSELLO_API_URL ??
   `http://127.0.0.1:${process.env.TASSELLO_API_PORT ?? "4311"}`;
@@ -58,19 +65,21 @@ export async function loadEditorData(id: string): Promise<{
   post: PostDTO | null;
   platforms: PlatformDTO[];
   settings: AppSettings;
+  rss: PodcastRssDTO | null;
   counts: Record<string, number>;
   tasks: TaskDTO[];
 }> {
-  const [post, platforms, settings, all, tasks] = await Promise.all([
+  const [post, platforms, settings, rss, all, tasks] = await Promise.all([
     apiGet<PostDTO>(`/posts/${encodeURIComponent(id)}`).catch(() => null),
     apiGet<PlatformDTO[]>("/platforms"),
     apiGet<AppSettings>("/settings"),
+    apiGet<PodcastRssDTO | null>("/podcast-rss"),
     apiGet<PostDTO[]>("/posts?scope=all&sort=recent"),
     apiGet<TaskDTO[]>("/tasks"),
   ]);
   const counts: Record<string, number> = {};
   for (const p of all) counts[p.type] = (counts[p.type] ?? 0) + 1;
-  return { post, platforms, settings, counts, tasks };
+  return { post, platforms, settings, rss, counts, tasks };
 }
 
 export async function loadPlatformsWithSettings(): Promise<{ platforms: PlatformDTO[]; settings: AppSettings }> {

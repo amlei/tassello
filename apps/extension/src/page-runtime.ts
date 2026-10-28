@@ -317,35 +317,52 @@ export async function setFrameEditableText(
   tabId: number,
   selector: string,
   value: string,
+  timeoutMs = 15_000,
 ): Promise<boolean> {
-  return await executeInPage(tabId, ({ selector, value }) => {
-    const frame = document.querySelector(selector) as HTMLIFrameElement | null;
-    const win = frame?.contentWindow;
-    const doc = frame?.contentDocument;
-    const body = doc?.body;
-    if (!win || !doc || !body) return false;
-    body.focus();
-    const selection = win.getSelection();
-    const range = doc.createRange();
-    range.selectNodeContents(body);
-    selection?.removeAllRanges();
-    selection?.addRange(range);
-    const inserted = doc.execCommand("insertText", false, value);
-    if (!inserted || !(body.textContent ?? "").replace(/\s+/g, "").includes(value.replace(/\s+/g, ""))) {
-      body.replaceChildren(...value.split(/\n{2,}/).map((paragraph: string) => {
-        const element = doc.createElement("p");
-        element.textContent = paragraph;
-        return element;
+  const deadline = Date.now() + timeoutMs;
+  let frame: chrome.scripting.InjectionResult | undefined;
+  while (Date.now() < deadline && frame?.frameId == null) {
+    const frames = await chrome.scripting.executeScript({
+      target: { tabId, allFrames: true },
+      func: (frameSelector: string) => !!document.querySelector(frameSelector),
+      args: [selector],
+    });
+    frame = frames.find((candidate) => candidate.result === true && candidate.frameId != null);
+    if (frame?.frameId == null) await sleep(250);
+  }
+  if (frame?.frameId == null) return false;
+  const [execution] = await chrome.scripting.executeScript({
+    target: { tabId, frameIds: [frame.frameId] },
+    world: "MAIN",
+    func: ({ value }) => {
+      const win = window;
+      const doc = document;
+      const body = doc.body;
+      if (!body) return false;
+      body.focus();
+      const selection = win.getSelection();
+      const range = doc.createRange();
+      range.selectNodeContents(body);
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      const inserted = doc.execCommand("insertText", false, value);
+      if (!inserted || !(body.textContent ?? "").replace(/\s+/g, "").includes(value.replace(/\s+/g, ""))) {
+        body.replaceChildren(...value.split(/\n{2,}/).map((paragraph) => {
+          const element = doc.createElement("p");
+          element.textContent = paragraph;
+          return element;
+        }));
+      }
+      body.dispatchEvent(new InputEvent("input", {
+        bubbles: true,
+        inputType: "insertText",
+        data: value,
       }));
-    }
-    const FrameInputEvent = (win as unknown as { InputEvent: typeof InputEvent }).InputEvent;
-    body.dispatchEvent(new FrameInputEvent("input", {
-      bubbles: true,
-      inputType: "insertText",
-      data: value,
-    }));
-    return (body.textContent ?? "").replace(/\s+/g, "").includes(value.replace(/\s+/g, ""));
-  }, { selector, value });
+      return (body.textContent ?? "").replace(/\s+/g, "").includes(value.replace(/\s+/g, ""));
+    },
+    args: [{ value }],
+  });
+  return execution?.result === true;
 }
 
 export async function waitForUploadIdle(tabId: number, timeoutMs: number): Promise<void> {

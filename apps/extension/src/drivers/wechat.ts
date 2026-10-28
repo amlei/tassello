@@ -1,6 +1,7 @@
 import type { ExtensionJobResult } from "@tassello/shared";
-import { articleHtml, cacheQuery, figureSourceMap, plainBody, summaryText } from "../driver-utils.ts";
+import { articleHtml, cacheQuery, coverMedia, figureSourceMap, mediaOfKind, plainBody, summaryText } from "../driver-utils.ts";
 import {
+  clickText,
   executeInPage,
   setControlValue,
   setInputFiles,
@@ -64,30 +65,36 @@ async function uploadMaterial(
     };
   }
   const result = await executeInPage(tabId, async ({ base64, name, mime, scene }) => {
-    const binary = atob(base64);
-    const bytes = new Uint8Array(binary.length);
-    for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
-    const form = new FormData();
-    form.append("file", new Blob([bytes], { type: mime }), name);
-    const data = (globalThis as typeof globalThis & {
-      wx?: { commonData?: { data?: Record<string, unknown> } };
-    }).wx?.commonData?.data ?? {};
-    const seq = Date.now();
-    const url = `/cgi-bin/filetransfer?action=upload_material&f=json&scene=${scene}&writetype=doublewrite&groupid=1`
-      + `&ticket_id=${encodeURIComponent(String(data.ticket_id ?? ""))}`
-      + `&ticket_token=${encodeURIComponent(String(data.ticket_token ?? ""))}`
-      + `&svr_time=${Math.floor(seq / 1000)}&lang=zh_CN&seq=${seq}`;
-    const response = await fetch(url, { method: "POST", body: form, credentials: "include" });
-    const payload = await response.json().catch(() => null) as {
-      base_resp?: { ret?: number; err_msg?: string };
-      content?: string;
-      cdn_url?: string;
-    } | null;
-    if (!response.ok || payload?.base_resp?.ret !== 0 || !payload.content) {
-      throw new Error(`公众号图片上传失败：${payload?.base_resp?.err_msg || response.status}`);
+    try {
+      const binary = atob(base64);
+      const bytes = new Uint8Array(binary.length);
+      for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+      const form = new FormData();
+      form.append("file", new Blob([bytes], { type: mime }), name);
+      const data = (globalThis as typeof globalThis & {
+        wx?: { commonData?: { data?: Record<string, unknown> } };
+      }).wx?.commonData?.data ?? {};
+      const seq = Date.now();
+      const url = `/cgi-bin/filetransfer?action=upload_material&f=json&scene=${scene}&writetype=doublewrite&groupid=1`
+        + `&ticket_id=${encodeURIComponent(String(data.ticket_id ?? ""))}`
+        + `&ticket_token=${encodeURIComponent(String(data.ticket_token ?? ""))}`
+        + `&svr_time=${Math.floor(seq / 1000)}&lang=zh_CN&seq=${seq}`;
+      const response = await fetch(url, { method: "POST", body: form, credentials: "include" });
+      const payload = await response.json().catch(() => null) as {
+        base_resp?: { ret?: number; err_msg?: string };
+        content?: string;
+        cdn_url?: string;
+      } | null;
+      if (!response.ok || payload?.base_resp?.ret !== 0 || !payload.content) {
+        return { error: `公众号素材上传失败：${payload?.base_resp?.err_msg || response.status}` };
+      }
+      return { id: payload.content, url: payload.cdn_url || null };
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : String(error) };
     }
-    return { id: payload.content, url: payload.cdn_url || null };
   }, { base64: media.base64, name: media.fileName || "asset", mime: media.mime, scene }, 300_000);
+  if ("error" in result) throw new Error(result.error || "公众号素材上传失败");
+  if (!result.id) throw new Error("公众号素材上传没有返回文件 ID");
   await runtime.saveUpload(query, {
     id: result.id,
     url: result.url,
@@ -137,10 +144,41 @@ async function pasteWechatBody(tabId: number, html: string, text: string): Promi
   if (!result) throw new Error("未找到公众号正文编辑区");
 }
 
+async function setWechatTitle(tabId: number, title: string): Promise<boolean> {
+  if (!(await setControlValue(tabId, "textarea#title", title))) return false;
+  await executeInPage(tabId, ({ title }) => {
+    const editor = Array.from(document.querySelectorAll(".ProseMirror"))
+      .find((element) => {
+        const height = (element as HTMLElement).offsetHeight;
+        return height > 0 && height < 60;
+      }) as HTMLElement | undefined;
+    if (!editor || editor.textContent?.trim()) return false;
+    editor.focus();
+    const selection = window.getSelection();
+    const range = document.createRange();
+    range.selectNodeContents(editor);
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    const inserted = document.execCommand("insertText", false, title);
+    if (!inserted) {
+      editor.textContent = title;
+      editor.dispatchEvent(new InputEvent("input", {
+        bubbles: true,
+        inputType: "insertText",
+        data: title,
+      }));
+    }
+    return true;
+  }, { title });
+  return true;
+}
+
 async function publishArticle(runtime: PublishRuntime): Promise<ExtensionJobResult["result"]> {
   const tabId = await openEditor(runtime, 0);
-  await waitForSelector(tabId, "#title, .js_title_main .ProseMirror", { visible: true, timeoutMs: 60_000 });
-  const images = await runtime.loadMedia(runtime.job.snapshot.media.filter((item) => item.kind === "image"));
+  await waitForSelector(tabId, "textarea#title", { visible: false, timeoutMs: 60_000 });
+  const imageRefs = mediaOfKind(runtime, "image");
+  const images = await runtime.loadMedia(imageRefs);
+  const coverRef = coverMedia(runtime);
   const remote = new Map<string, string>();
   for (const [index, image] of images.entries()) {
     runtime.report({ status: "uploading", stage: 1, progress: 15 + Math.round(((index + 1) / images.length) * 45), message: `上传公众号配图 ${index + 1}/${images.length}` });
@@ -151,13 +189,58 @@ async function publishArticle(runtime: PublishRuntime): Promise<ExtensionJobResu
     }
   }
   const title = runtime.job.snapshot.title.slice(0, 64);
-  const titleSet = await setControlValue(tabId, "#title, .js_title_main .ProseMirror", title);
+  const titleSet = await setWechatTitle(tabId, title);
   if (!titleSet) throw new Error("公众号标题写入失败");
   const summary = summaryText(runtime);
   if (summary) await setControlValue(tabId, "textarea#js_description", summary).catch(() => false);
   const html = articleHtml(runtime, figureSourceMap(images, remote));
   runtime.report({ status: "filling", stage: 2, progress: 75, message: "填充公众号正文与摘要" });
   await pasteWechatBody(tabId, html, plainBody(runtime));
+  if (coverRef) {
+    const coverIsBodyImage = coverRef.role !== "cover";
+    let coverFileName = "";
+    if (!coverIsBodyImage) {
+      const [cover] = await runtime.loadMedia([coverRef]);
+      if (!cover) throw new Error("公众号封面素材读取失败");
+      coverFileName = cover.fileName || "";
+      runtime.report({ status: "uploading", stage: 2, progress: 82, message: "上传公众号封面" });
+      await uploadImage(runtime, tabId, cover);
+    }
+    if (!(await clickText(tabId, "拖拽或选择封面", {
+      selector: "#js_cover_area .js_cover_btn_area",
+      exact: false,
+      timeoutMs: 15_000,
+    }))) {
+      throw new Error("未找到公众号封面设置入口");
+    }
+    await clickText(tabId, coverIsBodyImage ? "从正文选择" : "从图片库选择", { exact: false, timeoutMs: 10_000 });
+    await waitForText(tabId, "选择图片", 20_000);
+    await waitForSelector(tabId, ".weui-desktop-img-picker__item", { visible: true, timeoutMs: 30_000 });
+    const selected = await executeInPage(tabId, ({ coverIndex, coverFileName: fileName }) => {
+      const items = Array.from(document.querySelectorAll(".weui-desktop-img-picker__item"));
+      const named = fileName
+        ? items.find((element) =>
+          element.querySelector(".weui-desktop-img-picker__img-title")?.textContent?.trim() === fileName
+        )
+        : undefined;
+      const item = (named ?? items[coverIndex]) as HTMLElement | undefined;
+      item?.click();
+      return !!item;
+    }, {
+      coverIndex: coverIsBodyImage
+        ? Math.max(0, imageRefs.findIndex((item) =>
+            item.assetId === coverRef.assetId || item.resolved === coverRef.resolved
+          ))
+        : 0,
+      coverFileName,
+    });
+    if (!selected) throw new Error("公众号没有可用的封面图片");
+    await clickText(tabId, "下一步", { exact: true, timeoutMs: 10_000 });
+    await waitForText(tabId, "编辑封面", 20_000);
+    await clickText(tabId, "确认", { exact: true, timeoutMs: 10_000 });
+    await waitForSelector(tabId, "#js_cover_area .js_cover_preview_new", { visible: true, timeoutMs: 20_000 });
+    runtime.report({ status: "filling", stage: 3, progress: 92, message: "公众号封面已设置" });
+  }
   return {
     status: "awaiting_confirm",
     url: null,

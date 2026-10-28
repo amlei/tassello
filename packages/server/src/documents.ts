@@ -68,7 +68,7 @@ async function documentAssets(document: VaultDocument): Promise<{
     }
     urlByTarget.set(media.resolved, url);
     idByTarget.set(media.resolved, id);
-    return { id, kind: media.kind, path: resolved, url, color };
+    return { id, kind: media.kind, reference: media.resolved, path: resolved, url, color, role: media.role };
   }));
   return { assets, urlByTarget, idByTarget };
 }
@@ -113,6 +113,7 @@ export async function toPostDTO(document: VaultDocument): Promise<PostDTO> {
     platforms: document.platforms,
     options: document.options,
     media: document.media,
+    cover: document.cover,
     durationSec: typeof duration === "number" && Number.isFinite(duration) ? duration : null,
     updatedAt: document.updatedAt,
     manualOrder: document.manualOrder,
@@ -153,6 +154,7 @@ export async function updatePost(
   patch: {
     title?: string;
     markdown?: string;
+    cover?: string | null;
     durationSec?: number | null;
     order?: string[];
     expectedFingerprint?: string;
@@ -177,6 +179,7 @@ export async function updatePost(
   const updated = await updateDocument(vaultPath, id, {
     title: patch.title,
     markdown: patch.markdown,
+    cover: patch.cover,
     options,
     expectedFingerprint: patch.expectedFingerprint,
   });
@@ -204,17 +207,23 @@ export async function deleteAsset(postId: string, assetId: string): Promise<void
   const document = await getDocument(vaultPath, postId);
   if (!document) return;
   let matchedRaw: string | null = null;
+  let matchedReference: string | null = null;
   for (const media of document.media) {
     const resolved = resolveMediaTarget(document, media);
     const id = await mediaAssetId(media, resolved);
     if (id === assetId) {
       matchedRaw = media.raw;
+      matchedReference = media.resolved;
       break;
     }
   }
   if (!matchedRaw) return;
   const markdown = document.bodyMarkdown.replace(matchedRaw, "").replace(/\n{3,}/g, "\n\n").trimEnd();
-  await updateDocument(vaultPath, postId, { markdown, expectedFingerprint: document.fingerprint });
+  await updateDocument(vaultPath, postId, {
+    markdown,
+    ...(document.cover === matchedReference ? { cover: null } : {}),
+    expectedFingerprint: document.fingerprint,
+  });
 }
 
 export async function reorderAssets(postId: string, ids: string[]): Promise<void> {
@@ -265,6 +274,30 @@ export async function setPostMedia(
   const updated = await updateDocument(vaultPath, postId, {
     markdown,
     options: { ...document.options, durationSec: null },
+    expectedFingerprint: document.fingerprint,
+  });
+  return toPostDTO(updated);
+}
+
+export async function setPostCover(
+  postId: string,
+  fileName: string,
+  bytes: Uint8Array,
+): Promise<PostDTO | null> {
+  const vaultPath = await resolveVaultPath();
+  const document = await getDocument(vaultPath, postId);
+  if (!document) return null;
+  const base = safeName(fileName);
+  const ext = path.extname(base).toLowerCase();
+  if (!MEDIA_EXT.image.includes(ext)) throw new Error(`不支持的文件格式：${ext || "无扩展名"}`);
+  const settings = await getSettings();
+  const mediaDir = path.join(resolveAttachmentDir(vaultPath, settings.attachmentPath), postId);
+  await fs.mkdir(mediaDir, { recursive: true });
+  const destination = path.join(mediaDir, `${Date.now()}-cover-${base}`);
+  await fs.writeFile(destination, bytes);
+  const relative = path.relative(path.dirname(document.filePath), destination).split(path.sep).join("/");
+  const updated = await updateDocument(vaultPath, postId, {
+    cover: relative,
     expectedFingerprint: document.fingerprint,
   });
   return toPostDTO(updated);

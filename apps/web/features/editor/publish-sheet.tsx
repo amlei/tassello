@@ -1,16 +1,19 @@
 /* publish-sheet —— 当前稿件可发布目标与频道选择。 */
 "use client";
 
-import { TYPE_META, type PlatformDTO, type PostDTO } from "@tassello/shared";
+import React from "react";
+import { TYPE_META, type PlatformDTO, type PodcastRssDTO, type PostDTO } from "@tassello/shared";
 import { Button, ListBox, ListBoxItem, Modal, Select } from "@heroui/react";
 import { Alert, Check, ChevronDown, Refresh, Send } from "reicon-react";
+import { Rss } from "lucide-react";
 import { PlatformMark } from "@tassello/ui/platform-icons";
 
 export function PublishSheet({
-  post, platforms, selectedIds, channelIds, publishError, onChannel, onToggle, onOpenLogin, onClose, onConfirm,
+  post, platforms, rss, selectedIds, channelIds, publishError, onChannel, onToggle, onOpenLogin, onClose, onConfirm,
 }: {
   post: PostDTO;
   platforms: PlatformDTO[];
+  rss: PodcastRssDTO | null;
   selectedIds: string[];
   channelIds: Record<string, string>;
   publishError: string | null;
@@ -20,15 +23,30 @@ export function PublishSheet({
   onClose: () => void;
   onConfirm: (platformIds: string[], channelIds: Record<string, string>) => void;
 }) {
+  const [rssOpen, setRssOpen] = React.useState(false);
   const t = TYPE_META[post.type];
   const supported = platforms.filter((p) => p.supports.includes(post.type));
+  const rssTargets = post.type === "audio"
+    ? (rss?.claims ?? []).flatMap((claim) => {
+        const platform = platforms.find((candidate) => candidate.id === claim.platformId);
+        return platform ? [{ claim, platform }] : [];
+      })
+    : [];
+  const rssClaimedIds = new Set(rssTargets.map(({ platform }) => platform.id));
+  const directSupported = supported.filter((p) =>
+    p.authMode !== "rss-downstream" && !rssClaimedIds.has(p.id)
+  );
   const failed = (p: PlatformDTO) => p.sync.phase !== "connected";
-  const selected = supported.filter((p) => selectedIds.includes(p.id) && !failed(p));
-  const needChannel = selected.filter((p) => (p.account?.channels?.length ?? 0) > 1);
-  const selectedChannelIds = Object.fromEntries(needChannel.map((p) => {
+  const selected = directSupported.filter((p) => selectedIds.includes(p.id) && !failed(p));
+  /* 多频道平台的目标行始终展示；未选平台时置灰并禁用选择。 */
+  const channelTargets = directSupported.filter((p) => (p.account?.channels?.length ?? 0) > 1);
+  const needChannel = channelTargets.filter((p) => selectedIds.includes(p.id) && !failed(p));
+  const channelValue = (p: PlatformDTO) => {
     const list = p.account?.channels ?? [];
-    const id = channelIds[p.id] && list.some((c) => c.id === channelIds[p.id]) ? channelIds[p.id] : list[0]?.id ?? "";
-    return [p.id, id];
+    return channelIds[p.id] && list.some((c) => c.id === channelIds[p.id]) ? channelIds[p.id] : list[0]?.id ?? "";
+  };
+  const selectedChannelIds = Object.fromEntries(needChannel.map((p) => {
+    return [p.id, channelValue(p)];
   }));
   /* 三态皮肤：选中 = 平台色实底；未选中 = 平台色 20% 淡底；未获取 = 中性灰 */
   const skinOf = (p: PlatformDTO) => {
@@ -52,7 +70,7 @@ export function PublishSheet({
                 <span className="inline-block h-2 w-2 rounded-[2px] bg-white/95" />
                 {t.zh}
               </span>
-              <span className="ml-auto font-mono text-[13px] text-ink2">已选 {String(selected.length).padStart(2, "0")} / {supported.length}</span>
+              <span className="ml-auto font-mono text-[13px] text-ink2">直接发布 {String(selected.length).padStart(2, "0")} / {directSupported.length}</span>
             </div>
             {publishError && (
               <p className="m-0 mt-3 flex items-start gap-2 rounded-[10px] border border-error/25 bg-error/10 px-3 py-2.5 text-[12px] leading-[1.65] text-error" role="alert">
@@ -63,7 +81,7 @@ export function PublishSheet({
 
             {/* 原型 .m-platwall：gap 16，padding 14 6 8 */}
             <div className="flex flex-wrap gap-4 px-1.5 pb-2 pt-3.5">
-              {supported.map((p) => {
+              {directSupported.map((p) => {
                 const off = failed(p);
                 const on = selectedIds.includes(p.id);
                 return (
@@ -99,21 +117,86 @@ export function PublishSheet({
               })}
             </div>
 
-            {needChannel.length > 0 && (
-              <div className="mt-[22px] flex flex-col gap-2.5 border-t border-line pt-[22px]">
-                {needChannel.map((p) => {
-                  const list = p.account?.channels ?? [];
-                  const current = selectedChannelIds[p.id];
-                  return (
-                    <div key={p.id} className="flex min-h-[40px] items-center gap-3">
+            {rssTargets.length > 0 && rss && (
+              <div className="mt-2 overflow-hidden rounded-[14px] border border-line bg-card">
+                <Button
+                  variant="ghost"
+                  className="flex h-auto w-full items-center gap-2.5 rounded-none px-3.5 py-3 text-left data-[hovered=true]:bg-hover"
+                  aria-expanded={rssOpen}
+                  onPress={() => setRssOpen((open) => !open)}
+                >
+                  <span className="flex h-7 flex-none items-center gap-1 rounded-[8px] bg-accent-tint px-2 font-mono text-[10px] font-black text-accent">
+                    <Rss size={12} strokeWidth={2.7} /> RSS
+                  </span>
+                  <b className="min-w-0 truncate text-[13px] text-ink">{rss.title}</b>
+                  <span className="ml-auto flex-none text-[10.5px] text-ink2">
+                    {rss.episodeCount ?? 0} 期 · 自动同步 {rssTargets.length} 个平台
+                  </span>
+                  <ChevronDown
+                    size={11}
+                    strokeWidth={2.5}
+                    className={"flex-none text-ink3 transition-transform " + (rssOpen ? "rotate-180" : "")}
+                  />
+                </Button>
+                {rssOpen && (
+                  <div className="flex flex-wrap gap-2 border-t border-line px-3.5 py-3">
+                    {rssTargets.map(({ claim, platform }) => (
                       <span
-                        className="flex h-7 w-7 flex-none items-center justify-center rounded-[8px] text-[12px] font-black"
-                        style={{ background: p.color, color: p.fg || "#fff" }}
+                        key={claim.platformId}
+                        className={
+                          "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10.5px] font-bold "
+                          + (claim.state === "claimed"
+                            ? "border-accent/25 bg-accent-tint text-ink"
+                            : "border-line bg-paper text-ink2")
+                        }
+                        title={`${platform.name} · ${claim.label}${claim.evidenceUrl ? ` · ${claim.evidenceUrl}` : ""}`}
+                      >
+                        <PlatformMark
+                          id={platform.id}
+                          char={platform.char}
+                          size={15}
+                          tone={claim.state === "claimed" ? "lit" : "dim"}
+                          className="m-0 h-[15px] w-[15px]"
+                        />
+                        {platform.name}
+                        <em className="not-italic text-ink3">{claim.label}</em>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {channelTargets.length > 0 && (
+              <div className="mt-[22px] flex flex-col gap-2.5 border-t border-line pt-[22px]">
+                {channelTargets.map((p) => {
+                  const list = p.account?.channels ?? [];
+                  const current = channelValue(p);
+                  const enabled = selectedIds.includes(p.id) && !failed(p);
+                  return (
+                    <div
+                      key={p.id}
+                      className={"flex min-h-[40px] items-center gap-3" + (enabled ? "" : " opacity-[0.55]")}
+                      aria-disabled={!enabled}
+                    >
+                      <span
+                        className="flex h-[30px] w-[30px] flex-none items-center justify-center rounded-[9px] text-[12px] font-black"
+                        style={{
+                          background: enabled ? p.color : "var(--color-hover)",
+                          color: enabled ? p.fg || "#fff" : "var(--color-ink3)",
+                        }}
                         aria-hidden="true"
                       >
-                        {p.char}
+                        <PlatformMark
+                          id={p.id}
+                          char={p.char}
+                          size={18}
+                          imgScale={1.25}
+                          tone={enabled ? "lit" : "off"}
+                          className="m-0 h-[18px] w-[18px]"
+                        />
                       </span>
-                      <span className="min-w-0 flex-1 truncate text-sm font-bold text-ink">
+                      <span className={"min-w-0 flex-1 truncate text-sm font-bold " + (enabled ? "text-ink" : "text-ink3")}>
                         发到「{p.name}」的哪个{p.id === "xiaoyuzhou" ? "节目" : p.id === "lizhi" ? "播单" : "专辑"}
                       </span>
                       <span className="relative inline-flex flex-none items-center">
@@ -121,6 +204,7 @@ export function PublishSheet({
                           className="inline-flex flex-none"
                           aria-label={`${p.name} 发布频道`}
                           selectedKey={current}
+                          isDisabled={!enabled}
                           onSelectionChange={(key) => { if (typeof key === "string") onChannel(p.id, key); }}
                         >
                           <Select.Trigger className="h-auto cursor-pointer rounded-full border border-line bg-card py-[7px] pl-4 pr-8 text-[12px] font-bold text-ink shadow-none outline-none transition-[border-color] duration-150 hover:border-[#DEDCD8] focus-visible:border-accent data-[focus-visible=true]:border-accent">
@@ -141,7 +225,7 @@ export function PublishSheet({
                             </ListBox>
                           </Select.Popover>
                         </Select>
-                        <span className="pointer-events-none absolute right-3 flex text-ink2">
+                        <span className="pointer-events-none absolute right-3 flex text-ink3">
                           <ChevronDown size={10} strokeWidth={2.4} />
                         </span>
                       </span>

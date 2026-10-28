@@ -5,6 +5,7 @@ import type {
   AppSettings,
   DirectoryListingDTO,
   PlatformDTO,
+  PodcastRssDTO,
   PostDTO,
   PublishCapabilityDTO,
   TaskDTO,
@@ -49,6 +50,7 @@ export const api = {
     patch: {
       title?: string;
       markdown?: string;
+      cover?: string | null;
       durationSec?: number | null;
       order?: string[];
       expectedFingerprint?: string;
@@ -80,6 +82,12 @@ export const api = {
     form.set("kind", kind);
     form.set("file", file);
     const res = await fetch(`/api/posts/${postId}/media`, { method: "POST", body: form });
+    return unwrap<PostDTO>(res);
+  },
+  async uploadCover(postId: string, file: File): Promise<PostDTO> {
+    const form = new FormData();
+    form.set("file", file);
+    const res = await fetch(`/api/posts/${postId}/cover`, { method: "POST", body: form });
     return unwrap<PostDTO>(res);
   },
   async listPlatforms(): Promise<PlatformDTO[]> {
@@ -134,6 +142,18 @@ export const api = {
       body: JSON.stringify(patch),
     });
     return unwrap<AppSettings>(res);
+  },
+  async getPodcastRss(): Promise<PodcastRssDTO | null> {
+    const res = await fetch("/api/podcast-rss", { cache: "no-store" });
+    return unwrap<PodcastRssDTO | null>(res);
+  },
+  async savePodcastRss(feedUrl: string): Promise<PodcastRssDTO> {
+    const res = await fetch("/api/podcast-rss", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ feedUrl }),
+    });
+    return unwrap<PodcastRssDTO>(res);
   },
   async publish(postId: string, platformIds: string[], channelIds: Record<string, string> = {}): Promise<TaskDTO[]> {
     const res = await fetch("/api/publish", {

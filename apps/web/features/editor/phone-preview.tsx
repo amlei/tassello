@@ -11,6 +11,30 @@ function fmtDuration(sec: number | null): string {
   return sec ? fmtTime(sec) : "00:00";
 }
 
+function PostCover({
+  asset, kind,
+}: {
+  asset: PostDTO["assets"][number] | null;
+  kind: "article" | "audio";
+}) {
+  if (!asset) return null;
+  return (
+    <span
+      className={
+        kind === "audio"
+          ? "block h-16 w-16 flex-none overflow-hidden rounded-[10px]"
+          : "mx-5 mt-3.5 block aspect-video overflow-hidden rounded-[10px]"
+      }
+      style={{ background: asset.color || "var(--color-hover)" }}
+    >
+      {(asset.path || asset.url) && (
+        // eslint-disable-next-line @next/next/no-img-element -- 本机签名媒体地址
+        <img src={asset.url || `/api/assets/${asset.id}/raw`} alt="封面预览" className="h-full w-full object-cover" />
+      )}
+    </span>
+  );
+}
+
 /* 预览贴图条：手机交互 —— 缩略图定宽 72px，按住拖动横滑（不是电脑端滚动条） */
 function PhoneGallery({ assets }: { assets: PostDTO["assets"] }) {
   const ref = React.useRef<HTMLDivElement | null>(null);
@@ -134,6 +158,8 @@ export function PhoneCard({
 }) {
   const t = TYPE_META[post.type];
   const assets = post.assets;
+  const images = assets.filter((asset) => asset.kind === "image");
+  const cover = (post.cover ? images.find((asset) => asset.reference === post.cover) : null) ?? images[0] ?? null;
   const html = post.bodyHtml && post.bodyHtml.trim()
     ? post.bodyHtml
     : "";
@@ -143,6 +169,7 @@ export function PhoneCard({
         <span className="flex h-[30px] w-[30px] items-center justify-center rounded-[9px] text-[13px] font-black text-white" style={{ background: t.color }}>九</span>
         <div className="text-[13px] font-bold">九漾小记</div>
       </div>
+      {post.type === "article" && <PostCover asset={cover} kind="article" />}
       {/* 没有标题就不渲染占位：预览长得像发出去的样子，空标题不发出去 */}
       {post.title ? <h2 className="mx-5 mt-4 flex-none text-[19px] font-bold leading-[1.4] tracking-[-0.2px]">{post.title}</h2> : null}
       <div className="relative flex min-h-0 flex-1">
@@ -169,11 +196,22 @@ export function PhoneCard({
             {showImages && <PhoneGallery assets={assets.filter((a) => a.kind === "image")} />}
             {post.type === "video" && video && (
               <div className="overflow-hidden rounded-xl bg-ink">
-                <video src={video.url || `/api/assets/${video.id}/raw`} controls controlsList="nodownload" playsInline preload="metadata" className="block aspect-video w-full" />
+                <video
+                  src={video.url || `/api/assets/${video.id}/raw`}
+                  poster={cover?.url || (cover?.path ? `/api/assets/${cover.id}/raw` : undefined)}
+                  controls
+                  controlsList="nodownload"
+                  playsInline
+                  preload="metadata"
+                  className="block aspect-video w-full"
+                />
               </div>
             )}
             {post.type === "audio" && audio && (
-              <AudioPlayer asset={audio} durationSec={post.durationSec} />
+              <div className="flex items-center gap-2.5">
+                <PostCover asset={cover} kind="audio" />
+                <div className="min-w-0 flex-1"><AudioPlayer asset={audio} durationSec={post.durationSec} /></div>
+              </div>
             )}
           </div>
         );

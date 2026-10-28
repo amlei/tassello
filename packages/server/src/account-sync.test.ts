@@ -16,9 +16,11 @@ import { autoPairExtension } from "./extensions";
 import { saveAccountVerification } from "./account-store";
 
 const originalDataDir = process.env.TASSELLO_DATA_DIR;
+const originalFetch = globalThis.fetch;
 const tempDirs: string[] = [];
 
 afterEach(async () => {
+  globalThis.fetch = originalFetch;
   setExtensionAccountConnection(null);
   setExtensionAccountRequestDispatcher(null);
   if (originalDataDir === undefined) delete process.env.TASSELLO_DATA_DIR;
@@ -113,6 +115,40 @@ describe("浏览器扩展账号同步", () => {
     expect(requests).toBe(1);
     release();
     await Promise.all([first, second]);
+  });
+
+  test("RSS 平台只在缺少正向快照时请求扩展读取 Feed", async () => {
+    const connected = await setupExtension();
+    setExtensionAccountConnection({ ...connected, accountProtocolVersion: 1 });
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      const url = input instanceof Request ? input.url : String(input);
+      if (url.startsWith("https://www.douban.com/search")) return new Response("", { status: 404 });
+      if (url.startsWith("https://itunes.apple.com/search")) return Response.json({ results: [] });
+      throw new Error(`未预期的测试请求：${url}`);
+    }) as typeof fetch;
+    const requests: ExtensionAccountRequest[] = [];
+    setExtensionAccountRequestDispatcher((request) => {
+      requests.push(request);
+      queueMicrotask(() => {
+        handleExtensionAccountMessage({
+          ...successResult(request),
+          rssFeeds: requests.length === 1
+            ? [{
+              url: "https://feed.example.com/show.xml",
+              title: "青春列车",
+              episodeCount: 20,
+              status: "已同步",
+            }]
+            : [],
+        });
+      });
+      return true;
+    });
+
+    await verifyAccountThroughExtension("xhs");
+    await verifyAccountThroughExtension("xhs");
+    expect(requests[0]?.includeRss).toBe(true);
+    expect(requests[1]?.includeRss).toBeUndefined();
   });
 
   test("不同平台 verify 仍按单标签页策略串行执行", async () => {
