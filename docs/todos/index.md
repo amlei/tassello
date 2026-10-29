@@ -9,4 +9,4 @@
 - [ ] 清理迁移结束后不再使用的 CDP 产品路径、SQLite/Prisma 与旧客户端实现。
 - [ ] [已有 Vault 的目录结构兼容](./existing-vault-directory-compatibility.md)：运营端接入用户已有 Vault 时保留原目录结构，区分逻辑分类和物理目录。
 
-Agent/MCP、面向发布流程的 CLI 和非 active 平台明确延期；豆包生图 CLI 作为应用内部能力独立维护，不计入发布平台范围。
+Agent/MCP 与非 active 平台明确延期；本机 CLI 只包装现有应用 API，不增加新的 Agent 鉴权或状态源。

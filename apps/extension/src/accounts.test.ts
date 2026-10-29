@@ -8,7 +8,7 @@ import {
 } from "./accounts";
 
 describe("浏览器扩展账号验证器", () => {
-  test("覆盖当前 active 的平台", () => {
+  test("覆盖已实现账号探测的平台", () => {
     const expected = [
       "douban",
       "jike",

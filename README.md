@@ -31,7 +31,7 @@ Markdown 直编与独立本机后端已经落地；旧平台 CDP 逻辑仍在按
 | Web | Next.js 只负责 UI，经 rewrite 访问本机 API |
 | Obsidian | 直接编辑 Markdown，发布和任务经本机 API |
 | 桌面 | Electron 同时托管 API 与 Web |
-| CLI | 按需启动，通过本机 API 创建、等待和取消豆包生图任务 |
+| CLI | 按需启动，通过本机 API 查询平台能力、发布 Markdown、跟踪任务并使用豆包生图 |
 | 浏览器扩展 | Native Messaging 自动发现/配对、连接、任务协议和 popup 已完成；平台页面驱动仍迁移中 |
 
 目标架构和迁移边界见 [`docs/design/architecture.md`](docs/design/architecture.md)。
@@ -57,11 +57,11 @@ cd apps/extension && bun run build
 
 ## CLI
 
-`onda` 是九漾 Onda 的按需 CLI，不启动第二个后台服务。它通过本机 API 创建生图任务，实际页面操作仍由已连接的 Onda 浏览器扩展完成。使用前需要：
+`onda` 是九漾 Onda 的按需 CLI，不启动第二个后台服务。它通过本机 API 调用创作与发布任务，实际页面操作仍由已连接的 Onda 浏览器扩展完成。使用前需要：
 
 1. 启动九漾 Onda。
 2. 启动 Chrome 或 Edge，并确认 Onda 扩展已连接。
-3. 在浏览器中登录豆包。
+3. 在浏览器中登录目标平台。
 
 桌面安装包会把 CLI 放在：
 
@@ -73,17 +73,64 @@ Windows: <安装目录>\resources\bin\onda.exe
 仓库开发时可以直接运行：
 
 ```bash
-bun run cli -- image list --json
+bun run cli -- platforms list --json
 ```
 
 也可以先构建独立可执行文件：
 
 ```bash
 bun run build:cli
-./apps/cli/dist/onda image list --json
+./apps/cli/dist/onda platforms list --json
 ```
 
-### 创建生图任务
+### 平台与发布
+
+查看当前运行实例的平台、账号状态和内容类型能力：
+
+```bash
+onda platforms list --json
+onda platforms show wechat --json
+```
+
+`platforms list` 同时展示 active 与 planned 平台；`publish` 只接受 active 且账号已连接的平台。
+
+发布 Markdown：
+
+```bash
+onda publish wechat article ./note.md --json
+onda publish zhihu article ./note.md --wait --timeout 20m --json
+onda publish baijiahao image ./note.md --json
+onda publish xiaoyuzhou audio ./episode.md --channel <节目ID> --json
+```
+
+稿件至少需要有效的 frontmatter：
+
+```md
+---
+tassello:
+  id: m5xk2q9f
+  type: article
+---
+
+# 标题
+
+正文
+```
+
+语法固定为：
+
+```text
+onda publish <platform> <type> <file>
+```
+
+- `platform` 使用稳定平台 ID，例如 `wechat`、`xhs`、`zhihu`、`baijiahao`。
+- `type` 为 `article`、`image`、`video` 或 `audio`。
+- `file` 必须是带有效 `tassello.id` 与 `tassello.type` frontmatter 的 Markdown。
+- `--vault` 可指定 Markdown 所在根目录；不使用该参数时，相对路径按当前目录解析。
+- 播客账号有多个节目、专辑或播单时必须传 `--channel`。
+- 发布仍遵循应用的默认人工确认策略；`--wait` 会停在 `awaiting_confirm` 并返回平台页面或草稿链接。
+
+### 创作能力：豆包生图
 
 请求文件示例：
 
@@ -106,30 +153,45 @@ bun run build:cli
 创建后立即返回任务 ID：
 
 ```bash
-onda image generate ./request.json --json
+onda generate image ./request.json --json
 ```
 
 创建并等待任务完成：
 
 ```bash
-onda image generate ./request.json --wait --timeout 20m --json
+onda generate image ./request.json --wait --timeout 20m --json
 ```
 
 请求也可以从 stdin 传入：
 
 ```bash
-onda image generate - --json < request.json
+onda generate image - --json < request.json
 ```
 
 默认模型为 `Seedream 5.0 Flash`，默认比例为 `16:9`。同一任务中的提示词会按顺序在同一个豆包对话里执行。
 
-### 查询与取消
+### 发布任务
 
 ```bash
-onda image status <task-id> --json
-onda image wait <task-id> --timeout 20m --interval 2s --json
-onda image list --json
-onda image cancel <task-id> --json
+onda tasks list --json
+onda tasks list --platform zhihu --type article --status awaiting_confirm --json
+onda tasks status <task-id> --json
+onda tasks wait <task-id> --timeout 20m --interval 2s --json
+onda tasks cancel <task-id> --json
+onda tasks retry <task-id> --wait --json
+onda tasks confirm <task-id> --url "https://example.com/post/1" --json
+onda tasks confirm <task-id> --no-public-url --json
+```
+
+`tasks confirm` 只用于记录用户在平台已经完成的发布结果，不会再次调用平台发送。
+
+### 生图任务
+
+```bash
+onda generate image status <task-id> --json
+onda generate image wait <task-id> --timeout 20m --interval 2s --json
+onda generate image list --json
+onda generate image cancel <task-id> --json
 ```
 
 `wait` 超时不会取消任务，只返回最后一次任务状态并退出。中断 CLI 也不会取消后台任务；需要停止时显式执行 `cancel`。
@@ -155,9 +217,11 @@ CLI 按以下顺序查找本机 API：
 {
   "ok": true,
   "data": {
-    "id": "g...",
-    "status": "success",
-    "outputs": []
+    "id": "t...",
+    "platformId": "zhihu",
+    "contentType": "article",
+    "status": "awaiting_confirm",
+    "pageUrl": "https://zhuanlan.zhihu.com/..."
   }
 }
 ```
@@ -170,13 +234,15 @@ CLI 按以下顺序查找本机 API：
 | `1` | CLI 内部错误 |
 | `2` | 参数、请求或 API 拒绝 |
 | `3` | 无法连接九漾 Onda |
-| `6` | 豆包额度耗尽 |
-| `7` | 生图明确失败 |
+| `4` | 平台暂未开放或账号未就绪 |
+| `5` | 任务已完成页面填写，等待用户在平台确认 |
+| `6` | 豆包创作额度耗尽 |
+| `7` | 任务明确失败 |
 | `8` | 结果未知，不要自动重试 |
 | `9` | 任务已取消 |
 | `10` | `wait` 超时，任务仍在运行 |
 
-CLI 只接受结构化生图命令，不读取浏览器 Cookie，不直接连接扩展，也不暴露通用页面自动化能力。
+CLI 只接受结构化的创作与发布命令，不读取浏览器 Cookie，不直接连接扩展，也不暴露通用页面自动化能力。
 
 ## 文档
 

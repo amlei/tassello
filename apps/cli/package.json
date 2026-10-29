@@ -12,7 +12,8 @@
     "test": "bun test src"
   },
   "dependencies": {
-    "@tassello/shared": "workspace:*"
+    "@tassello/shared": "workspace:*",
+    "@tassello/vault": "workspace:*"
   },
   "devDependencies": {
     "@types/bun": "^1.2.0"

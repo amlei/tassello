@@ -36,7 +36,19 @@ describe("Onda CLI API 发现", () => {
 });
 
 describe("Onda CLI API 客户端", () => {
-  test("创建任务时发送结构化请求", async () => {
+  test("检查 CLI 协议版本，拒绝版本漂移", async () => {
+    globalThis.fetch = (async () => new Response(JSON.stringify({
+      ok: true,
+      data: { cliProtocolVersion: 1 },
+    }), { headers: { "content-type": "application/json" } })) as unknown as typeof fetch;
+    const client = new OndaApiClient("http://127.0.0.1:4311");
+    await expect(client.assertCompatible()).rejects.toMatchObject({
+      code: "cli_protocol_mismatch",
+      exitCode: 2,
+    });
+  });
+
+  test("生图客户端发送结构化请求", async () => {
     let body = "";
     globalThis.fetch = (async (_url, init) => {
       body = String(init?.body ?? "");
@@ -57,15 +69,15 @@ describe("Onda CLI API 客户端", () => {
           error: null,
           pageUrl: null,
           tabId: null,
-          createdAt: "2026-10-29T00:00:00.000Z",
-          updatedAt: "2026-10-29T00:00:00.000Z",
+          createdAt: "2026-10-30T00:00:00.000Z",
+          updatedAt: "2026-10-30T00:00:00.000Z",
           startedAt: null,
           finishedAt: null,
         },
       }), { headers: { "content-type": "application/json" } });
     }) as typeof fetch;
     const client = new OndaApiClient("http://127.0.0.1:4311");
-    const task = await client.generate({
+    const task = await client.generateImage({
       platform: "doubao",
       model: "Seedream 5.0 Flash",
       name: "sample",
@@ -75,17 +87,39 @@ describe("Onda CLI API 客户端", () => {
     expect(JSON.parse(body).items[0].ratio).toBe("16:9");
   });
 
+  test("发布客户端提交 source、平台和频道", async () => {
+    let body = "";
+    globalThis.fetch = (async (_url, init) => {
+      body = String(init?.body ?? "");
+      return new Response(JSON.stringify({ ok: true, data: [] }), {
+        headers: { "content-type": "application/json" },
+      });
+    }) as typeof fetch;
+    const client = new OndaApiClient("http://127.0.0.1:4311");
+    await client.publish({
+      id: "m1234567890",
+      filePath: "articles/demo.md",
+      markdown: "---\ntassello:\n  id: m1234567890\n  type: article\n---\n\n正文",
+      fingerprint: "abc",
+    }, ["wechat"], { wechat: "channel-1" });
+    expect(JSON.parse(body)).toMatchObject({
+      source: { id: "m1234567890" },
+      platformIds: ["wechat"],
+      channelIds: { wechat: "channel-1" },
+    });
+  });
+
   test("API 拒绝和连接失败使用稳定错误码", async () => {
     globalThis.fetch = (async () => new Response(JSON.stringify({
       ok: false,
-      error: "生图参数不合法",
-    }), { status: 400, headers: { "content-type": "application/json" } })) as unknown as typeof fetch;
+      error: "任务不存在",
+    }), { status: 404, headers: { "content-type": "application/json" } })) as unknown as typeof fetch;
     const client = new OndaApiClient("http://127.0.0.1:4311");
-    await expect(client.status("bad")).rejects.toMatchObject({ code: "request_failed", exitCode: 2 });
+    await expect(client.getTask("bad")).rejects.toMatchObject({ code: "request_failed", exitCode: 2 });
 
     globalThis.fetch = (async () => {
       throw new TypeError("connection refused");
     }) as unknown as typeof fetch;
-    await expect(client.list()).rejects.toMatchObject({ code: "app_unavailable", exitCode: 3 });
+    await expect(client.platforms()).rejects.toMatchObject({ code: "app_unavailable", exitCode: 3 });
   });
 });

@@ -22,6 +22,7 @@ import {
   getPublishCapability,
   getPodcastRss,
   getPost,
+  getTask,
   getSettings,
   heartbeatExtension,
   getImageGeneration,
@@ -74,6 +75,7 @@ import {
 } from "@tassello/server";
 import {
   extensionAutoPairSchema,
+  CLI_PROTOCOL_VERSION,
   imageGenerationRequestSchema,
   postCreateSchema,
   postUpdateSchema,
@@ -180,6 +182,7 @@ export const app = new Elysia()
   .get("/api/v1/runtime", async () => ok({
     apiOrigin: process.env.TASSELLO_API_ORIGIN ?? `http://127.0.0.1:${process.env.TASSELLO_API_PORT ?? "4311"}`,
     protocolVersion: 1,
+    cliProtocolVersion: CLI_PROTOCOL_VERSION,
   }))
   .get("/api/v1/posts", async ({ query }) => {
     const type = query.scope && query.scope !== "all" ? String(query.scope) : undefined;
@@ -485,6 +488,14 @@ export const app = new Elysia()
     }
   })
   .get("/api/v1/tasks", async () => ok(await listTasks()))
+  .get("/api/v1/tasks/:id", async ({ params, set }) => {
+    const task = await getTask(params.id);
+    if (!task) {
+      set.status = 404;
+      return { ok: false, error: "任务不存在" };
+    }
+    return ok(task);
+  })
   .post("/api/v1/tasks/:id", async ({ params, body, set }) => {
     const input = body as { action?: string; url?: string | null; noPublicUrl?: boolean } | null;
     try {

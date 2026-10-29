@@ -1,10 +1,14 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { CLI_PROTOCOL_VERSION } from "@tassello/shared";
 import type {
   ApiResult,
   ImageGenerationRequest,
   ImageGenerationTaskDTO,
+  PlatformDTO,
+  PublishSourceInput,
+  TaskDTO,
 } from "@tassello/shared";
 
 export class CliCommandError extends Error {
@@ -12,7 +16,7 @@ export class CliCommandError extends Error {
     readonly code: string,
     message: string,
     readonly exitCode: number,
-    readonly task?: ImageGenerationTaskDTO,
+    readonly task?: ImageGenerationTaskDTO | TaskDTO,
   ) {
     super(message);
   }
@@ -91,7 +95,18 @@ export class OndaApiClient {
     return payload.data;
   }
 
-  async generate(request: ImageGenerationRequest): Promise<ImageGenerationTaskDTO> {
+  async assertCompatible(): Promise<void> {
+    const runtime = await this.request<{ cliProtocolVersion?: unknown }>("/api/v1/runtime");
+    if (runtime.cliProtocolVersion !== CLI_PROTOCOL_VERSION) {
+      throw new CliCommandError(
+        "cli_protocol_mismatch",
+        `CLI 协议与应用不兼容（需要 ${CLI_PROTOCOL_VERSION}，实际 ${String(runtime.cliProtocolVersion)}），请同时更新 API、Web 和 CLI`,
+        2,
+      );
+    }
+  }
+
+  async generateImage(request: ImageGenerationRequest): Promise<ImageGenerationTaskDTO> {
     return this.request("/api/v1/generations", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -99,17 +114,68 @@ export class OndaApiClient {
     });
   }
 
-  async status(id: string): Promise<ImageGenerationTaskDTO> {
+  async getImageGeneration(id: string): Promise<ImageGenerationTaskDTO> {
     return this.request(`/api/v1/generations/${encodeURIComponent(id)}`);
   }
 
-  async cancel(id: string): Promise<ImageGenerationTaskDTO> {
+  async cancelImageGeneration(id: string): Promise<ImageGenerationTaskDTO> {
     return this.request(`/api/v1/generations/${encodeURIComponent(id)}`, {
       method: "DELETE",
     });
   }
 
-  async list(): Promise<ImageGenerationTaskDTO[]> {
+  async listImageGenerations(): Promise<ImageGenerationTaskDTO[]> {
     return this.request("/api/v1/generations");
+  }
+
+  async platforms(): Promise<PlatformDTO[]> {
+    return this.request("/api/v1/platforms");
+  }
+
+  async publish(
+    source: PublishSourceInput,
+    platformIds: string[],
+    channelIds: Record<string, string> = {},
+  ): Promise<TaskDTO[]> {
+    return this.request("/api/v1/publish", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ source, platformIds, channelIds }),
+    });
+  }
+
+  async listTasks(): Promise<TaskDTO[]> {
+    return this.request("/api/v1/tasks");
+  }
+
+  async getTask(id: string): Promise<TaskDTO> {
+    return this.request(`/api/v1/tasks/${encodeURIComponent(id)}`);
+  }
+
+  async cancelTask(id: string): Promise<TaskDTO> {
+    return this.request(`/api/v1/tasks/${encodeURIComponent(id)}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "cancel" }),
+    });
+  }
+
+  async retryTask(id: string): Promise<TaskDTO> {
+    return this.request(`/api/v1/tasks/${encodeURIComponent(id)}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "retry" }),
+    });
+  }
+
+  async confirmTask(
+    id: string,
+    input: { url: string | null; noPublicUrl: boolean },
+  ): Promise<TaskDTO> {
+    return this.request(`/api/v1/tasks/${encodeURIComponent(id)}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input),
+    });
   }
 }

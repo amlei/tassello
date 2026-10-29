@@ -2,9 +2,9 @@ import { describe, expect, test } from "bun:test";
 import { getPlatformMeta } from "./registry";
 
 describe("平台注册表", () => {
-  test("头条号开放四个发布类型并作为扩展平台启用", () => {
+  test("头条号保留四个发布类型但产品状态仍为 planned", () => {
     expect(getPlatformMeta("toutiao")).toMatchObject({
-      status: "active",
+      status: "planned",
       authMode: "extension",
       supports: ["article", "image", "video", "audio"],
       contentLabels: { image: "微头条", audio: "音频" },

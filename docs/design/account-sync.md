@@ -125,7 +125,7 @@ type ExtensionLoginOpened = {
 | X | `x.com/home` | account switcher / avatar test id | 无 |
 | 知乎 | `www.zhihu.com` | `/api/v4/me` | 无 |
 | 豆瓣 | `www.douban.com` | `__INIT_STATE__`、`_GLOBAL_NAV`、导航文案 | 无 |
-| 头条号 | `mp.toutiao.com/profile_v4/index` | `/c/user/<uid>/` 账号链接、账号名和头像 | 无 |
+| 头条号（planned，代码保留） | `mp.toutiao.com/profile_v4/index` | `/c/user/<uid>/` 账号链接、账号名和头像；当前不自动验证 | 无 |
 | 百家号 | `baijiahao.baidu.com/builder/rc/home` | `window.user_id`、账号菜单问候语和头像 | 无 |
 | 小宇宙 | `podcaster.xiaoyuzhoufm.com` | `/v1/profile/get` + `/v1/podcast/list` | 节目 |
 | 喜马拉雅 | `studio.ximalaya.com` | `/api/home/userInfo` + 专辑列表 | 专辑 |

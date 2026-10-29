@@ -8,6 +8,8 @@ export type ContentType = (typeof CONTENT_TYPES)[number];
 /** 手动安装与开发版共享的扩展 ID；manifest 使用同一 public key 固定此值。 */
 export const BUNDLED_EXTENSION_ID = "ablhokoljngdpaicipgpaigjeagmbhkl";
 export const NATIVE_HOST_NAME = "com.jiuyang.onda";
+/** 本机 CLI 与 application API 的兼容版本；新增平台任务字段时递增。 */
+export const CLI_PROTOCOL_VERSION = 2;
 
 export function configuredExtensionIds(env: Record<string, string | undefined> = {}): string[] {
   const candidates = [
@@ -237,6 +239,7 @@ export type TaskDTO = {
   id: string;
   postId: string;
   postTitle: string;
+  contentType: ContentType;
   documentPath?: string | null;
   platformId: string;
   accountUid: string | null;

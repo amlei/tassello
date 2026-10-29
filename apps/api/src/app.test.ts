@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, test } from "node:test";
-import { BUNDLED_EXTENSION_ID, extensionOrigin } from "@tassello/shared";
+import { BUNDLED_EXTENSION_ID, CLI_PROTOCOL_VERSION, extensionOrigin } from "@tassello/shared";
 import { autoPairExtension, setPreferredExtensionBrowser } from "@tassello/server";
 
 const originalDataDir = process.env.TASSELLO_DATA_DIR;
@@ -49,6 +49,17 @@ async function setup(): Promise<typeof import("./app").app> {
 }
 
 describe("API 路由", { concurrency: false }, () => {
+  test("运行信息包含 CLI 协议版本", async () => {
+    const app = await setup();
+    const response = await app.handle(new Request("http://localhost/api/v1/runtime"));
+    const payload = await response.json() as {
+      ok: true;
+      data: { protocolVersion: number; cliProtocolVersion: number };
+    };
+    assert.equal(payload.data.protocolVersion, 1);
+    assert.equal(payload.data.cliProtocolVersion, CLI_PROTOCOL_VERSION);
+  });
+
   test("文档 API 以 Markdown 文件为事实源", async () => {
     const app = await setup();
     const createdResponse = await app.handle(new Request("http://localhost/api/v1/posts", {
@@ -114,6 +125,12 @@ describe("API 路由", { concurrency: false }, () => {
     assert.equal(payload.ok, true);
     assert.equal(payload.data.state, "waiting");
     assert.ok(payload.data.installationId);
+  });
+
+  test("单个发布任务不存在时返回 404", async () => {
+    const app = await setup();
+    const response = await app.handle(new Request("http://localhost/api/v1/tasks/not-found"));
+    assert.equal(response.status, 404);
   });
 
   test("应用内生图任务不进入发布平台列表", async () => {
@@ -197,6 +214,7 @@ describe("API 路由", { concurrency: false }, () => {
     };
     assert.equal(platforms.ok, true);
     assert.equal(platforms.data.find((platform) => platform.id === "weibo")?.sync.phase, "extension_offline");
+    assert.equal(platforms.data.find((platform) => platform.id === "toutiao")?.status, "planned");
     assert.equal(platforms.data.find((platform) => platform.id === "bili")?.sync.phase, "unsupported");
 
     const verifyResponse = await app.handle(new Request("http://localhost/api/v1/accounts/weibo", {

@@ -15,7 +15,7 @@
 | 前端 | Next.js rewrite 调用 API；编辑器保存 Markdown + fingerprint | 外部修改实时提示 |
 | Obsidian | 远端 API 客户端、直接 Markdown 编辑、预览内发布、WebSocket 状态 | 插件 token 配对与完整冲突交互 |
 | 桌面 | Electron 托管 API 二进制与 Next standalone，动态端口与完整链路自检 | 目标平台安装包实跑 |
-| 浏览器执行 | MV3、Native Messaging 自动发现/配对、单连接、心跳、13 个 active 扩展平台驱动、串行任务与断线恢复、结果确认回执、tab 聚焦/关闭、媒体传输与上传复用、账号自动发现/验证；RSS 认领在账号检查时采集一次；微信公众号文章/短语音、微博贴图、小红书长文/播客、即刻贴图、豆瓣图文草稿、知乎文章/视频、X 图文/视频、头条号文章（含配图）/微头条文字草稿、百家号图文/视频/动态、小宇宙/喜马拉雅/蜻蜓 FM/荔枝单音频已真机通过 | 微信长播客改走 RSS、微博/小红书/头条号视频与贴图上传回归、头条号微头条配图与音频文件上传、其余未列平台组合、账号与发布全平台回归、真机安装包验证 |
+| 浏览器执行 | MV3、Native Messaging 自动发现/配对、单连接、心跳、12 个 active 扩展平台驱动、串行任务与断线恢复、结果确认回执、tab 聚焦/关闭、媒体传输与上传复用、账号自动发现/验证；RSS 认领在账号检查时采集一次；微信公众号文章/短语音、微博贴图、小红书长文/播客、即刻贴图、豆瓣图文草稿、知乎文章/视频、X 图文/视频、百家号图文/视频/动态、小宇宙/喜马拉雅/蜻蜓 FM/荔枝单音频已真机通过；头条号驱动代码保留但产品状态为 planned | 头条号完整开发验收、微信长播客改走 RSS、微博/小红书视频回归、其余未列平台组合、账号与发布全平台回归、真机安装包验证 |
 | 应用内网页生图 | 豆包任务契约、本机后端持久化、扩展串行执行、原图下载、Vault 落盘和按需 CLI | 页面入口、Agent/MCP 接口、更多平台 |
 
 阅读和实现时必须区分“已落地”和“尚未完成”。未完成迁移的代码不得被描述为已满足目标契约。
@@ -110,7 +110,7 @@ Obsidian 插件     浏览器扩展（MV3）
 apps/
 ├── web/                    # Next.js：内容库、编辑器、队列、设置
 ├── api/                    # Bun + ElysiaJS：唯一后端进程
-├── cli/                    # 按需 CLI：调用 api 完成生图等自动化任务
+├── cli/                    # 按需 CLI：调用 api 完成平台发布与生图任务
 ├── desktop/                # Electron：启动 api 与 web，不实现业务
 ├── native-host/            # Chrome / Edge Native Messaging 动态端口发现
 ├── obsidian/               # Obsidian 插件：直接编辑 MD，发布时调用 api
@@ -459,6 +459,8 @@ POST   /api/v1/extensions/auto-pair
 GET    /api/v1/extensions
 DELETE /api/v1/extensions/:clientId
 ```
+
+`GET /api/v1/runtime` 同时返回 `cliProtocolVersion`；CLI 在每次调用前校验版本，协议不一致时要求同时更新 API、Web 与 CLI。任务 DTO 从发布快照派生 `contentType`，供 CLI 按平台和类型查询，不新增第二套任务字段。
 
 WebSocket：
 
@@ -828,7 +830,7 @@ storage, scripting, tabs, alarms, nativeMessaging
 | 即刻 | 扩展 | 页面上下文账号验证、媒体注入与人工发送 |
 | 抖音 / B 站 / 头条 / 百家 | 扩展优先 | 新平台不再实现 CDP |
 
-全部 13 个 active 扩展平台驱动已打包进扩展注册表；Apple Podcasts 是第 14 个 active registry 条目，只消费 RSS 收录状态，没有扩展驱动。代码迁移完成不等于验收完成：当前逐平台、逐内容类型的真机结果以 [`platforms/README.md`](../platforms/README.md#0-1-浏览器扩展迁移状态) 为准。未验收组合不得描述为可用。
+全部 12 个 active 扩展平台驱动已打包进扩展注册表；头条号驱动代码仍随扩展打包，但平台状态为 `planned`，不会出现在可发布目标中。Apple Podcasts 是第 13 个 active registry 条目，只消费 RSS 收录状态，没有扩展驱动。代码迁移完成不等于验收完成：当前逐平台、逐内容类型的真机结果以 [`platforms/README.md`](../platforms/README.md#0-1-浏览器扩展迁移状态) 为准。未验收组合不得描述为可用。
 
 <a id="resources"></a>
 ## 14. 算法与资源评估
@@ -837,7 +839,7 @@ storage, scripting, tabs, alarms, nativeMessaging
 
 - 1,000 篇稿件，平均 30 KB：列表扫描读取约 30 MB frontmatter/头部数据；搜索约 30 MB 文本。
 - 同时打开 1–3 篇稿件：编辑器 Buffer 通常小于几百 KB。
-- 13 个扩展平台账号、1 个扩展连接：状态文件与 WS 开销可忽略。
+- 12 个 active 扩展平台账号、1 个扩展连接：状态文件与 WS 开销可忽略。
 - 发布连接状态查询、心跳与切换均为 `O(1)`；单连接 30 秒心跳约 24 KB/小时。
 - 每平台每次发布 1–20 张图片：网络与磁盘主要受媒体大小影响。
 - RSS 认领只缓存小型元数据；每个 Feed 典型小于 10 KiB，公开索引查询最多读取 1 MiB HTML/JSON。

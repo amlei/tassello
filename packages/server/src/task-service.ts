@@ -21,7 +21,7 @@ import { createMediaToken } from "./media-token";
 import { podcastRssClaimsPlatform } from "./podcast-rss";
 import { readJsonFile, resolveVaultPath, statePath, writeJsonAtomic } from "./state";
 
-export type StoredTask = TaskDTO & {
+export type StoredTask = Omit<TaskDTO, "contentType"> & {
   snapshot: PublishSnapshotDTO;
 };
 
@@ -92,9 +92,14 @@ export async function listTasks(): Promise<TaskDTO[]> {
   return (await listStoredTasks()).map(toTaskDTO);
 }
 
+export async function getTask(id: string): Promise<TaskDTO | null> {
+  const task = await readTask(id);
+  return task ? toTaskDTO(task) : null;
+}
+
 function toTaskDTO(task: StoredTask): TaskDTO {
-  const { snapshot: _snapshot, ...dto } = task;
-  return dto;
+  const { snapshot, ...dto } = task;
+  return { ...dto, contentType: snapshot.type };
 }
 
 export async function runningCount(): Promise<number> {
@@ -106,6 +111,7 @@ export async function runningCount(): Promise<number> {
 async function requireCurrentAccount(platformId: string, expectedUid?: string | null): Promise<StoredAccount> {
   const meta = getPlatformMeta(platformId);
   if (!meta) throw new Error(`未知平台：${platformId}`);
+  if (meta.status !== "active") throw new Error(`${meta.name}当前尚未开放发布`);
   const account = await getStoredAccount(platformId);
   const capability = await getPublishCapability();
   if (
@@ -479,8 +485,7 @@ export async function confirmTask(
     finishedAt: now(),
   });
   if (!task) throw new Error("任务不存在");
-  const { snapshot: _snapshot, ...dto } = task;
-  return dto;
+  return toTaskDTO(task);
 }
 
 export async function retryTask(taskId: string): Promise<TaskDTO> {

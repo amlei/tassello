@@ -8,6 +8,7 @@ import {
   resolveDataDir,
   resolveRuntimeDiscoveryPath,
 } from "@tassello/server";
+import { CLI_PROTOCOL_VERSION } from "@tassello/shared";
 
 const port = Number(process.env.TASSELLO_API_PORT ?? 4311);
 const runtimeFile = path.join(resolveDataDir(), "runtime.json");
@@ -21,6 +22,7 @@ const runtime = {
   port,
   pid: process.pid,
   protocolVersion: 1,
+  cliProtocolVersion: CLI_PROTOCOL_VERSION,
   nativeHostVersion: 1,
   startedAt: new Date().toISOString(),
 };

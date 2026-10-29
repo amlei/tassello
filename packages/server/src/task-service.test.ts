@@ -21,6 +21,7 @@ import {
   createTasksFromSource,
   dispatchWaitingTasks,
   focusTaskTab,
+  getTask,
   listStoredTasks,
   listTasks,
   onExtensionJobEvent,
@@ -88,6 +89,8 @@ test("无扩展时任务等待，扩展接入后派发且回执落盘", async ()
 
   const waiting = await createTasks(documentId, ["xhs"]);
   assert.equal(waiting[0]?.status, "waiting_extension");
+  assert.equal(waiting[0]?.contentType, "image");
+  assert.equal((await getTask(waiting[0]!.id))?.contentType, "image");
 
   await connectExtension(paired.extension.clientId);
   assert.equal((await getPublishCapability()).state, "ready");
@@ -118,6 +121,11 @@ test("无扩展时任务等待，扩展接入后派发且回执落盘", async ()
 test("账号未连接时拒绝创建发布任务", async () => {
   const documentId = await setupVault();
   await assert.rejects(createTasks(documentId, ["xhs"]), /账号未连接/);
+});
+
+test("planned 平台不能创建或重试发布任务", async () => {
+  const documentId = await setupVault();
+  await assert.rejects(createTasks(documentId, ["toutiao"]), /尚未接入|尚未开放发布/);
 });
 
 test("按请求中的 Markdown 文件路径创建快照，不依赖全局 Vault", async () => {
