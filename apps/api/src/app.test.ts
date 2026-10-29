@@ -116,6 +116,65 @@ describe("API 路由", { concurrency: false }, () => {
     assert.ok(payload.data.installationId);
   });
 
+  test("应用内生图任务不进入发布平台列表", async () => {
+    const app = await setup();
+    const invalid = await app.handle(new Request("http://localhost/api/v1/generations", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        platform: "doubao",
+        model: "Seedream 5.0 Flash",
+        items: [],
+      }),
+    }));
+    assert.equal(invalid.status, 400);
+
+    const missing = await app.handle(new Request("http://localhost/api/v1/generations/not-a-task"));
+    assert.equal(missing.status, 404);
+
+    const createdResponse = await app.handle(new Request("http://localhost/api/v1/generations", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        platform: "doubao",
+        model: "Seedream 5.0 Flash",
+        name: "autumn-window",
+        items: [{ prompt: "秋日窗边的橘猫", ratio: "16:9", slug: "orange-cat" }],
+      }),
+    }));
+    const created = await createdResponse.json() as {
+      ok: true;
+      data: { id: string; status: string; outputDirectory: string };
+    };
+    assert.equal(created.ok, true);
+    assert.equal(created.data.status, "waiting_extension");
+    assert.match(created.data.outputDirectory, /^files\/generated\/\d{4}-\d{2}-\d{2}-autumn-window$/);
+
+    const detailResponse = await app.handle(new Request(
+      `http://localhost/api/v1/generations/${created.data.id}`,
+    ));
+    const detail = await detailResponse.json() as { ok: true; data: { id: string } };
+    assert.equal(detail.data.id, created.data.id);
+
+    const listedResponse = await app.handle(new Request("http://localhost/api/v1/generations"));
+    const listed = await listedResponse.json() as { ok: true; data: Array<{ id: string }> };
+    assert.equal(listed.data.some((task) => task.id === created.data.id), true);
+
+    const platformsResponse = await app.handle(new Request("http://localhost/api/v1/platforms"));
+    const platforms = await platformsResponse.json() as { ok: true; data: Array<{ id: string }> };
+    assert.equal(platforms.data.some((platform) => platform.id === "doubao"), false);
+
+    const cancelledResponse = await app.handle(new Request(
+      `http://localhost/api/v1/generations/${created.data.id}`,
+      { method: "DELETE" },
+    ));
+    const cancelled = await cancelledResponse.json() as {
+      ok: true;
+      data: { status: string };
+    };
+    assert.equal(cancelled.data.status, "cancelled");
+  });
+
   test("播客 RSS 无记录时返回 null，并拒绝非 HTTP(S) 地址", async () => {
     const app = await setup();
     const empty = await app.handle(new Request("http://localhost/api/v1/podcast-rss"));
@@ -293,6 +352,101 @@ describe("API 路由", { concurrency: false }, () => {
       assert.equal((await nextMessageOfType(authenticated, "pong")).type, "pong");
       await closeSocket(authenticated);
     } finally {
+      server.server?.stop(true);
+    }
+  });
+
+  test("生图任务通过已鉴权扩展执行并保存结果", async () => {
+    const app = await setup();
+    const paired = await autoPairExtension({
+      origin: extensionOrigin(BUNDLED_EXTENSION_ID),
+      extensionId: BUNDLED_EXTENSION_ID,
+      browserLabel: "Chrome",
+      userAgent: "test",
+      version: "0.1.0",
+    });
+    const server = app.listen({ port: 0, hostname: "127.0.0.1" });
+    const port = server.server!.port!;
+    const origin = extensionOrigin(BUNDLED_EXTENSION_ID).replace(/\/$/, "");
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/ws/extension`, {
+      headers: { Origin: origin },
+    });
+    const originalFetch = globalThis.fetch;
+    try {
+      await new Promise<void>((resolve, reject) => {
+        socket.addEventListener("open", () => resolve(), { once: true });
+        socket.addEventListener("error", () => reject(new Error("WebSocket 连接失败")), { once: true });
+      });
+      socket.send(JSON.stringify({
+        type: "hello",
+        clientId: paired.extension.clientId,
+        token: paired.token,
+        accountProtocolVersion: 1,
+      }));
+      await nextMessageOfType(socket, "ready");
+      const dispatched = nextMessageOfType(socket, "generation.dispatch");
+      const createdResponse = await app.handle(new Request("http://localhost/api/v1/generations", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          platform: "doubao",
+          model: "Seedream 5.0 Flash",
+          name: "window-scene",
+          items: [{ prompt: "窗边的橘猫插画", ratio: "16:9", slug: "orange-cat" }],
+        }),
+      }));
+      const created = await createdResponse.json() as {
+        ok: true;
+        data: { id: string; status: string };
+      };
+      assert.equal(created.data.status, "queued");
+      const dispatch = await dispatched;
+      const job = dispatch.job as { jobId: string };
+      assert.equal(job.jobId, created.data.id);
+
+      const png = Uint8Array.from(Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2nWQAAAAASUVORK5CYII=",
+        "base64",
+      ));
+      globalThis.fetch = (async () => ({
+        ok: true,
+        status: 200,
+        url: "https://p3-flow-imagex-sign.byteimg.com/result.png",
+        headers: new Headers({ "content-type": "image/png" }),
+        arrayBuffer: async () => png.buffer,
+      })) as unknown as typeof fetch;
+      const acknowledged = nextMessageOfType(socket, "generation.result.ack");
+      socket.send(JSON.stringify({
+        type: "generation.result",
+        jobId: created.data.id,
+        result: {
+          status: "success",
+          outputs: [{
+            promptIndex: 0,
+            outputIndex: 0,
+            src: "https://p3-flow-imagex-sign.byteimg.com/result.png",
+            width: 2048,
+            height: 1152,
+          }],
+        },
+      }));
+      await acknowledged;
+      const detailResponse = await app.handle(new Request(
+        `http://localhost/api/v1/generations/${created.data.id}`,
+      ));
+      const detail = await detailResponse.json() as {
+        ok: true;
+        data: {
+          status: string;
+          outputs: Array<{ filePath: string; width: number; height: number }>;
+        };
+      };
+      assert.equal(detail.data.status, "success");
+      assert.equal(detail.data.outputs[0]?.width, 2048);
+      assert.equal((await fs.readFile(detail.data.outputs[0]!.filePath)).byteLength, png.byteLength);
+    } finally {
+      globalThis.fetch = originalFetch;
+      socket.close();
       server.server?.stop(true);
     }
   });

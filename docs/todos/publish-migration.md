@@ -76,8 +76,8 @@ Obsidian 当前测试仓库是 `/Users/amlei/Data/files`，后端内容目录是
 
 以下事项不参与本轮正式发布迁移，也不作为本轮完成标准：
 
-- 豆包或其他网页生图能力。
-- Agent 接入、Agent token、MCP server 和 CLI。
+- 其它网页生图平台；豆包生图及其 CLI 作为应用内部能力独立维护，不纳入发布迁移。
+- Agent 接入、Agent token、MCP server，以及面向发布流程的 CLI。
 - B站、头条号、百家号、抖音等 `planned` 平台。
 - 不阻塞发布的内容 watcher、软编辑租约和三方冲突副本。
 - Obsidian 插件 token 配对、Agent 审计和通用浏览器自动化能力。

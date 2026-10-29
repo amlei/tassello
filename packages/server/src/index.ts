@@ -15,6 +15,7 @@ export * from "./browser-launcher";
 export * from "./documents";
 export * from "./extensions";
 export * from "./filesystem";
+export * from "./generation-service";
 export * from "./media-token";
 export * from "./podcast-rss";
 export * from "./state";

@@ -16,10 +16,11 @@
 | Obsidian | 远端 API 客户端、直接 Markdown 编辑、预览内发布、WebSocket 状态 | 插件 token 配对与完整冲突交互 |
 | 桌面 | Electron 托管 API 二进制与 Next standalone，动态端口与完整链路自检 | 目标平台安装包实跑 |
 | 浏览器执行 | MV3、Native Messaging 自动发现/配对、单连接、心跳、11 个 active 扩展平台驱动、串行任务与断线恢复、结果确认回执、tab 聚焦/关闭、媒体传输与上传复用、账号自动发现/验证；RSS 认领在账号检查时采集一次；微信公众号文章/短语音、微博贴图、小红书长文/播客、即刻贴图、豆瓣图文草稿、知乎文章/视频、X 图文/视频、小宇宙/喜马拉雅/蜻蜓 FM/荔枝单音频已真机通过 | 微信长播客改走 RSS、微博/小红书视频、其余未列平台组合、账号与发布全平台回归、真机安装包验证 |
+| 应用内网页生图 | 豆包任务契约、本机后端持久化、扩展串行执行、原图下载、Vault 落盘和按需 CLI | 页面入口、Agent/MCP 接口、更多平台 |
 
 阅读和实现时必须区分“已落地”和“尚未完成”。未完成迁移的代码不得被描述为已满足目标契约。
 
-当前实施范围包含浏览器扩展的正式发布迁移和播客 RSS 分发，见 [`publish-migration.md`](../todos/publish-migration.md) 与 [`podcast-rss.md`](./podcast-rss.md)。网页生图与 Agent/CLI/MCP 明确延期，不作为本轮完成标准。
+当前实施范围包含浏览器扩展的正式发布迁移和播客 RSS 分发，见 [`publish-migration.md`](../todos/publish-migration.md) 与 [`podcast-rss.md`](./podcast-rss.md)。网页生图作为应用内部能力接入，并由按需 CLI 调用，规则见 [`image-generation.md`](./image-generation.md)；Agent/MCP 不在此能力范围内。
 
 ## 目录
 
@@ -74,23 +75,23 @@
 ## 3. 总体架构
 
 ```text
-Next.js 前端（apps/web）
-  │  HTTP / WebSocket
-  ├────────────────────────────────────────────┐
-  │                                            │
-ElysiaJS 本地后端（apps/api，仅监听 127.0.0.1） │
-  ├─ Markdown 文件读写 / watcher              │
-  ├─ frontmatter / 渲染 / 媒体解析             │
-  ├─ 发布任务状态机                            │
-  ├─ 账号 verify                              │
-  ├─ 文件状态库                                │
-  └─ 扩展连接与任务下发                        │
-  │                                            │
-  ├───────────────┐                            │
-  │               │                            │
-Obsidian 插件     浏览器扩展（MV3）              │
-  │               │                            │
-  └── 直接读写 ───┴── Vault Markdown 文件 ─────┘
+Next.js 前端（apps/web）       CLI（apps/cli）
+  │  HTTP / WebSocket             │  HTTP
+  └───────────────┬────────────────┘
+                  ▼
+ElysiaJS 本地后端（apps/api，仅监听 127.0.0.1）
+  ├─ Markdown 文件读写 / watcher
+  ├─ frontmatter / 渲染 / 媒体解析
+  ├─ 发布任务状态机
+  ├─ 账号 verify
+  ├─ 文件状态库
+  └─ 扩展连接与任务下发
+  │
+  ├───────────────┐
+  │               │
+Obsidian 插件     浏览器扩展（MV3）
+  │               │
+  └── 直接读写 ───┴── Vault Markdown 文件
 ```
 
 关键边界：
@@ -98,6 +99,7 @@ Obsidian 插件     浏览器扩展（MV3）              │
 - Next.js 与 Obsidian 都不实现发布状态机。
 - Obsidian 插件与 Next.js 可以读取同一份 Markdown，但彼此不维护共享文档对象。
 - 扩展不持有平台账号凭据，只执行后端下发的结构化任务。
+- CLI 只调用本机 API，不读取 Cookie、不连接扩展，也不保存第二套任务状态。
 - 后端是发布任务、账号与扩展连接的唯一写入方。
 - 内容文件由 Web 后端和 Obsidian 分别直接写入；不引入跨应用 CRDT。
 - 本机 API 的 CORS 只额外放行固定 Obsidian WebView 来源 `app://obsidian.md`；其余非本机 HTTP 与已登记扩展来源继续拒绝。
@@ -108,6 +110,7 @@ Obsidian 插件     浏览器扩展（MV3）              │
 apps/
 ├── web/                    # Next.js：内容库、编辑器、队列、设置
 ├── api/                    # Bun + ElysiaJS：唯一后端进程
+├── cli/                    # 按需 CLI：调用 api 完成生图等自动化任务
 ├── desktop/                # Electron：启动 api 与 web，不实现业务
 ├── native-host/            # Chrome / Edge Native Messaging 动态端口发现
 ├── obsidian/               # Obsidian 插件：直接编辑 MD，发布时调用 api
@@ -127,7 +130,7 @@ packages/
 
 - `apps/api`：`127.0.0.1:4311`，可用 `TASSELLO_API_PORT` 覆盖。
 - `apps/web`：开发默认 `127.0.0.1:3000`，由 Next 自身管理。
-- Electron 启动两个进程；纯网页模式由根 `bun run dev` 同时启动。
+- Electron 启动 API 与 Web 两个常驻进程；CLI 只在命令执行期间启动。
 
 ### 4.1 删除项
 
@@ -448,6 +451,11 @@ POST   /api/v1/tasks/:id/retry
 DELETE /api/v1/tasks/:id
 POST   /api/v1/tasks/:id/focus-tab
 
+POST   /api/v1/generations
+GET    /api/v1/generations
+GET    /api/v1/generations/:id
+DELETE /api/v1/generations/:id
+
 GET    /api/v1/accounts
 POST   /api/v1/accounts/:platformId/verify
 
@@ -633,7 +641,9 @@ apps/native-host/
 type ServerMessage =
   | { type: "ready"; installationId: string }
   | { type: "job.dispatch"; job: ExtensionJob }
+  | { type: "generation.dispatch"; job: ImageGenerationJob }
   | { type: "job.cancel"; jobId: string }
+  | { type: "generation.cancel"; jobId: string }
   | { type: "job.focusTab"; jobId: string; tabId: number }
   | { type: "job.closeTab"; jobId: string; tabId: number }
   | { type: "job.result.ack"; jobId: string }
@@ -643,6 +653,8 @@ type ExtensionMessage =
   | { type: "hello"; clientId: string; token: string; extVersion: string }
   | { type: "job.event"; jobId: string; event: DriverEvent }
   | { type: "job.result"; jobId: string; result: DriverResult }
+  | { type: "generation.event"; jobId: string; event: GenerationEvent }
+  | { type: "generation.result"; jobId: string; result: GenerationResult }
   | { type: "ping" };
 ```
 
@@ -656,6 +668,7 @@ type ExtensionMessage =
 - 看到明确成功回执才自动 success。
 - 已经可能提交但结果不确定时标记 `unknown`，不能自动重试以免重复发布。
 - 成功和等待确认都不自动关闭标签页；用户可通过“关闭标签页”显式清理，取消任务时关闭本次任务创建的标签页。
+- 发布和生图共用唯一扩展执行通道，但使用不同任务类型和回执消息；生图不使用发布快照或平台注册表。
 
 ### 10.5 页面执行
 
@@ -679,6 +692,8 @@ storage, scripting, tabs, alarms, nativeMessaging
 
 - `http://127.0.0.1/*`
 - `http://localhost/*`
+- `https://doubao.com/*`
+- `https://www.doubao.com/*`
 - `https://weibo.com/*`
 - `https://passport.weibo.com/*`
 - `https://mp.weixin.qq.com/*`
@@ -832,6 +847,7 @@ storage, scripting, tabs, alarms, nativeMessaging
 - 内存：不保存全量内容索引；只有请求内解析结果、当前编辑器 Buffer 和进行中的任务。
 - 本机后端、Web、Obsidian 与一个扩展的常驻连接内存通常小于 1 MB；媒体文件和编辑器 Buffer 不计入该值。
 - CPU：主要消耗在 Markdown 渲染、全文搜索、文件 hash 与平台页面驱动。
+- CLI 进程只在命令期间存在；单次内存约 10–50 MB，`wait` 轮询复杂度为 `O(T / interval)`，不增加 GPU 或外部网络开销。
 
 <a id="migration"></a>
 ## 15. 迁移

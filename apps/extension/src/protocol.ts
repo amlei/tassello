@@ -5,6 +5,9 @@ import type {
   ExtensionJobEvent,
   ExtensionJobResult,
   ExtensionLoginOpened,
+  ImageGenerationJob,
+  ImageGenerationJobEvent,
+  ImageGenerationJobResult,
   PublishCapabilityDTO,
 } from "@tassello/shared";
 
@@ -33,10 +36,15 @@ export type ServerMessage =
   | { type: "job.dispatch"; job: ExtensionJob }
   | { type: "job.cancel"; jobId: string }
   | { type: "job.focusTab"; jobId: string; tabId: number }
-  | { type: "job.closeTab"; jobId: string; tabId: number };
+  | { type: "job.closeTab"; jobId: string; tabId: number }
+  | { type: "generation.dispatch"; job: ImageGenerationJob }
+  | { type: "generation.cancel"; jobId: string }
+  | { type: "generation.result.ack"; jobId: string };
 
 export type ClientMessage =
   | ExtensionJobEvent
   | ExtensionJobResult
+  | ImageGenerationJobEvent
+  | ImageGenerationJobResult
   | ExtensionAccountResult
   | ExtensionLoginOpened;

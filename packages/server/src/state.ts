@@ -59,7 +59,7 @@ export function statePath(...parts: string[]): string {
 export async function ensureStateLayout(): Promise<void> {
   await Promise.all([
     fs.mkdir(resolveStateDir(), { recursive: true }),
-    ...["accounts", "extensions", "tasks", "logs", "uploads", "locks"].map((dir) =>
+    ...["accounts", "extensions", "tasks", "generations", "logs", "uploads", "locks"].map((dir) =>
       fs.mkdir(statePath(dir), { recursive: true }),
     ),
   ]);

@@ -19,6 +19,7 @@ const targets = [
   "packages/platforms/ximalaya",
   "packages/platforms/lizhi",
   "packages/server",
+  "apps/cli",
   "apps/api",
   "apps/extension",
   "apps/native-host",

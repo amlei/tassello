@@ -7,12 +7,13 @@
   "scripts": {
     "build": "bun build src/main.ts src/preload.ts --outdir dist --target node --external electron",
     "build:api": "cd ../api && bun run build",
+    "build:cli": "cd ../cli && bun run build",
     "build:native": "cd ../native-host && bun run build",
     "desktop": "bun run build:native && bun run build && electron dist/main.js",
-    "dist:mac": "bun run build:api && bun run build:native && cd ../web && bun run build && cd ../desktop && bun run build && bun scripts/prepare-web-resources.mjs && electron-builder --mac --arm64 && bun scripts/verify-packaged.mjs --target mac-arm64",
-    "dist:win": "bun run build:api && bun run build:native && cd ../web && bun run build && cd ../desktop && bun run build && bun scripts/prepare-web-resources.mjs && electron-builder --win --x64 && bun scripts/verify-packaged.mjs --target win-unpacked",
-    "dist:mac:dir": "bun run build:api && bun run build:native && cd ../web && bun run build && cd ../desktop && bun run build && bun scripts/prepare-web-resources.mjs && electron-builder --mac --arm64 --dir && bun scripts/verify-packaged.mjs --target mac-arm64",
-    "dist:win:dir": "bun run build:api && bun run build:native && cd ../web && bun run build && cd ../desktop && bun run build && bun scripts/prepare-web-resources.mjs && electron-builder --win --x64 --dir && bun scripts/verify-packaged.mjs --target win-unpacked",
+    "dist:mac": "bun run build:api && bun run build:cli && bun run build:native && cd ../web && bun run build && cd ../desktop && bun run build && bun scripts/prepare-web-resources.mjs && electron-builder --mac --arm64 && bun scripts/verify-packaged.mjs --target mac-arm64",
+    "dist:win": "bun run build:api && bun run build:cli && bun run build:native && cd ../web && bun run build && cd ../desktop && bun run build && bun scripts/prepare-web-resources.mjs && electron-builder --win --x64 && bun scripts/verify-packaged.mjs --target win-unpacked",
+    "dist:mac:dir": "bun run build:api && bun run build:cli && bun run build:native && cd ../web && bun run build && cd ../desktop && bun run build && bun scripts/prepare-web-resources.mjs && electron-builder --mac --arm64 --dir && bun scripts/verify-packaged.mjs --target mac-arm64",
+    "dist:win:dir": "bun run build:api && bun run build:cli && bun run build:native && cd ../web && bun run build && cd ../desktop && bun run build && bun scripts/prepare-web-resources.mjs && electron-builder --win --x64 --dir && bun scripts/verify-packaged.mjs --target win-unpacked",
     "verify:packaged": "bun scripts/verify-packaged.mjs"
   },
   "build": {
@@ -48,6 +49,10 @@
       {
         "from": "../native-host/dist",
         "to": "native-host"
+      },
+      {
+        "from": "../cli/dist",
+        "to": "bin"
       }
     ],
     "mac": {

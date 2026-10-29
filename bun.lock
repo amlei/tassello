@@ -26,6 +26,19 @@
         "@types/bun": "^1.2.0",
       },
     },
+    "apps/cli": {
+      "name": "@tassello/cli",
+      "version": "0.2.0",
+      "bin": {
+        "onda": "./src/index.ts",
+      },
+      "dependencies": {
+        "@tassello/shared": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/bun": "^1.2.0",
+      },
+    },
     "apps/desktop": {
       "name": "@tassello/desktop",
       "version": "0.2.0",
@@ -758,6 +771,8 @@
     "@tassello/api": ["@tassello/api@workspace:apps/api"],
 
     "@tassello/cdp": ["@tassello/cdp@workspace:packages/cdp"],
+
+    "@tassello/cli": ["@tassello/cli@workspace:apps/cli"],
 
     "@tassello/db": ["@tassello/db@workspace:packages/db"],
 

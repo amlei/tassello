@@ -14,6 +14,8 @@
   "host_permissions": [
     "http://127.0.0.1/*",
     "http://localhost/*",
+    "https://doubao.com/*",
+    "https://www.doubao.com/*",
     "https://weibo.com/*",
     "https://passport.weibo.com/*",
     "https://mp.weixin.qq.com/*",

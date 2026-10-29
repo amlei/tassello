@@ -5,28 +5,33 @@ import {
   AccountSyncError,
   authenticateExtension,
   autoPairExtension,
+  cancelImageGeneration,
   cancelTask,
   closeTaskTab,
   confirmTask,
   connectExtension,
+  createImageGeneration,
   createPost,
   createTasks,
   deleteAsset,
   deletePost,
   deleteTask,
   disconnectExtension,
+  dispatchWaitingImageGenerations,
   dispatchWaitingTasks,
   getPublishCapability,
   getPodcastRss,
   getPost,
   getSettings,
   heartbeatExtension,
+  getImageGeneration,
   findUploadCache,
   focusTaskTab,
   forgetUploadCache,
   isTrustedExtensionOrigin,
   listDirectories,
   listExtensions,
+  listImageGenerations,
   listPlatformsWithAccountSync,
   listPosts,
   listTasks,
@@ -39,6 +44,10 @@ import {
   onExtensionDisconnected,
   onExtensionJobInterrupted,
   onExtensionJobResult,
+  onImageGenerationDisconnected,
+  onImageGenerationEvent,
+  onImageGenerationInterrupted,
+  onImageGenerationResult,
   reconcileAccounts,
   readAssetFile,
   readAssetFileRange,
@@ -55,6 +64,8 @@ import {
   setPostCover,
   setPodcastRssFeed,
   setPreferredExtensionBrowser,
+  setImageGenerationControlDispatcher,
+  setImageGenerationDispatcher,
   setTaskControlDispatcher,
   setTaskDispatcher,
   updatePost,
@@ -63,6 +74,7 @@ import {
 } from "@tassello/server";
 import {
   extensionAutoPairSchema,
+  imageGenerationRequestSchema,
   postCreateSchema,
   postUpdateSchema,
   podcastRssUpdateSchema,
@@ -420,6 +432,36 @@ export const app = new Elysia()
       value,
     ));
   })
+  .post("/api/v1/generations", async ({ body, set }) => {
+    const parsed = imageGenerationRequestSchema.safeParse(body);
+    if (!parsed.success) {
+      set.status = 400;
+      return { ok: false, error: "生图参数不合法" };
+    }
+    try {
+      return ok(await createImageGeneration(parsed.data));
+    } catch (error) {
+      set.status = 400;
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  })
+  .get("/api/v1/generations", async () => ok(await listImageGenerations()))
+  .get("/api/v1/generations/:id", async ({ params, set }) => {
+    const task = await getImageGeneration(params.id);
+    if (!task) {
+      set.status = 404;
+      return { ok: false, error: "生图任务不存在" };
+    }
+    return ok(task);
+  })
+  .delete("/api/v1/generations/:id", async ({ params, set }) => {
+    try {
+      return ok(await cancelImageGeneration(params.id));
+    } catch (error) {
+      set.status = 404;
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  })
   .delete("/api/v1/uploads", async ({ body, set }) => {
     const parsed = uploadCacheQuerySchema.safeParse(body);
     if (!parsed.success) {
@@ -585,6 +627,7 @@ export const app = new Elysia()
           ws.send(JSON.stringify({ type: "ready", installationId: record.installationId }));
           if (typeof message.activeJobId === "string" && message.activeJobId) {
             await onExtensionJobInterrupted(message.activeJobId);
+            await onImageGenerationInterrupted(message.activeJobId);
           }
           const parsedProtocolVersion = Number(message.accountProtocolVersion);
           const accountProtocolVersion = Number.isInteger(parsedProtocolVersion)
@@ -599,6 +642,7 @@ export const app = new Elysia()
           });
           if (process.env.TASSELLO_DISABLE_ACCOUNT_RECONCILE !== "1") void reconcileAccounts();
           void dispatchWaitingTasks();
+          void dispatchWaitingImageGenerations();
         } catch (error) {
           ws.send(JSON.stringify({ type: "error", error: error instanceof Error ? error.message : String(error) }));
           ws.close();
@@ -636,6 +680,18 @@ export const app = new Elysia()
           type: "job.result.ack",
           jobId: String((message as { jobId?: unknown }).jobId ?? ""),
         }));
+        return;
+      }
+      if (message.type === "generation.event") {
+        await onImageGenerationEvent(message as never);
+        return;
+      }
+      if (message.type === "generation.result") {
+        await onImageGenerationResult(message as never);
+        ws.send(JSON.stringify({
+          type: "generation.result.ack",
+          jobId: String((message as { jobId?: unknown }).jobId ?? ""),
+        }));
       }
     },
     async close(ws) {
@@ -647,6 +703,7 @@ export const app = new Elysia()
       extensionClientId = null;
       setExtensionAccountConnection(null);
       await onExtensionDisconnected();
+      await onImageGenerationDisconnected();
       if (clientId) await disconnectExtension(clientId);
     },
   })
@@ -678,10 +735,23 @@ setTaskControlDispatcher((message) => {
   return true;
 });
 
+setImageGenerationDispatcher((job) => {
+  if (!extensionSocket) return false;
+  extensionSocket.send(JSON.stringify({ type: "generation.dispatch", job }));
+  return true;
+});
+
+setImageGenerationControlDispatcher((message) => {
+  if (!extensionSocket) return false;
+  extensionSocket.send(JSON.stringify(message));
+  return true;
+});
+
 onPublishCapabilityChange(() => {
   void getPublishCapability().then((capability) => {
     for (const socket of clientSockets) socket.send(JSON.stringify({ type: "capability", capability }));
     broadcastClientPlatforms();
+    if (capability.state === "ready") void dispatchWaitingImageGenerations();
   });
 });
 

@@ -366,6 +366,141 @@ export type PublishSnapshotDTO = {
   options: Record<string, unknown>;
 };
 
+/* ---------- 应用内网页生图 ---------- */
+export const IMAGE_GENERATION_PLATFORMS = ["doubao"] as const;
+export type ImageGenerationPlatform = (typeof IMAGE_GENERATION_PLATFORMS)[number];
+
+export const IMAGE_GENERATION_MODELS = [
+  "Seedream 5.0 Flash",
+  "Seedream 5.0 Pro",
+  "Seedream 4.5",
+  "Seedream 4.0",
+] as const;
+export type ImageGenerationModel = (typeof IMAGE_GENERATION_MODELS)[number];
+
+export const IMAGE_GENERATION_RATIOS = [
+  "自动",
+  "9:16",
+  "2:3",
+  "3:4",
+  "1:1",
+  "4:3",
+  "3:2",
+  "16:9",
+] as const;
+export type ImageGenerationRatio = (typeof IMAGE_GENERATION_RATIOS)[number];
+
+export const DEFAULT_IMAGE_GENERATION_MODEL = "Seedream 5.0 Flash" as const;
+export const DEFAULT_IMAGE_GENERATION_RATIO = "16:9" as const;
+export const IMAGE_GENERATION_TIMEOUT_MS = 300_000;
+export const IMAGE_GENERATION_LOGIN_TIMEOUT_MS = 180_000;
+
+export const IMAGE_GENERATION_STATUSES = [
+  "queued",
+  "waiting_extension",
+  "waiting_login",
+  "generating",
+  "downloading",
+  "quota_exhausted",
+  "unknown",
+  "success",
+  "failed",
+  "cancelled",
+] as const;
+export type ImageGenerationStatus = (typeof IMAGE_GENERATION_STATUSES)[number];
+
+const generationSlugSchema = z.string().trim().toLowerCase()
+  .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "名称只能包含小写字母、数字和连字符")
+  .max(80);
+
+export const imageGenerationItemSchema = z.object({
+  prompt: z.string().trim().min(1).max(20_000),
+  ratio: z.enum(IMAGE_GENERATION_RATIOS).default(DEFAULT_IMAGE_GENERATION_RATIO),
+  slug: generationSlugSchema.optional(),
+}).strict();
+export type ImageGenerationItemInput = z.infer<typeof imageGenerationItemSchema>;
+
+export const imageGenerationRequestSchema = z.object({
+  platform: z.literal("doubao").default("doubao"),
+  model: z.enum(IMAGE_GENERATION_MODELS).default(DEFAULT_IMAGE_GENERATION_MODEL),
+  name: generationSlugSchema.optional(),
+  items: z.array(imageGenerationItemSchema).min(1),
+  idempotencyKey: z.string().trim().min(1).max(200).optional(),
+}).strict();
+export type ImageGenerationRequest = z.infer<typeof imageGenerationRequestSchema>;
+
+export type ImageGenerationOutputDTO = {
+  promptIndex: number;
+  outputIndex: number;
+  filePath: string;
+  relativePath: string;
+  width: number;
+  height: number;
+  bytes: number;
+  contentHash: string;
+};
+
+export type ImageGenerationTaskDTO = {
+  id: string;
+  platform: ImageGenerationPlatform;
+  model: ImageGenerationModel;
+  name: string;
+  status: ImageGenerationStatus;
+  stage: number;
+  progress: number;
+  total: number;
+  completed: number;
+  outputDirectory: string | null;
+  outputs: ImageGenerationOutputDTO[];
+  error: string | null;
+  pageUrl: string | null;
+  tabId: number | null;
+  createdAt: string;
+  updatedAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+};
+
+export type ImageGenerationJob = {
+  jobId: string;
+  attempt: number;
+  request: ImageGenerationRequest;
+};
+
+export type ImageGenerationJobEvent = {
+  type: "generation.event";
+  jobId: string;
+  event: {
+    status?: ImageGenerationStatus;
+    stage?: number;
+    progress?: number;
+    completed?: number;
+    message?: string | null;
+    pageUrl?: string | null;
+    tabId?: number | null;
+  };
+};
+
+export type ImageGenerationResultAsset = {
+  promptIndex: number;
+  outputIndex: number;
+  src: string;
+  width: number;
+  height: number;
+};
+
+export type ImageGenerationJobResult = {
+  type: "generation.result";
+  jobId: string;
+  result: {
+    status: "success" | "quota_exhausted" | "unknown" | "failed" | "cancelled";
+    outputs: ImageGenerationResultAsset[];
+    error?: string | null;
+    pageUrl?: string | null;
+    tabId?: number | null;
+  };
+};
+
 export type ExtensionJob = {
   jobId: string;
   attempt: number;

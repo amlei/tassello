@@ -52,6 +52,7 @@ apps/desktop/dist/
 packages/db/src/generated/
 apps/desktop/build/
 apps/web/prisma-cli/
+apps/cli/dist/
 apps/extension/dist/
 apps/api/dist/
 

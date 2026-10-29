@@ -18,6 +18,7 @@
 |---|---|
 | [design/architecture.md](./design/architecture.md) | 目标架构、模块边界、Vault、API、任务、扩展与迁移状态 |
 | [design/podcast-rss.md](./design/podcast-rss.md) | 播客 RSS 发现、认领缓存与音频分发规则 |
+| [design/image-generation.md](./design/image-generation.md) | 应用内部豆包网页生图任务、执行边界和资源约束 |
 | [design/design-language.md](./design/design-language.md) | UI 视觉语言、布局、分隔线、组件、文案和主题规则 |
 | [design/ui-components.md](./design/ui-components.md) | 组件术语、复用边界、原型目录、生产目录和拆分规则 |
 | [design/agents.md](./design/agents.md) | Agent 能力域、鉴权、任务来源、并发和资源边界 |
@@ -36,6 +37,7 @@
 | 修改内容模型、后端、任务或扩展 | `design/architecture.md#status` 与对应主题章节 |
 | 修改 API、Vault 或文件状态库 | `design/architecture.md#content-model`、`#backend`、`conventions/repo-conventions.md#generated` |
 | 修改浏览器扩展 | `design/architecture.md#extension`、`workflow/development-workflow.md#validation` |
+| 修改应用内网页生图 | `design/image-generation.md`、`design/architecture.md#extension` |
 | 新建文件、包或调整目录 | `conventions/repo-conventions.md#code-placement` |
 | 修改 Web、Obsidian 或扩展 UI | `design/design-language.md#principles`、`#layout`、`#controls` |
 | 拆分、复用或新增 UI 组件 | `design/ui-components.md#layers`、`#inventory`、`#rules` |

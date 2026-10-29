@@ -6,9 +6,12 @@ import {
   type ExtensionJobEvent,
   type ExtensionJobResult,
   type ExtensionLoginOpened,
+  type ImageGenerationJob,
+  type ImageGenerationJobResult,
 } from "@tassello/shared";
 import { accountResult, openPlatformLogin, verifyPlatformAccount } from "./accounts.ts";
 import { runDriver } from "./drivers.ts";
+import { runDoubaoImageGeneration } from "./drivers/doubao-generation.ts";
 import { closeTab, focusTab } from "./page-runtime.ts";
 import { PublishRuntime } from "./publish-runtime.ts";
 import type { BackgroundState, ClientMessage, ServerMessage, StoredConnection } from "./protocol.ts";
@@ -24,14 +27,18 @@ const JOB_ACKED_KEY = "tassello.ackedJobResults";
 let socket: WebSocket | null = null;
 let connectPromise: Promise<void> | null = null;
 let connectionInfo: StoredConnection | null = null;
-let jobQueue: ExtensionJob[] = [];
-let activeJob: ExtensionJob | null = null;
+type BrowserWork =
+  | { kind: "publish"; job: ExtensionJob }
+  | { kind: "generation"; job: ImageGenerationJob };
+type BrowserResult = ExtensionJobResult | ImageGenerationJobResult;
+let jobQueue: BrowserWork[] = [];
+let activeJob: BrowserWork | null = null;
 let jobPumpRunning = false;
 let activeJobRunning = false;
 let activeTabs = new Set<number>();
 let activeJobCancelled = false;
 let jobKeepAliveTimer: ReturnType<typeof setInterval> | null = null;
-let jobResults = new Map<string, ExtensionJobResult>();
+let jobResults = new Map<string, BrowserResult>();
 let ackedResults = new Set<string>();
 const accountResults = new Map<string, ExtensionAccountResult | ExtensionLoginOpened>();
 const accountInflight = new Map<string, Promise<void>>();
@@ -57,11 +64,16 @@ async function getConnection(): Promise<StoredConnection | null> {
 
 async function hydrateJobs(): Promise<void> {
   const stored = await chrome.storage.local.get([JOB_QUEUE_KEY, JOB_ACTIVE_KEY, JOB_RESULTS_KEY, JOB_ACKED_KEY]);
-  jobQueue = Array.isArray(stored[JOB_QUEUE_KEY]) ? stored[JOB_QUEUE_KEY] as ExtensionJob[] : [];
+  jobQueue = Array.isArray(stored[JOB_QUEUE_KEY])
+    ? (stored[JOB_QUEUE_KEY] as BrowserWork[]).filter((work) =>
+        work && (work.kind === "publish" || work.kind === "generation")
+      )
+    : [];
   activeJob = stored[JOB_ACTIVE_KEY] && typeof stored[JOB_ACTIVE_KEY] === "object"
-    ? stored[JOB_ACTIVE_KEY] as ExtensionJob
+    && ["publish", "generation"].includes(String((stored[JOB_ACTIVE_KEY] as { kind?: unknown }).kind))
+    ? stored[JOB_ACTIVE_KEY] as BrowserWork
     : null;
-  const results = Array.isArray(stored[JOB_RESULTS_KEY]) ? stored[JOB_RESULTS_KEY] as ExtensionJobResult[] : [];
+  const results = Array.isArray(stored[JOB_RESULTS_KEY]) ? stored[JOB_RESULTS_KEY] as BrowserResult[] : [];
   jobResults = new Map(results.map((result) => [result.jobId, result]));
   ackedResults = new Set(Array.isArray(stored[JOB_ACKED_KEY]) ? stored[JOB_ACKED_KEY] as string[] : []);
 }
@@ -197,18 +209,30 @@ async function connectOnce(): Promise<void> {
       token: connection.token,
       extVersion: chrome.runtime.getManifest().version,
       accountProtocolVersion: 1,
-      activeJobId: activeJob?.jobId ?? null,
+      activeJobId: activeJob?.job.jobId ?? null,
     }));
     if (activeJob && !activeJobRunning) {
       const stale = activeJob;
       activeJob = null;
-      jobResults.set(stale.jobId, {
-        type: "job.result",
-        jobId: stale.jobId,
-        result: {
-          status: "unknown",
-          error: "浏览器扩展在任务执行中断，平台结果无法确认",
-        },
+      jobResults.set(stale.job.jobId, {
+        ...(stale.kind === "publish"
+          ? {
+              type: "job.result" as const,
+              jobId: stale.job.jobId,
+              result: {
+                status: "unknown" as const,
+                error: "浏览器扩展在任务执行中断，平台结果无法确认",
+              },
+            }
+          : {
+              type: "generation.result" as const,
+              jobId: stale.job.jobId,
+              result: {
+                status: "unknown" as const,
+                outputs: [],
+                error: "浏览器扩展在生图任务执行中断，平台结果无法确认",
+              },
+            }),
       });
     }
     for (const result of jobResults.values()) {
@@ -262,11 +286,20 @@ async function handleMessage(raw: string, sourceSocket: WebSocket): Promise<void
     await persistJobState();
     return;
   }
-  if (message.type === "job.dispatch") {
-    void enqueueJob(message.job);
+  if (message.type === "generation.result.ack") {
+    ackedResults.add(message.jobId);
+    await persistJobState();
     return;
   }
-  if (message.type === "job.cancel") {
+  if (message.type === "job.dispatch") {
+    void enqueueJob({ kind: "publish", job: message.job });
+    return;
+  }
+  if (message.type === "generation.dispatch") {
+    void enqueueJob({ kind: "generation", job: message.job });
+    return;
+  }
+  if (message.type === "job.cancel" || message.type === "generation.cancel") {
     await cancelJob(message.jobId);
     return;
   }
@@ -308,7 +341,7 @@ function send(message: ClientMessage): boolean {
   return true;
 }
 
-async function deliverResult(result: ExtensionJobResult): Promise<void> {
+async function deliverResult(result: BrowserResult): Promise<void> {
   jobResults.set(result.jobId, result);
   while (jobResults.size > 50) {
     const first = jobResults.keys().next().value;
@@ -373,14 +406,15 @@ async function executeAccountRequest(request: ExtensionAccountRequest): Promise<
   await task;
 }
 
-async function enqueueJob(job: ExtensionJob): Promise<void> {
-  const previous = jobResults.get(job.jobId);
+async function enqueueJob(work: BrowserWork): Promise<void> {
+  const jobId = work.job.jobId;
+  const previous = jobResults.get(jobId);
   if (previous) {
     send(previous);
     return;
   }
-  if (activeJob?.jobId === job.jobId || jobQueue.some((item) => item.jobId === job.jobId)) return;
-  jobQueue.push(job);
+  if (activeJob?.job.jobId === jobId || jobQueue.some((item) => item.job.jobId === jobId)) return;
+  jobQueue.push(work);
   await persistJobState();
   await pumpJobs();
 }
@@ -425,56 +459,100 @@ function stopJobKeepAlive(): void {
 }
 
 async function cancelJob(jobId: string): Promise<void> {
-  const index = jobQueue.findIndex((job) => job.jobId === jobId);
+  const index = jobQueue.findIndex((work) => work.job.jobId === jobId);
   if (index >= 0) {
-    jobQueue.splice(index, 1);
-    const result: ExtensionJobResult = {
-      type: "job.result",
-      jobId,
-      result: { status: "cancelled", error: null },
-    };
+    const [work] = jobQueue.splice(index, 1);
+    if (!work) return;
+    const result: BrowserResult = work.kind === "publish"
+      ? {
+          type: "job.result",
+          jobId,
+          result: { status: "cancelled", error: null },
+        }
+      : {
+          type: "generation.result",
+          jobId,
+          result: { status: "cancelled", outputs: [], error: null },
+        };
     await deliverResult(result);
     return;
   }
-  if (activeJob?.jobId === jobId) {
+  if (activeJob?.job.jobId === jobId) {
     activeJobCancelled = true;
     await Promise.all([...activeTabs].map((tabId) => closeTab(tabId)));
   }
 }
 
-async function executeJob(job: ExtensionJob): Promise<void> {
-  let finalResult: ExtensionJobResult["result"];
+async function executeJob(work: BrowserWork): Promise<void> {
+  let result: BrowserResult;
   try {
     if (!connectionInfo) throw new Error("浏览器扩展未连接本机 Onda");
-    const runtime = new PublishRuntime(job, connectionInfo.apiOrigin, (progress) => {
-      if (progress.tabId) activeTabs.add(progress.tabId);
-      send({
-        type: "job.event",
-        jobId: job.jobId,
-        event: progress,
+    if (work.kind === "publish") {
+      const runtime = new PublishRuntime(work.job, connectionInfo.apiOrigin, (progress) => {
+        if (progress.tabId) activeTabs.add(progress.tabId);
+        send({
+          type: "job.event",
+          jobId: work.job.jobId,
+          event: progress,
+        });
       });
-    });
-    finalResult = await runDriver(runtime);
-    if (activeJobCancelled) {
-      finalResult = { status: "cancelled", error: null, pageUrl: finalResult.pageUrl ?? null };
-    }
-    if (finalResult.status === "cancelled") {
-      await Promise.all([...activeTabs].map((tabId) => closeTab(tabId)));
-      activeTabs.clear();
+      let finalResult = await runDriver(runtime);
+      if (activeJobCancelled) {
+        finalResult = { status: "cancelled", error: null, pageUrl: finalResult.pageUrl ?? null };
+      }
+      if (finalResult.status === "cancelled") {
+        await Promise.all([...activeTabs].map((tabId) => closeTab(tabId)));
+        activeTabs.clear();
+      }
+      result = {
+        type: "job.result",
+        jobId: work.job.jobId,
+        result: finalResult,
+      };
+    } else {
+      let finalResult = await runDoubaoImageGeneration(work.job, (event) => {
+        if (event.tabId) activeTabs.add(event.tabId);
+        send({
+          type: "generation.event",
+          jobId: work.job.jobId,
+          event,
+        });
+      });
+      if (activeJobCancelled) {
+        await Promise.all([...activeTabs].map((tabId) => closeTab(tabId)));
+        activeTabs.clear();
+        finalResult = {
+          status: "cancelled",
+          outputs: [],
+          error: null,
+          pageUrl: finalResult.pageUrl ?? null,
+          tabId: finalResult.tabId ?? null,
+        };
+      }
+      result = {
+        type: "generation.result",
+        jobId: work.job.jobId,
+        result: finalResult,
+      };
     }
   } catch (error) {
-    finalResult = activeJobCancelled
-      ? { status: "cancelled", error: null }
+    const message = error instanceof Error ? error.message : String(error);
+    result = work.kind === "publish"
+      ? {
+          type: "job.result",
+          jobId: work.job.jobId,
+          result: activeJobCancelled
+            ? { status: "cancelled", error: null }
+            : { status: "failed", error: message },
+        }
       : {
-        status: "failed",
-        error: error instanceof Error ? error.message : String(error),
-      };
+          type: "generation.result",
+          jobId: work.job.jobId,
+          result: activeJobCancelled
+            ? { status: "cancelled", outputs: [], error: null }
+            : { status: "failed", outputs: [], error: message },
+        };
   }
-  const result: ExtensionJobResult = {
-    type: "job.result",
-    jobId: job.jobId,
-    result: finalResult,
-  };
   await deliverResult(result);
 }
 

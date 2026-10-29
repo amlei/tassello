@@ -4,7 +4,7 @@
  * 用法: bun scripts/verify-packaged.mjs --root ../../release [--target mac-arm64|win-unpacked]
  * 同平台产物做完整握手；跨平台产物只检查二进制和 Web 资源结构。
  */
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readdirSync, statSync } from "node:fs";
 import http from "node:http";
 import os from "node:os";
@@ -42,12 +42,14 @@ const artifactPlatform = /win-unpacked/i.test(appRoot) || existsSync(path.join(a
   ? "win32"
   : "darwin";
 const apiBinary = path.join(resourcesDir, "api", artifactPlatform === "win32" ? "tassello-api.exe" : "tassello-api");
+const cliBinary = path.join(resourcesDir, "bin", artifactPlatform === "win32" ? "onda.exe" : "onda");
 const nativeHostBinary = path.join(resourcesDir, "native-host", artifactPlatform === "win32" ? "onda-native-host.exe" : "onda-native-host");
 const fullCheck = artifactPlatform === process.platform;
 
 log(`产物: ${appRoot}`);
 log(`Web:  ${webDir}`);
 log(`API:  ${apiBinary}`);
+log(`CLI:  ${cliBinary}`);
 log(fullCheck ? "模式: 完整运行时校验" : "模式: 跨平台结构校验");
 
 for (const required of [
@@ -58,6 +60,7 @@ for (const required of [
   if (!existsSync(required)) fail(`Web 产物缺文件: ${required}`);
 }
 if (!existsSync(apiBinary)) fail(`API 二进制缺文件: ${apiBinary}`);
+if (!existsSync(cliBinary)) fail(`CLI 二进制缺文件: ${cliBinary}`);
 if (!existsSync(nativeHostBinary)) fail(`Native Messaging Host 缺文件: ${nativeHostBinary}`);
 if (process.platform !== "win32" && (statSync(apiBinary).mode & 0o111) === 0) {
   fail(`API 二进制没有执行权限: ${apiBinary}`);
@@ -65,11 +68,23 @@ if (process.platform !== "win32" && (statSync(apiBinary).mode & 0o111) === 0) {
 if (artifactPlatform !== "win32" && (statSync(nativeHostBinary).mode & 0o111) === 0) {
   fail(`Native Messaging Host 没有执行权限: ${nativeHostBinary}`);
 }
+if (artifactPlatform !== "win32" && (statSync(cliBinary).mode & 0o111) === 0) {
+  fail(`CLI 二进制没有执行权限: ${cliBinary}`);
+}
 
 if (!fullCheck) {
   log("结构校验通过（跨平台产物需在目标系统执行完整校验）");
   process.exit(0);
 }
+
+const cliVersion = spawnSync(cliBinary, ["--version"], {
+  encoding: "utf8",
+  env: { ...process.env, TASSELLO_API_ORIGIN: "" },
+});
+if (cliVersion.status !== 0 || !String(cliVersion.stdout).includes("onda 0.2.0")) {
+  fail(`CLI 自检失败: ${String(cliVersion.stderr || cliVersion.stdout).trim()}`);
+}
+log("CLI 自检通过");
 
 const dataDir = mkdtempSync(path.join(os.tmpdir(), "tassello-verify-"));
 const apiPort = 4400 + Math.floor(Math.random() * 250);

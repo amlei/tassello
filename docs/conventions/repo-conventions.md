@@ -20,6 +20,7 @@
 |---|---|
 | `apps/web` | Next.js Web 界面与 SSR 数据加载；不承载业务 API |
 | `apps/api` | Bun + ElysiaJS 本机服务：HTTP、WebSocket、Markdown 与发布状态 |
+| `apps/cli` | 按需启动的本机命令行客户端，调用 API 完成生图等自动化任务 |
 | `apps/desktop` | Electron 宿主，启动 API 二进制与 Next standalone |
 | `apps/native-host` | Chrome / Edge Native Messaging Host，读取动态 API 运行信息 |
 | `apps/obsidian` | Obsidian 插件源码、构建与部署脚本 |
