@@ -272,11 +272,19 @@ export const postUpdateSchema = z.object({
 });
 
 export const publishRequestSchema = z.object({
-  postId: z.string().min(1),
+  source: z.object({
+    id: z.string().trim().min(1).max(200),
+    filePath: z.string().trim().min(1).max(4096),
+    vaultPath: z.string().trim().min(1).max(4096).optional(),
+    markdown: z.string().max(16 * 1024 * 1024),
+    fingerprint: z.string().trim().min(1).max(512),
+  }).strict(),
   platformIds: z.array(z.string().min(1)).min(1),
   /** 平台 → 发布频道；播客账号有多个节目/专辑/播单时必选 */
   channelIds: z.record(z.string(), z.string().min(1)).optional(),
-});
+}).strict();
+
+export type PublishSourceInput = z.infer<typeof publishRequestSchema>["source"];
 
 export const extensionAutoPairSchema = z.object({
   clientId: z.string().min(1).max(160).optional(),

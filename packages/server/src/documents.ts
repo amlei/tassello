@@ -168,7 +168,7 @@ export async function updatePost(
     const byId = new Map(all.map((document) => [document.id, document]));
     const nextOrder = all.map((document) => (picked.has(document.id) ? byId.get(queue.shift()!)! : document));
     await Promise.all(nextOrder.map((document, index) =>
-      updateDocument(vaultPath, document.id, { manualOrder: index, touch: false }).catch(() => undefined),
+      updateDocument(vaultPath, document.id, { manualOrder: index }).catch(() => undefined),
     ));
   }
   const current = await getDocument(vaultPath, id);

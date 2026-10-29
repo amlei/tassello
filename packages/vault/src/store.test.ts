@@ -55,6 +55,23 @@ tassello:
     assert.match(parsed.error ?? "", /frontmatter/);
     assert.match(parsed.body, /正文/);
   });
+
+  test("只要求 id 与 type，时间从文件 stat 派生", async () => {
+    const vault = await tempVault();
+    const file = path.join(vault, "minimal.md");
+    await fs.writeFile(file, `---
+tassello:
+  id: minimal
+  type: article
+---
+# 标题
+`);
+    const document = await parseDocumentFile(vault, file);
+    assert.equal(document.status, "ready");
+    assert.equal(document.id, "minimal");
+    assert.ok(Number.isFinite(Date.parse(document.createdAt)));
+    assert.ok(Number.isFinite(Date.parse(document.updatedAt)));
+  });
 });
 
 describe("markdown media", () => {
@@ -156,6 +173,7 @@ tassello:
   type: article
   createdAt: 2026-10-26T10:00:00Z
   updatedAt: 2026-10-26T10:00:00Z
+  customField: keep
 ---
 # 标题
 `);
@@ -164,6 +182,10 @@ tassello:
     const saved = await fs.readFile(file, "utf8");
     assert.match(saved, /custom:/);
     assert.match(saved, /nested: true/);
+    assert.match(saved, /customField: keep/);
+    assert.doesNotMatch(saved, /version:/);
+    assert.doesNotMatch(saved, /createdAt:/);
+    assert.doesNotMatch(saved, /updatedAt:/);
   });
 
   test("只更新正文时保留首个 H1，不把标题退化为文件名", async () => {

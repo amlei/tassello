@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -17,6 +18,7 @@ import {
   cancelTask,
   closeTaskTab,
   createTasks,
+  createTasksFromSource,
   dispatchWaitingTasks,
   focusTaskTab,
   listStoredTasks,
@@ -116,6 +118,83 @@ test("无扩展时任务等待，扩展接入后派发且回执落盘", async ()
 test("账号未连接时拒绝创建发布任务", async () => {
   const documentId = await setupVault();
   await assert.rejects(createTasks(documentId, ["xhs"]), /账号未连接/);
+});
+
+test("按请求中的 Markdown 文件路径创建快照，不依赖全局 Vault", async () => {
+  const documentId = await setupVault();
+  const original = await getDocument(process.env.TASSELLO_VAULT_DIR!, documentId);
+  assert.ok(original);
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "tassello-explicit-source-"));
+  tempDirs.push(root);
+  const sourceRoot = path.join(root, "source-vault");
+  const sourceFile = path.join(sourceRoot, "posts", "post.md");
+  await fs.mkdir(path.dirname(sourceFile), { recursive: true });
+  const markdown = await fs.readFile(original.filePath, "utf8");
+  await fs.writeFile(sourceFile, markdown);
+  process.env.TASSELLO_VAULT_DIR = path.join(root, "unrelated-vault");
+
+  const paired = await autoPairExtension({
+    origin: extensionOrigin(BUNDLED_EXTENSION_ID),
+    extensionId: BUNDLED_EXTENSION_ID,
+    clientId: "explicit-source-extension",
+    browserLabel: "Chrome",
+    userAgent: "test",
+    version: "0.1.0",
+  });
+  await connectExtension(paired.extension.clientId);
+  await saveAccountVerification({
+    platformId: "xhs",
+    outcome: "ok",
+    error: null,
+    profile: {
+      uid: "explicit-source-user",
+      name: "九漾",
+      avatarUrl: null,
+      authExpiresAt: null,
+      channels: [],
+    },
+    extensionClientId: paired.extension.clientId,
+    browserLabel: paired.extension.browserLabel,
+  });
+  await disconnectExtension(paired.extension.clientId);
+
+  const fingerprint = createHash("sha256").update(markdown).digest("hex");
+  const [task] = await createTasksFromSource({
+    id: documentId,
+    filePath: "posts/post.md",
+    vaultPath: sourceRoot,
+    markdown,
+    fingerprint,
+  }, ["xhs"]);
+  assert.equal(task?.postId, documentId);
+  assert.equal(task?.documentPath, "posts/post.md");
+  assert.equal(task?.status, "waiting_extension");
+});
+
+test("显式发布快照拒绝指纹不匹配和越界路径", async () => {
+  const documentId = await setupVault();
+  const original = await getDocument(process.env.TASSELLO_VAULT_DIR!, documentId);
+  assert.ok(original);
+  await assert.rejects(
+    createTasksFromSource({
+      id: documentId,
+      filePath: original.relativePath,
+      vaultPath: process.env.TASSELLO_VAULT_DIR!,
+      markdown: "---\ntassello:\n  id: wrong\n---\n正文",
+      fingerprint: "0".repeat(64),
+    }, ["xhs"]),
+    /指纹不匹配/,
+  );
+  await assert.rejects(
+    createTasksFromSource({
+      id: documentId,
+      filePath: "../outside.md",
+      vaultPath: process.env.TASSELLO_VAULT_DIR!,
+      markdown: "",
+      fingerprint: createHash("sha256").update("").digest("hex"),
+    }, ["xhs"]),
+    /路径不合法/,
+  );
 });
 
 test("音频账号没有发布频道时拒绝创建任务", async () => {

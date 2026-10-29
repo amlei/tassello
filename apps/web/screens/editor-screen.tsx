@@ -248,7 +248,7 @@ export function EditorScreen({
   };
   const confirmPublish = async (platformIds: string[], selectedChannelIds: Record<string, string>) => {
     try {
-      const created = await api.publish(post.id, platformIds, selectedChannelIds);
+      const created = await api.publish(post, platformIds, selectedChannelIds);
       setTasks((ts) => [...created, ...ts]);
       setPublishError(null);
       setSheetOpen(false);

@@ -213,6 +213,7 @@
   .panel-head h1{flex:1;font-size:15px;font-weight:700;letter-spacing:-.2px;line-height:1.2}
   .theme-btn{width:27px;height:27px;border-radius:8px;color:var(--ink2);display:flex;align-items:center;justify-content:center}
   .theme-btn:hover{background:var(--hover);color:var(--ink)}
+  .theme-btn.active{background:var(--selected);color:var(--ink)}
   .conn-indicator{
     width:28px;height:28px;border-radius:8px;display:grid;place-items:center;
     color:var(--ink2);transition:background .15s;
@@ -236,6 +237,32 @@
   .mode button.active{background:var(--card);color:var(--ink);box-shadow:var(--shadow-card)}
   .mode-count{min-width:17px;height:16px;padding:0 4px;border-radius:99px;background:var(--selected);color:var(--ink2);font-family:var(--mono);font-size:9.5px;display:flex;align-items:center;justify-content:center}
   .mode button.active .mode-count{background:var(--accent-tint);color:var(--accent)}
+
+  .current-doc{display:flex;align-items:flex-start;gap:11px;padding:3px 2px 6px}
+  .current-doc-mark{width:36px;height:36px;border-radius:11px;display:grid;place-items:center;flex:0 0 auto;background:var(--hover);color:var(--ink2)}
+  .current-doc-copy{min-width:0;display:flex;flex-direction:column;gap:4px}
+  .current-doc-copy h2{font-size:14px;line-height:1.35;letter-spacing:-.15px}
+  .current-doc-copy p{font-size:10.8px;line-height:1.45;color:var(--ink2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .current-doc-meta{display:flex;align-items:center;gap:6px;margin-top:2px}
+  .current-doc-meta span{display:inline-flex;align-items:center;min-height:21px;padding:0 7px;border-radius:999px;background:var(--hover);color:var(--ink2);font-size:9.8px;font-weight:650}
+  .publish-action{display:flex;flex-direction:column;gap:6px;padding:2px 2px 4px}
+  .publish-feedback{display:flex;align-items:center;gap:8px;padding:9px 10px;border-radius:10px;background:var(--hover);font-size:10.5px;color:var(--ink2);line-height:1.45}
+  .publish-feedback .pulse{width:7px;height:7px;border-radius:50%;background:var(--accent);flex:0 0 auto}
+  .publish-feedback.done .pulse{background:var(--green)}
+  .publish-feedback span{flex:1}
+  .publish-feedback button{white-space:nowrap;color:var(--accent);font-size:10px;font-weight:700}
+  .live-tasks{display:flex;flex-direction:column;gap:6px;padding:2px}
+  .live-task{display:grid;grid-template-columns:26px minmax(0,1fr) auto auto;align-items:center;gap:8px;padding:8px 9px;border-radius:10px;background:var(--card)}
+  .live-task .glyph{width:26px;height:26px;border-radius:8px;display:grid;place-items:center;color:#fff;font-size:9px;font-weight:800}
+  .live-task-copy{min-width:0;display:flex;flex-direction:column;gap:4px}
+  .live-task-copy b{font-size:10.8px}
+  .live-task-copy span{overflow:hidden;color:var(--ink2);font-size:9.7px;text-overflow:ellipsis;white-space:nowrap}
+  .live-task-state{font-size:9.8px;font-weight:750;color:var(--ink2)}
+  .live-task-state.waiting{color:var(--warn)}
+  .live-task-state.failed{color:var(--error)}
+  .live-task-state.success{color:var(--green)}
+  .live-task-bar{height:3px;border-radius:99px;background:var(--hover);overflow:hidden}
+  .live-task-bar i{display:block;height:100%;border-radius:99px;background:var(--accent);transition:width .2s ease}
 
   .panel-body{flex:1;min-height:0;overflow:auto;padding:12px 14px 16px;display:flex;flex-direction:column;gap:11px}
   /* 预览页下部固定在视口内：检查与平台选择保持可见，长正文只在 payload 卡片里滚动。 */
@@ -419,9 +446,29 @@
   .modal label{display:block;margin:14px 0 6px;font-size:11px;font-weight:600;color:var(--ink2)}
   .modal input{width:100%;height:32px;padding:0 10px;border:1px solid var(--line);border-radius:9px;background:var(--paper);color:var(--ink);font-size:12px;outline:none}
   .modal input:focus{border-color:color-mix(in srgb,var(--accent) 50%,transparent);box-shadow:0 0 0 2px var(--accent-tint)}
-  .completion-check{display:flex!important;align-items:flex-start;gap:7px;margin-top:10px!important;color:var(--ink2)!important;line-height:1.45;cursor:pointer}
-  .completion-check input{width:14px!important;height:14px!important;margin-top:1px;padding:0!important}
   .modal-actions{display:flex;justify-content:flex-end;gap:7px;margin-top:16px}
+  .publish-modal{width:min(430px,100%);max-height:min(680px,calc(100vh - 48px));overflow:auto}
+  .publish-modal .modal-kicker{margin-bottom:4px;font-family:var(--mono);font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3)}
+  .publish-field{display:flex;flex-direction:column;gap:8px;margin-top:17px}
+  .publish-field-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+  .publish-field-head b{font-size:11px;color:var(--ink)}
+  .publish-field-head span{font-size:9.8px;color:var(--ink3)}
+  .publish-type-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+  .publish-type{min-height:54px;border:1px solid transparent;border-radius:11px;background:var(--hover);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:10.5px;font-weight:700;color:var(--ink2)}
+  .publish-type i{width:9px;height:9px;border-radius:3px;background:var(--type-color)}
+  .publish-type.active{background:color-mix(in srgb,var(--type-color) 12%,var(--card));border-color:color-mix(in srgb,var(--type-color) 52%,transparent);color:var(--ink)}
+  .publish-platforms{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+  .publish-platform{min-height:49px;padding:7px 8px;border-radius:11px;background:var(--hover);display:flex;align-items:center;gap:8px;text-align:left;color:var(--ink2);transition:.15s ease}
+  .publish-platform:hover{background:var(--selected);color:var(--ink)}
+  .publish-platform.selected{background:color-mix(in srgb,var(--platform-color) 11%,var(--card));box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--platform-color) 46%,transparent);color:var(--ink)}
+  .publish-platform.off{opacity:.46;cursor:not-allowed}
+  .publish-platform .glyph{width:25px;height:25px;border-radius:7px;display:grid;place-items:center;color:#fff;font-size:9px;font-weight:800;flex:0 0 auto}
+  .publish-platform-copy{min-width:0;display:flex;align-items:center}
+  .publish-platform-copy b{font-size:10.8px;font-weight:700}
+  .publish-platform .checkmark{margin-left:auto;width:16px;height:16px;border-radius:50%;display:grid;place-items:center;background:var(--card);color:transparent;font-size:9px;font-weight:900}
+  .publish-platform.selected .checkmark{background:var(--platform-color);color:#fff}
+  .publish-platform-empty{min-height:64px;border-radius:11px;background:var(--hover);display:grid;place-items:center;color:var(--ink3);font-size:10.5px}
+  .publish-modal .modal-actions{margin-top:20px}
 
   .empty{
     min-height:220px;border:1px dashed var(--line);border-radius:var(--r-md);
@@ -476,7 +523,7 @@ const NOTE_FIXTURES = [
     title: "发布插件结构假设",
     type: "article",
     platforms: ["wechat", "xhs", "zhihu", "douban"],
-    body: "这一篇记录发布插件的结构假设：右侧面板只保留预览与默认。\n\n预览不是模仿平台官方 UI，而是展示即将交给适配器的 payload。这样能避免「Obsidian 里看着对，发布时结构变了」的偏差。\n\n文章按 Markdown 原文顺序发送，图片留在原来的段落位置。",
+    body: "这一篇记录发布插件的结构假设：右侧面板只负责发布，类型与平台在点击发布后选择。\n\n内容始终在 Obsidian 原生编辑器中查看，插件不再维护第二套预览。\n\n文章按 Markdown 原文顺序发送，图片留在原来的段落位置。",
     media: [{ name:"封面图", kind:"image", color:"#7A6FF0" }],
   },
   {
@@ -538,65 +585,6 @@ function icon(name){
   return <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
 }
 
-function PayloadAttachments({items = [], compact=false}){
-  const trackRef = useRef(null);
-  const dragRef = useRef(null);
-  const [dragging, setDragging] = useState(false);
-
-  const startDrag = (event) => {
-    const track = trackRef.current;
-    if (!track) return;
-    dragRef.current = { x:event.clientX, left:track.scrollLeft };
-    setDragging(true);
-    try { track.setPointerCapture(event.pointerId); } catch {}
-  };
-  const moveDrag = (event) => {
-    const track = trackRef.current;
-    const drag = dragRef.current;
-    if (!track || !drag) return;
-    track.scrollLeft = drag.left - (event.clientX - drag.x);
-  };
-  const endDrag = () => {
-    dragRef.current = null;
-    setDragging(false);
-  };
-
-  if (!items.length) return null;
-
-  return (
-    <div
-      ref={trackRef}
-      className={`gallery${compact ? " compact" : ""}${dragging ? " dragging" : ""}`}
-      aria-label="单行滑动的完整图片附件"
-      onPointerDown={startDrag}
-      onPointerMove={moveDrag}
-      onPointerUp={endDrag}
-      onPointerCancel={endDrag}
-      onPointerLeave={endDrag}
-    >
-      {items.filter(item => item.kind === "image").map((p,i) => (
-        <figure key={p.name} className="item">
-          <div className="media" style={{background:p.color}}>{p.name}</div>
-        </figure>
-      ))}
-      {items.filter(item => item.kind === "video").map(item => (
-        <figure key={item.name} className="item media-wide">
-          <div className="media" style={{background:item.color}}>
-            <span>视频 · {item.duration}</span>
-          </div>
-        </figure>
-      ))}
-      {items.filter(item => item.kind === "audio").map(item => (
-        <div key={item.name} className="payload-audio">
-          <span className="play">▶</span>
-          <span className="name">{item.name}</span>
-          <span className="time">{item.duration}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 function NoteMedia({note}){
   if(!note.media.length) return null;
   if(note.type === "image"){
@@ -645,19 +633,15 @@ function NoteMedia({note}){
   );
 }
 
-function initialTasks(){
-  const map = {};
-  PLATFORMS.forEach(p => map[p.id] = {status:"idle", stage:0, progress:0, url:null, urlSource:null, noPublic:false});
-  return map;
-}
-
 function App(){
   const [theme, setTheme] = useState(document.documentElement.dataset.theme);
   const [systemDark, setSystemDark] = useState(() => window.matchMedia("(prefers-color-scheme: dark)").matches);
-  const [mode, setMode] = useState("preview");
+  const [mode, setMode] = useState("overview");
+  const [publishOpen, setPublishOpen] = useState(false);
+  const [publishType, setPublishType] = useState(null);
+  const [settingsType, setSettingsType] = useState("article");
   const [activeNoteId, setActiveNoteId] = useState("a1");
-  const [activePlatform, setActivePlatform] = useState("zhihu");
-  const [selected, setSelected] = useState({wechat:true, xhs:true, zhihu:true});
+  const [selected, setSelected] = useState({});
   const [defaultTargets, setDefaultTargets] = useState({
     article:["wechat","xhs","zhihu"],
     image:["xhs","weibo","jike","douban"],
@@ -666,18 +650,16 @@ function App(){
   });
   const [backend, setBackend] = useState("connected");
   const [extension, setExtension] = useState("connected");
-  const [tasks, setTasks] = useState(initialTasks);
   const [running, setRunning] = useState(false);
-  const [completion, setCompletion] = useState(null);
+  const [publishFeedback, setPublishFeedback] = useState(null);
+  const [sessionTasks, setSessionTasks] = useState([]);
   const timers = useRef([]);
 
   const note = NOTE_BY_ID.get(activeNoteId) ?? NOTE_FIXTURES[0];
-  const sourceType = note.type;
-  const body = note.body;
-  const supportedPlatforms = PLATFORMS.filter(p => p.supports.includes(sourceType));
+  const supportedPlatforms = publishType ? PLATFORMS.filter(p => p.supports.includes(publishType)) : [];
+  const settingsPlatforms = PLATFORMS.filter(p => p.supports.includes(settingsType));
   const supportedCount = supportedPlatforms.length;
   const selectedCount = supportedPlatforms.filter(p => selected[p.id]).length;
-  const platform = PLATFORMS.find(p => p.id === activePlatform);
   const blocked = backend !== "connected" || extension !== "connected";
   const connectionState = backend !== "connected"
     ? "bad"
@@ -710,43 +692,30 @@ function App(){
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
 
   const findings = useMemo(() => {
-    const mediaText = note.type === "image"
-      ? `${note.media.length} 张图片将按出现顺序组成图集。`
-      : note.type === "video"
-        ? "视频引用已解析为主媒体。"
-        : note.type === "audio"
-          ? "音频引用已解析为主媒体。"
-          : note.media.length
-            ? `${note.media.length} 张图片保留在正文原位。`
-            : "正文没有媒体引用。";
-    const common = [
-      {level:"ok", text:`frontmatter 完整：${note.id} / ${note.type}`},
-      {level:"ok", text:mediaText},
+    return [
+      {level:"ok", text:`Markdown 已读取：${note.file}.md`},
       {level:"warn", text:"仅支持 CommonMark + GFM；wiki link、callout 和专有语法不会发布。"},
     ];
-    if(activePlatform === "jike") return [...common, {level:"ok", text:"即刻不支持独立文章；本篇自动降级为图文动态。"}];
-    if(activePlatform === "xhs") return [...common, {level:"warn", text:"小红书正文是纯文本，不携带 Markdown 格式。"}];
-    if(activePlatform === "weibo") return [...common, {level:"ok", text:"话题会转为 #话题#，图片作为附件上传。"}];
-    if(activePlatform === "wechat") return [...common, {level:"ok", text:"图片将先进入公众号素材库，再替换正文引用。"}];
-    return common;
-  }, [activePlatform, note]);
-
-  const payloadText = `标题：${note.title}\n\n${body}`;
-  const weiboPayloadText = `标题：${note.title}\n\n${body}\n\n#自媒体#`;
+  }, [note]);
 
   function selectNote(id){
     const next = NOTE_BY_ID.get(id);
     if(!next) return;
     setActiveNoteId(id);
-    const first = PLATFORMS.find(p => next.platforms.includes(p.id));
-    setActivePlatform(first?.id ?? "");
-    setSelected(Object.fromEntries((defaultTargets[next.type] ?? []).filter(pid => next.platforms.includes(pid)).map(pid => [pid,true])));
+    setPublishFeedback(null);
+    setSessionTasks([]);
   }
 
-  function selectSourceType(type){
-    if(type === sourceType) return;
-    const first = NOTE_FIXTURES.find(item => item.type === type);
-    if(first) selectNote(first.id);
+  function openPublish(){
+    selectPublishType("article");
+    setPublishOpen(true);
+  }
+
+  function selectPublishType(type){
+    const supportedIds = PLATFORMS.filter(platform => platform.supports.includes(type)).map(platform => platform.id);
+    const defaults = defaultTargets[type] ?? [];
+    setPublishType(type);
+    setSelected(Object.fromEntries(defaults.filter(id => supportedIds.includes(id)).map(id => [id, true])));
   }
 
   function toggleDefault(type, id){
@@ -760,9 +729,10 @@ function App(){
   }
 
   function toggleTheme(){
-    const next = dark ? "light" : "dark";
+    const next = theme === "light" ? "dark" : theme === "dark" ? "system" : "light";
     setTheme(next);
-    localStorage.setItem("obsidian-publisher-theme", next);
+    if(next === "system") localStorage.removeItem("obsidian-publisher-theme");
+    else localStorage.setItem("obsidian-publisher-theme", next);
   }
 
   function connectExtension(){
@@ -778,64 +748,48 @@ function App(){
   function startPublish(){
     if(blocked || running || selectedCount === 0) return;
     setRunning(true);
-    setTasks(initialTasks());
-    const next = initialTasks();
-    PLATFORMS.forEach((p, index) => {
-      if(!selected[p.id]) return;
-      const stages = p.id === "zhihu"
-        ? [["queued",4],["running",38],["running",82],["success",100]]
-        : p.id === "wechat"
-          ? [["queued",6],["running",32],["running",68],["waiting",100]]
-          : p.id === "xhs"
-            ? [["queued",6],["running",32],["running",68],["unknown",100]]
-            : [["queued",6],["running",32],["running",68],["waiting_extension",100]];
-      stages.forEach(([status, progress], stageIndex) => {
-        const t = setTimeout(() => {
-          setTasks(prev => ({
-            ...prev,
-            [p.id]: {
-              status,
-              stage:stageIndex,
-              progress,
-              url: status === "success" ? "https://zhuanlan.zhihu.com/p/29018473" : null,
-              urlSource: status === "success" ? "auto" : null,
-            },
-          }));
-        }, 350 + index*180 + stageIndex*680);
-        timers.current.push(t);
+    setPublishOpen(false);
+    setPublishFeedback(null);
+    const published = supportedPlatforms.filter(platform => selected[platform.id]);
+    setSessionTasks(published.map(platform => ({
+      platformId: platform.id,
+      status: "queued",
+      progress: 0,
+      message: "等待发布",
+    })));
+    published.forEach((platform, index) => {
+      [[24, "running", "准备平台页面"], [58, "running", "填写内容"], [86, "running", "上传资源"]].forEach(([progress, status, message], stage) => {
+        const timer = setTimeout(() => {
+          setSessionTasks(current => current.map(task => task.platformId === platform.id
+            ? {...task, progress, status, message}
+            : task));
+        }, 220 + index * 120 + stage * 420);
+        timers.current.push(timer);
       });
+      const settle = setTimeout(() => {
+        setSessionTasks(current => current.map(task => task.platformId === platform.id
+          ? {...task, progress:100, status:"waiting", message:"草稿已创建，等待在平台完成发布"}
+          : task));
+      }, 1_550 + index * 120);
+      timers.current.push(settle);
     });
-    const done = setTimeout(() => setRunning(false), 3600);
+    const done = setTimeout(() => {
+      setRunning(false);
+      setPublishFeedback({ count:selectedCount });
+    }, 2_000);
     timers.current.push(done);
   }
-
-  function confirmTask(id){
-    setCompletion({id, url:"", noPublic:false});
-  }
-
-  function submitCompletion(){
-    if(!completion) return;
-    const url = completion.url.trim();
-    if (!url && !completion.noPublic) return;
-    setTasks(prev => ({...prev, [completion.id]:{...prev[completion.id], status:"success", progress:100, url:url || null, urlSource:"manual", noPublic:!url}}));
-    setCompletion(null);
-  }
-
-  const statusText = {
-    idle:"未发布", queued:"排队", running:"执行中", waiting:"等待完成", waiting_extension:"等待扩展", unknown:"结果未知", success:"完成", failed:"失败"
-  };
-  const visibleTasks = PLATFORMS.filter(p => tasks[p.id]?.status !== "idle");
 
   return (
     <div className="proto">
       <header className="proto-top">
         <strong>九漾 Onda · Obsidian 右侧面板</strong>
-        <span>直接预览，底部一键发布</span>
+        <span>发布当前 Markdown</span>
         <div className="actions">
           <button className="ghost-btn active">右侧面板</button>
           <button className="ghost-btn" onClick={toggleTheme}>
             {icon(dark ? "sun" : "moon")}
-            {dark ? "浅色" : "深色"}
+            {theme === "light" ? "深色" : theme === "dark" ? "跟随系统" : "浅色"}
           </button>
         </div>
       </header>
@@ -901,69 +855,38 @@ function App(){
                 >
                   <span className="dot"></span>
                 </button>
+                <button
+                  className={`theme-btn ${mode === "defaults" ? "active" : ""}`}
+                  onClick={() => setMode(mode === "defaults" ? "overview" : "defaults")}
+                  title="默认发布设置"
+                  aria-label="默认发布设置"
+                >
+                  {icon("settings")}
+                </button>
                 <button className="theme-btn" onClick={toggleTheme} title="切换主题">{icon(dark ? "sun" : "moon")}</button>
-              </div>
-              <div className="mode">
-                <button className={mode === "preview" ? "active" : ""} onClick={() => setMode("preview")}>
-                  {icon("search")} 预览
-                </button>
-                <button className={mode === "defaults" ? "active" : ""} onClick={() => setMode("defaults")}>
-                  默认
-                </button>
               </div>
             </div>
 
             <div className="panel-body">
-              {mode === "preview" ? (
+              {mode === "overview" ? (
                 <React.Fragment>
-                  <div className="selector-card">
-                    <div className="selector-row">
-                      <span className="selector-label">类型</span>
-                      <div className="type-options">
-                        {TYPE_ORDER.map(type => {
-                          const meta = TYPE_META[type];
-                          return (
-                            <button
-                              key={type}
-                              className={`type-option ${sourceType === type ? "active" : ""}`}
-                              onClick={() => selectSourceType(type)}
-                            >
-                              {meta.zh}
-                            </button>
-                          );
-                        })}
+                  <div className="current-doc">
+                    <span className="current-doc-mark">{icon("files")}</span>
+                    <div className="current-doc-copy">
+                      <h2>{note.title}</h2>
+                      <p>{note.file}.md</p>
+                      <div className="current-doc-meta">
+                        <span>Markdown</span>
+                        <span>发布时选择类型与平台</span>
                       </div>
                     </div>
-                    <div className="selector-row">
-                      <span className="selector-label">平台</span>
-                      <div className="platform-options">
-                        {supportedPlatforms.map(p => (
-                          <button
-                            key={p.id}
-                            className={`platform-option ${selected[p.id] ? "selected" : ""}`}
-                            style={{background:p.color, color:p.fg || "#fff"}}
-                            title={`${p.name}${selected[p.id] ? " · 已选" : ""}`}
-                            aria-label={`${selected[p.id] ? "移除" : "选择"} ${p.name}`}
-                            aria-pressed={!!selected[p.id]}
-                            onClick={() => {
-                              setActivePlatform(p.id);
-                              setSelected(prev => ({...prev, [p.id]:!prev[p.id]}));
-                            }}
-                          >
-                            {p.short}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="selector-summary">
-                      <span className="count">
-                        已选
-                        <strong>{selectedCount}</strong>
-                        <span className="total">/ {supportedCount}</span>
-                      </span>
-                      <span className="divider"></span>
-                      <span className="summary-link" style={{cursor:"default"}}>点击图标切换发布目标</span>
-                    </div>
+                  </div>
+
+                  <div className="publish-action">
+                    <button className="primary-cta" disabled={blocked || running} onClick={openPublish}>
+                      {blocked ? "发布通道暂不可用" : running ? "发布任务执行中…" : "发布"}
+                    </button>
+                    <div className="foot-note">{blocked ? "扩展连接后会自动继续" : "发布前会先保存当前 Markdown"}</div>
                   </div>
 
                   <details
@@ -981,50 +904,42 @@ function App(){
                     </div>
                   </details>
 
-                  <div className="preview-frame">
-                    <div className="preview-content">
-                      <PayloadAttachments items={note.type === "article" ? [] : note.media} compact />
-                      {note.type === "article" ? (
-                        <div className="rich">
-                          <h4>{note.title}</h4>
-                          {note.body.split(/\n\n+/).map((paragraph, index) => <p key={index}>{paragraph}</p>)}
-                          <NoteMedia note={note} />
-                          <p>文章保留图片在 Markdown 原文中的位置。</p>
-                        </div>
-                      ) : activePlatform === "jike" ? (
-                        <div className="rich">
-                          <h4>{note.title}</h4>
-                          <p>{body}</p>
-                          <p>有标题的想法平台使用 Markdown 首行 H1 作为平台标题。</p>
-                        </div>
-                      ) : (
-                        <div className="plain">
-                          {note.type === "image" && <p>图片按出现顺序组成图集，与所在段落无关。</p>}
-                          {note.type === "video" && <p>视频作为主媒体上传。</p>}
-                          {note.type === "audio" && <p>音频作为主媒体，发布时再选择节目或专辑。</p>}
-                          {activePlatform === "weibo" ? weiboPayloadText : payloadText}
-                        </div>
-                      )}
+                  {(running || publishFeedback) && (
+                    <div className={`publish-feedback ${running ? "" : "done"}`} aria-live="polite">
+                      <span className="pulse"></span>
+                      <span>
+                        {running
+                          ? `正在发布到 ${selectedCount} 个平台`
+                          : `已提交到 ${publishFeedback.count} 个平台，结果可在九漾 Onda 发布队列查看`}
+                      </span>
                     </div>
-                  </div>
-                  {visibleTasks.length > 0 && (
-                    <div className="task-strip" aria-label="发布状态">
-                      {visibleTasks.map(p => {
-                        const task = tasks[p.id];
-                        const waiting = task.status === "waiting" || task.status === "waiting_extension" || task.status === "unknown";
+                  )}
+
+                  {sessionTasks.length > 0 && (
+                    <div className="live-tasks" aria-label="本次发布进度">
+                      {sessionTasks.map(task => {
+                        const platform = PLATFORMS.find(item => item.id === task.platformId);
+                        if(!platform) return null;
+                        const stateText = task.status === "waiting"
+                          ? "等待完成"
+                          : task.status === "running"
+                            ? "执行中"
+                            : task.status === "failed"
+                              ? "失败"
+                              : task.status === "success"
+                                ? "完成"
+                                : "排队";
                         return (
-                          <button
-                            key={p.id}
-                            className={`task-chip ${waiting ? "waiting" : task.status}`}
-                            onClick={() => {
-                              if (waiting) confirmTask(p.id);
-                              else if (task.status === "success" && task.url) window.open(task.url, "_blank", "noopener");
-                            }}
-                            title={waiting ? `补充 ${p.name} 的发布结果` : task.url || p.name}
-                          >
-                            <span className="glyph" style={{background:p.color,color:p.fg || "#fff"}}>{p.short}</span>
-                            {p.name} · {statusText[task.status] || task.status}
-                          </button>
+                          <div className="live-task" key={task.platformId}>
+                            <span className="glyph" style={{background:platform.color,color:platform.fg || "#fff"}}>{platform.short}</span>
+                            <span className="live-task-copy">
+                              <b>{platform.name}</b>
+                              <span>{task.message}</span>
+                              <span className="live-task-bar"><i style={{width:`${task.progress}%`}}></i></span>
+                            </span>
+                            <span className={`live-task-state ${task.status}`}>{stateText}</span>
+                            {task.status === "waiting" && <button className="mini">打开草稿</button>}
+                          </div>
                         );
                       })}
                     </div>
@@ -1041,8 +956,8 @@ function App(){
                             return (
                               <button
                                 key={type}
-                                className={`type-option ${sourceType === type ? "active" : ""}`}
-                                onClick={() => selectSourceType(type)}
+                                className={`type-option ${settingsType === type ? "active" : ""}`}
+                                onClick={() => setSettingsType(type)}
                               >
                                 {meta.zh}
                               </button>
@@ -1053,8 +968,8 @@ function App(){
                       <div className="selector-row">
                         <span className="selector-label">平台</span>
                         <div className="platform-options">
-                          {supportedPlatforms.map(p => {
-                            const on = (defaultTargets[sourceType] ?? []).includes(p.id);
+                          {settingsPlatforms.map(p => {
+                            const on = (defaultTargets[settingsType] ?? []).includes(p.id);
                             return (
                               <button
                                 key={p.id}
@@ -1063,7 +978,7 @@ function App(){
                                 title={p.name}
                                 aria-label={`${on ? "移除" : "保存"} ${p.name} 为默认平台`}
                                 aria-pressed={on}
-                                onClick={() => toggleDefault(sourceType, p.id)}
+                                onClick={() => toggleDefault(settingsType, p.id)}
                               >
                                 {p.short}
                               </button>
@@ -1079,41 +994,72 @@ function App(){
               ) : null}
             </div>
 
-            {mode !== "defaults" && (
-            <div className="panel-foot">
-              <button className="primary-cta" disabled={blocked || running || selectedCount === 0} onClick={startPublish}>
-                {blocked ? "发布通道暂不可用" : running ? "发布任务执行中…" : `发布到 ${selectedCount} 个平台`}
-              </button>
-              <div className="foot-note">{blocked ? "扩展连接后会自动继续" : "发布前会先保存当前 Markdown"}</div>
-            </div>
-            )}
           </aside>
         </section>
       </main>
-      {completion && (
-        <div className="modal-backdrop" onClick={() => setCompletion(null)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
-            <h3>补充发布结果</h3>
-            <p>自动回执缺失时才需要手动处理。填写最终链接，或明确确认该结果没有公开链接。</p>
-            <label htmlFor="publish-url">发布链接</label>
-            <input
-              id="publish-url"
-              value={completion.url}
-              placeholder="https://..."
-              autoFocus
-              onChange={e => setCompletion({...completion, url:e.target.value})}
-            />
-            <label className="completion-check">
-              <input
-                type="checkbox"
-                checked={completion.noPublic}
-                onChange={e => setCompletion({...completion, noPublic:e.target.checked, url:e.target.checked ? "" : completion.url})}
-              />
-              <span>该结果没有公开链接，我已在平台确认完成</span>
-            </label>
+      {publishOpen && (
+        <div className="modal-backdrop" onClick={() => setPublishOpen(false)}>
+          <div className="modal publish-modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-kicker">CURRENT NOTE</div>
+            <h3>发布当前稿件</h3>
+            <p>{note.title}</p>
+
+            <section className="publish-field">
+              <div className="publish-field-head">
+                <b>内容类型</b>
+                <span>写入 frontmatter</span>
+              </div>
+              <div className="publish-type-grid">
+                {TYPE_ORDER.map(type => {
+                  const meta = TYPE_META[type];
+                  return (
+                    <button
+                      key={type}
+                      className={`publish-type ${publishType === type ? "active" : ""}`}
+                      style={{"--type-color":meta.color}}
+                      aria-pressed={publishType === type}
+                      onClick={() => selectPublishType(type)}
+                    >
+                      <i></i>
+                      {meta.zh}
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+
+            <section className="publish-field">
+              <div className="publish-field-head">
+                <b>发布平台</b>
+                <span>已选 {selectedCount} / {supportedCount}</span>
+              </div>
+              <div className="publish-platforms">
+                {supportedPlatforms.map(p => {
+                  const on = !!selected[p.id];
+                  return (
+                    <button
+                      key={p.id}
+                      className={`publish-platform ${on ? "selected" : ""}`}
+                      style={{"--platform-color":p.color}}
+                      aria-pressed={on}
+                      onClick={() => setSelected(prev => ({...prev, [p.id]:!prev[p.id]}))}
+                    >
+                      <span className="glyph" style={{background:p.color,color:p.fg || "#fff"}}>{p.short}</span>
+                      <span className="publish-platform-copy">
+                        <b>{p.name}</b>
+                      </span>
+                      <span className="checkmark">✓</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+
             <div className="modal-actions">
-              <button className="mini" onClick={() => setCompletion(null)}>取消</button>
-              <button className="mini primary" disabled={!completion.url.trim() && !completion.noPublic} onClick={submitCompletion}>保存发布结果</button>
+              <button className="mini" onClick={() => setPublishOpen(false)}>取消</button>
+              <button className="mini primary" disabled={selectedCount === 0} onClick={startPublish}>
+                发布到 {selectedCount} 个平台
+              </button>
             </div>
           </div>
         </div>

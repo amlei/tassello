@@ -26,11 +26,10 @@
 .tassello-publisher .panel-head {
   flex: 0 0 auto;
   padding: 12px 14px 10px;
-  border-bottom: 1px solid var(--tp-line);
   background: var(--tp-card);
 }
 
-.tassello-publisher .head-top { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.tassello-publisher .head-top { display: flex; align-items: center; gap: 8px; }
 .tassello-publisher .mark { width: 24px; height: 24px; padding: 4px; border-radius: 7px; background: var(--tp-ink); display: grid; grid-template-columns: 1fr 1fr; gap: 2px; }
 .tassello-publisher .mark i { border-radius: 2px; background: var(--tp-card); }
 .tassello-publisher .mark i:first-child { background: #2c6ff0; }
@@ -47,6 +46,138 @@
 .tassello-publisher .conn-indicator.on .dot { background: var(--tp-ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--tp-ok) 16%, transparent); }
 .tassello-publisher .conn-indicator.wait .dot { background: var(--tp-warn); animation: tp-pulse 1.2s ease infinite; }
 .tassello-publisher .conn-indicator.bad .dot { background: var(--tp-error); box-shadow: 0 0 0 3px color-mix(in srgb, var(--tp-error) 14%, transparent); }
+.tassello-publisher .panel-icon-button {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--tp-ink2);
+  font-size: 14px;
+  line-height: 1;
+}
+.tassello-publisher .panel-icon-button:hover,
+.tassello-publisher .panel-icon-button.active { background: var(--tp-hover); color: var(--tp-ink); }
+
+.tassello-publisher .current-doc { display: flex; align-items: flex-start; gap: 11px; padding: 3px 2px 4px; }
+.tassello-publisher .current-doc-mark {
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  background: var(--tp-hover);
+  color: var(--tp-ink2);
+  font-family: var(--font-monospace);
+  font-size: 9px;
+  font-weight: 800;
+}
+.tassello-publisher .current-doc-copy { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.tassello-publisher .current-doc-copy h2 { margin: 0; font-size: 14px; line-height: 1.35; letter-spacing: -.15px; }
+.tassello-publisher .current-doc-copy p { margin: 0; overflow: hidden; color: var(--tp-ink2); font-size: 10.8px; line-height: 1.45; text-overflow: ellipsis; white-space: nowrap; }
+.tassello-publisher .current-doc-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+.tassello-publisher .current-doc-meta span { min-height: 21px; padding: 0 7px; border-radius: 999px; background: var(--tp-hover); color: var(--tp-ink2); font-size: 9.8px; font-weight: 650; }
+.tassello-publisher .publish-action { display: flex; flex-direction: column; gap: 6px; padding: 2px 2px 4px; }
+.tassello-publisher .publish-feedback {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 10px;
+  border-radius: 10px;
+  background: var(--tp-hover);
+  color: var(--tp-ink2);
+  font-size: 10.5px;
+  line-height: 1.45;
+}
+.tassello-publisher .publish-feedback .pulse { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; background: var(--tp-accent); }
+.tassello-publisher .publish-feedback.done .pulse { background: var(--tp-ok); }
+.tassello-publisher .publish-feedback.failed { color: var(--tp-error); }
+.tassello-publisher .publish-feedback.failed .pulse { background: var(--tp-error); }
+.tassello-publisher .live-tasks { display: flex; flex-direction: column; gap: 6px; padding: 2px; }
+.tassello-publisher .live-task {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 9px;
+  border-radius: 10px;
+  background: var(--tp-card);
+}
+.tassello-publisher .live-task .glyph {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+.tassello-publisher .live-task-copy { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.tassello-publisher .live-task-copy b { font-size: 10.8px; }
+.tassello-publisher .live-task-copy span { overflow: hidden; color: var(--tp-ink2); font-size: 9.7px; text-overflow: ellipsis; white-space: nowrap; }
+.tassello-publisher .live-task-state { font-size: 9.8px; font-weight: 750; color: var(--tp-ink2); white-space: nowrap; }
+.tassello-publisher .live-task-state.running { color: var(--tp-accent); }
+.tassello-publisher .live-task-state.waiting { color: var(--tp-warn); }
+.tassello-publisher .live-task-state.success { color: var(--tp-ok); }
+.tassello-publisher .live-task-state.failed { color: var(--tp-error); }
+.tassello-publisher .live-task-bar { height: 3px; border-radius: 99px; background: var(--tp-hover); overflow: hidden; }
+.tassello-publisher .live-task-bar i { display: block; height: 100%; border-radius: 99px; background: var(--tp-accent); transition: width .2s ease; }
+
+.tassello-publisher .publish-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--layer-modal, 1000);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, .34);
+}
+.tassello-publisher .publish-dialog {
+  width: min(430px, calc(100vw - 32px));
+  max-height: min(680px, calc(100vh - 48px));
+  overflow: auto;
+  padding: 16px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 16px;
+  background: var(--background-primary);
+  box-shadow: var(--shadow-s);
+}
+.tassello-publisher .publish-dialog-kicker { margin-bottom: 4px; color: var(--tp-ink3); font-family: var(--font-monospace); font-size: 9px; letter-spacing: .08em; }
+.tassello-publisher .publish-dialog h3 { margin: 0; font-size: 15px; }
+.tassello-publisher .publish-dialog > p { margin: 5px 0 0; color: var(--tp-ink2); font-size: 11px; line-height: 1.45; }
+.tassello-publisher .publish-field { display: flex; flex-direction: column; gap: 8px; margin-top: 17px; }
+.tassello-publisher .publish-field-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.tassello-publisher .publish-field-head b { color: var(--tp-ink); font-size: 11px; }
+.tassello-publisher .publish-field-head span { color: var(--tp-ink3); font-size: 9.8px; }
+.tassello-publisher .publish-platform-empty { min-height: 64px; border-radius: 11px; background: var(--tp-hover); display: grid; place-items: center; color: var(--tp-ink3); font-size: 10.5px; }
+.tassello-publisher .publish-platforms { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.tassello-publisher .publish-platform {
+  min-width: 0;
+  min-height: 48px;
+  padding: 7px 8px;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  background: var(--tp-hover);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--tp-ink2);
+  text-align: left;
+}
+.tassello-publisher .publish-platform:hover { background: var(--tp-selected); color: var(--tp-ink); }
+.tassello-publisher .publish-platform.selected {
+  border-color: color-mix(in srgb, var(--platform-color) 52%, transparent);
+  background: color-mix(in srgb, var(--platform-color) 11%, var(--tp-card));
+  color: var(--tp-ink);
+}
+.tassello-publisher .publish-platform.off { opacity: .46; cursor: not-allowed; }
+.tassello-publisher .publish-platform .glyph { width: 25px; height: 25px; border-radius: 7px; flex: 0 0 auto; display: grid; place-items: center; overflow: hidden; }
+.tassello-publisher .publish-platform-name { min-width: 0; overflow: hidden; font-size: 10.8px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.tassello-publisher .publish-platform .checkmark { width: 16px; height: 16px; margin-left: auto; border-radius: 50%; flex: 0 0 auto; display: grid; place-items: center; background: var(--tp-card); color: transparent; font-size: 9px; font-weight: 900; }
+.tassello-publisher .publish-platform.selected .checkmark { background: var(--platform-color); color: white; }
+.tassello-publisher .publish-dialog-actions { display: flex; justify-content: flex-end; gap: 7px; margin-top: 20px; }
 
 .tassello-publisher .mode {
   display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px;

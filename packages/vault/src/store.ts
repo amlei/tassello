@@ -77,9 +77,12 @@ async function walkMarkdown(dir: string): Promise<string[]> {
   return files;
 }
 
-export async function parseDocumentFile(vaultPath: string, filePath: string): Promise<VaultDocument> {
-  const raw = await fs.readFile(filePath, "utf8");
-  const stat = await fs.stat(filePath);
+export function parseDocumentContent(
+  vaultPath: string,
+  filePath: string,
+  raw: string,
+  stat: { mtimeMs: number; size: number; birthtimeMs?: number },
+): VaultDocument {
   const parsed = splitFrontmatter(raw);
   const relativePath = normalizeRelativePath(path.relative(vaultPath, filePath));
   const fallbackTitle = path.basename(filePath, path.extname(filePath));
@@ -88,8 +91,8 @@ export async function parseDocumentFile(vaultPath: string, filePath: string): Pr
   const markdown = parsed.body.trim();
   const bodyMarkdown = stripLeadingTitle(markdown, title);
   const id = parsed.data.id ?? `invalid:${relativePath}`;
-  const createdAt = parsed.data.createdAt ?? new Date(stat.birthtimeMs).toISOString();
-  const updatedAt = parsed.data.updatedAt ?? new Date(stat.mtimeMs).toISOString();
+  const createdAt = new Date(stat.birthtimeMs ?? stat.mtimeMs).toISOString();
+  const updatedAt = new Date(stat.mtimeMs).toISOString();
   const issues = [
     ...(parsed.error ? [parsed.error] : []),
     ...unsupportedMarkdownFeatures(markdown),
@@ -131,6 +134,12 @@ export async function parseDocumentFile(vaultPath: string, filePath: string): Pr
     issues,
     rawFrontmatter: parsed.rawData,
   };
+}
+
+export async function parseDocumentFile(vaultPath: string, filePath: string): Promise<VaultDocument> {
+  const raw = await fs.readFile(filePath, "utf8");
+  const stat = await fs.stat(filePath);
+  return parseDocumentContent(vaultPath, filePath, raw, stat);
 }
 
 export async function scanDocuments(vaultPath: string): Promise<VaultDocument[]> {
@@ -202,7 +211,6 @@ export async function createDocument(
   vaultPath: string,
   input: { type: ContentType; title?: string; markdown?: string; platforms?: string[]; options?: Record<string, unknown> },
 ): Promise<VaultDocument> {
-  const now = new Date().toISOString();
   const id = `m${randomUUID().replace(/-/g, "").slice(0, 10)}`;
   const title = input.title?.trim() || "未命名";
   const dir = path.join(vaultPath, TYPE_DIR[input.type]);
@@ -211,11 +219,8 @@ export async function createDocument(
   const body = (input.markdown ?? "").trim();
   const markdown = body.startsWith("# ") ? body : `# ${title}${body ? `\n\n${body}` : ""}`;
   const raw = stringifyDocument({
-    version: 1,
     id,
     type: input.type,
-    createdAt: now,
-    updatedAt: now,
     platforms: input.platforms,
     options: input.options,
   }, markdown);
@@ -247,7 +252,6 @@ export async function updateDocument(
     options?: Record<string, unknown>;
     manualOrder?: number;
     expectedFingerprint?: string;
-    touch?: boolean;
   },
 ): Promise<VaultDocument> {
   const current = await getDocument(vaultPath, id);
@@ -270,11 +274,8 @@ export async function updateDocument(
       : `# ${title}\n\n${markdown}`;
   }
   const frontmatter: TasselloFrontmatter = {
-    version: 1,
     id: current.id,
     type: current.type,
-    createdAt: current.createdAt,
-    updatedAt: patch.touch === false ? current.updatedAt : new Date().toISOString(),
     manualOrder: patch.manualOrder ?? current.manualOrder,
     platforms: patch.platforms ?? current.platforms,
     cover: patch.cover === undefined ? current.cover ?? undefined : patch.cover ?? undefined,

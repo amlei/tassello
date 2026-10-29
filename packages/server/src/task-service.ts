@@ -8,12 +8,13 @@ import {
   type ExtensionJob,
   type ExtensionJobEvent,
   type ExtensionJobResult,
+  type PublishSourceInput,
   type PublishSnapshotDTO,
   type TaskDTO,
   type TaskStatus,
 } from "@tassello/shared";
 import { escAttr, markdownToHtml, markdownToPlain } from "@tassello/render";
-import { getDocument, listDocuments } from "@tassello/vault";
+import { getDocument, parseDocumentContent, type VaultDocument } from "@tassello/vault";
 import { getStoredAccount, type StoredAccount } from "./account-store";
 import { getPublishCapability } from "./extensions";
 import { createMediaToken } from "./media-token";
@@ -121,10 +122,12 @@ async function requireCurrentAccount(platformId: string, expectedUid?: string | 
   return account;
 }
 
-async function buildSnapshot(postId: string, platformId: string, channelId?: string): Promise<PublishSnapshotDTO> {
-  const vaultPath = await resolveVaultPath();
-  const document = await getDocument(vaultPath, postId);
-  if (!document) throw new Error("稿子不存在");
+async function buildSnapshot(
+  vaultPath: string,
+  document: VaultDocument,
+  platformId: string,
+  channelId?: string,
+): Promise<PublishSnapshotDTO> {
   if (document.status !== "ready") {
     throw new Error(`稿件不可发布：${document.issues.join("；") || document.status}`);
   }
@@ -274,9 +277,23 @@ export async function createTasks(
   platformIds: string[],
   channelIds: Record<string, string> = {},
 ): Promise<TaskDTO[]> {
+  const vaultPath = await resolveVaultPath();
+  const document = await getDocument(vaultPath, postId);
+  if (!document) throw new Error("稿子不存在");
+  return createTasksForDocument(vaultPath, document, platformIds, channelIds);
+}
+
+async function createTasksForDocument(
+  vaultPath: string,
+  document: VaultDocument,
+  platformIds: string[],
+  channelIds: Record<string, string>,
+): Promise<TaskDTO[]> {
   const unique = [...new Set(platformIds)];
   if (!unique.length) throw new Error("至少选择一个发布平台");
-  const snapshots = await Promise.all(unique.map((platformId) => buildSnapshot(postId, platformId, channelIds[platformId])));
+  const snapshots = await Promise.all(
+    unique.map((platformId) => buildSnapshot(vaultPath, document, platformId, channelIds[platformId])),
+  );
   const rssClaimed = await Promise.all(
     snapshots.map((snapshot) => snapshot.type === "audio"
       ? podcastRssClaimsPlatform(snapshot.platformId, snapshot.accountUid)
@@ -288,6 +305,36 @@ export async function createTasks(
   }
   const tasks = await Promise.all(snapshots.map((snapshot) => createTask(snapshot)));
   return tasks.map(toTaskDTO);
+}
+
+/** 从客户端提交的不可变 Markdown 快照创建任务，不读取全局 Vault 设置。 */
+export async function createTasksFromSource(
+  source: PublishSourceInput,
+  platformIds: string[],
+  channelIds: Record<string, string> = {},
+): Promise<TaskDTO[]> {
+  const vaultPath = path.resolve(source.vaultPath ?? await resolveVaultPath());
+  const filePath = path.resolve(vaultPath, source.filePath);
+  const relativePath = path.relative(vaultPath, filePath);
+  if (
+    !relativePath
+    || relativePath.startsWith("..")
+    || path.isAbsolute(relativePath)
+    || path.extname(filePath).toLowerCase() !== ".md"
+  ) {
+    throw new Error("发布文件路径不合法");
+  }
+  const contentHash = createHash("sha256").update(source.markdown).digest("hex");
+  if (contentHash !== source.fingerprint) {
+    throw new Error("发布内容指纹不匹配，请重新读取当前 Markdown");
+  }
+  const stat = await fs.stat(filePath).catch(() => null);
+  if (!stat?.isFile()) throw new Error("发布文件不存在");
+  const document = parseDocumentContent(vaultPath, filePath, source.markdown, stat);
+  if (document.id !== source.id) {
+    throw new Error("Markdown 中的 tassello.id 与发布请求不一致");
+  }
+  return createTasksForDocument(vaultPath, document, platformIds, channelIds);
 }
 
 export async function dispatchWaitingTasks(): Promise<number> {

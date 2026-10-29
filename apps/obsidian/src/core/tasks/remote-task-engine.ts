@@ -1,19 +1,24 @@
-import type { PlatformId, PublishTask, SourceDraft } from "../types";
+import { Component } from "obsidian";
+import type { PublishSourceInput } from "@tassello/shared";
+import type { PlatformId, PublishTask } from "../types";
 import type { BackendApi } from "../api/client";
 
 type Listener = (tasks: PublishTask[]) => void;
 
-export class RemoteTaskEngine {
+export class RemoteTaskEngine extends Component {
   private listeners = new Set<Listener>();
-  private timer: number | null = null;
   private socket: WebSocket | null = null;
   private disposed = false;
 
   constructor(private readonly api: BackendApi) {
+    super();
+  }
+
+  override onload(): void {
     void this.connect();
-    this.timer = window.setInterval(() => {
+    this.registerInterval(activeWindow.setInterval(() => {
       if (!this.socket || this.socket.readyState > WebSocket.OPEN) void this.connect();
-    }, 5000);
+    }, 5000));
   }
 
   private async connect(): Promise<void> {
@@ -22,8 +27,9 @@ export class RemoteTaskEngine {
       const runtime = await this.api.runtime();
       if (this.disposed) return;
       this.socket?.close();
-      this.socket = new WebSocket(`${runtime.apiOrigin.replace(/^http/, "ws")}/ws/client`);
-      this.socket.addEventListener("message", (event) => {
+      const socket = new WebSocket(`${runtime.apiOrigin.replace(/^http/, "ws")}/ws/client`);
+      this.socket = socket;
+      socket.addEventListener("message", (event) => {
         try {
           const message = JSON.parse(String(event.data)) as {
             type?: string;
@@ -54,8 +60,8 @@ export class RemoteTaskEngine {
     }
   }
 
-  async enqueue(source: SourceDraft, platformIds: PlatformId[]): Promise<PublishTask[]> {
-    const tasks = await this.api.publish(source.id, platformIds);
+  async enqueue(source: PublishSourceInput, platformIds: PlatformId[]): Promise<PublishTask[]> {
+    const tasks = await this.api.publish(source, platformIds);
     for (const listener of this.listeners) listener(await this.api.tasks());
     return tasks;
   }
@@ -76,13 +82,11 @@ export class RemoteTaskEngine {
 
   async openPage(taskId: string): Promise<void> {
     const task = (await this.api.tasks()).find((item) => item.id === taskId);
-    if (task?.pageUrl) window.open(task.pageUrl, "_blank", "noopener,noreferrer");
+    if (task?.pageUrl) activeWindow.open(task.pageUrl, "_blank", "noopener,noreferrer");
   }
 
-  dispose(): void {
+  override onunload(): void {
     this.disposed = true;
-    if (this.timer) window.clearInterval(this.timer);
-    this.timer = null;
     this.socket?.close();
     this.socket = null;
     this.listeners.clear();

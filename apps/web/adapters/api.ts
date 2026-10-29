@@ -23,6 +23,11 @@ async function unwrap<T>(res: Response): Promise<T> {
   return j.data;
 }
 
+async function sha256Text(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
 export const api = {
   async getRuntime(): Promise<{ apiOrigin: string; protocolVersion: number }> {
     const res = await fetch("/api/runtime", { cache: "no-store" });
@@ -155,11 +160,25 @@ export const api = {
     });
     return unwrap<PodcastRssDTO>(res);
   },
-  async publish(postId: string, platformIds: string[], channelIds: Record<string, string> = {}): Promise<TaskDTO[]> {
+  async publish(
+    post: Pick<PostDTO, "id" | "filePath" | "markdown">,
+    platformIds: string[],
+    channelIds: Record<string, string> = {},
+  ): Promise<TaskDTO[]> {
+    const fingerprint = await sha256Text(post.markdown);
     const res = await fetch("/api/publish", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ postId, platformIds, channelIds }),
+      body: JSON.stringify({
+        source: {
+          id: post.id,
+          filePath: post.filePath,
+          markdown: post.markdown,
+          fingerprint,
+        },
+        platformIds,
+        channelIds,
+      }),
     });
     return unwrap<TaskDTO[]>(res);
   },

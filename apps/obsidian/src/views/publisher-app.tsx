@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { Notice, TFile } from "obsidian";
-import { createSourceDraft, readActiveSource } from "../core/source/source-resolver";
-import { parseImageEmbeds } from "../core/source/image-embeds";
-import { platformSupportsType, previewHtmlForPlatform, renderForPlatform } from "../core/render/renderers";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { FileSystemAdapter, Notice, TFile } from "obsidian";
+import { createSourceDraft, readActiveSource, saveOpenEditor } from "../core/source/source-resolver";
+import { ensureTasselloMetadata } from "../core/source/frontmatter";
+import { sha256Text } from "../core/source/hash";
 import {
   PLATFORMS,
   PLATFORM_BY_ID,
@@ -18,8 +18,37 @@ import { PlatformMark } from "@tassello/ui/platform-icons";
 import type { PodcastRssClaimDTO, PodcastRssDTO } from "@tassello/shared";
 import type { PublisherServices } from "./publisher-view";
 
-type ViewMode = "preview" | "defaults";
+type ViewMode = "overview" | "defaults";
 type PublisherAppProps = { services: PublisherServices; host: HTMLElement };
+type PublishFeedback = { tone: "running" | "done" | "failed"; text: string };
+
+function taskStatusLabel(status: PublishTask["status"]): string {
+  if (status === "queued") return "排队";
+  if (status === "running") return "执行中";
+  if (status === "awaiting_confirm") return "等待完成";
+  if (status === "waiting_extension") return "等待扩展";
+  if (status === "unknown") return "结果未知";
+  if (status === "failed") return "失败";
+  if (status === "success") return "完成";
+  return "已取消";
+}
+
+function taskStatusClass(status: PublishTask["status"]): string {
+  if (status === "running") return "running";
+  if (status === "awaiting_confirm" || status === "waiting_extension" || status === "unknown") return "waiting";
+  if (status === "success") return "success";
+  if (status === "failed") return "failed";
+  return "";
+}
+
+function latestTasksForDocument(tasks: PublishTask[], filePath: string): PublishTask[] {
+  const latest = new Map<string, PublishTask>();
+  for (const task of tasks) {
+    if (task.filePath !== filePath || latest.has(task.platformId)) continue;
+    latest.set(task.platformId, task);
+  }
+  return [...latest.values()];
+}
 
 const CONTENT_TYPES: ContentType[] = ["article", "image", "video", "audio"];
 const CONTENT_LABELS: Record<ContentType, string> = {
@@ -44,10 +73,6 @@ function platformCatalogSignature(platforms: PlatformCapability[]): string {
       platform.accountName ?? "",
     ].join("\u0000"))
     .join("\u0001");
-}
-
-function contentTypeLabel(type: ContentType): string {
-  return CONTENT_LABELS[type];
 }
 
 function RuntimeStatus({ api }: { api: BackendApi }) {
@@ -92,47 +117,11 @@ function RuntimeStatus({ api }: { api: BackendApi }) {
   );
 }
 
-function PlatformGlyph({
-  platform,
-  size,
-  available = true,
-}: {
-  platform: PlatformCapability;
-  size: number;
-  available?: boolean;
-}) {
-  return (
-    <span
-      className="glyph"
-      style={{
-        width: size,
-        height: size,
-        display: "grid",
-        placeItems: "center",
-        flex: "0 0 auto",
-        overflow: "hidden",
-        borderRadius: Math.max(5, Math.round(size * 0.24)),
-        background: available ? platform.color : "var(--tp-hover)",
-        color: available ? (platform.fg || "white") : "var(--tp-ink3)",
-      }}
-      title={platform.name}
-    >
-      <PlatformMark
-        id={platform.id}
-        char={platform.glyph}
-        size={size}
-        imgScale={1}
-        tone="lit"
-      />
-    </span>
-  );
-}
-
 function SourceTypePicker({
   sourceType,
   onChange,
 }: {
-  sourceType: ContentType;
+  sourceType: ContentType | null;
   onChange: (type: ContentType) => void;
 }) {
   return (
@@ -153,6 +142,7 @@ function SourceTypePicker({
                   borderColor: `color-mix(in srgb, ${color} 24%, transparent)`,
                 }}
             title={CONTENT_LABELS[type]}
+            aria-pressed={active}
             onClick={() => onChange(type)}
           >
             {CONTENT_LABELS[type]}
@@ -171,21 +161,23 @@ const COVER_LABELS = {
 
 function CoverControl({
   source,
+  contentType,
   onChoose,
   onUpload,
 }: {
   source: SourceDraft;
+  contentType: ContentType;
   onChoose: (vaultPath: string) => void;
   onUpload: (file: File) => void;
 }) {
-  const meta = COVER_LABELS[source.type as keyof typeof COVER_LABELS];
+  const meta = COVER_LABELS[contentType as keyof typeof COVER_LABELS];
   const inputRef = useRef<HTMLInputElement | null>(null);
   const images = source.assets.filter((asset) => asset.kind === "image");
   const cover = source.cover;
   if (!meta) return null;
   return (
     <div className="cover-row" data-role="cover-row">
-      <span className={"cover-thumb " + source.type}>
+      <span className={"cover-thumb " + contentType}>
         {cover
           ? <img src={cover.resourcePath} alt="" />
           : <span className="cover-empty">封面</span>}
@@ -301,191 +293,59 @@ function FindingsPanel({ findings }: { findings: Finding[] }) {
   );
 }
 
-function TaskList({
-  tasks,
-  onComplete,
-  services,
-}: {
-  tasks: PublishTask[];
-  onComplete: (task: PublishTask) => void;
-  services: PublisherServices;
-}) {
-  const visible = tasks.filter((task) => [
-    "queued",
-    "running",
-    "awaiting_confirm",
-    "waiting_extension",
-    "unknown",
-    "success",
-    "failed",
-  ].includes(task.status)).slice(0, 50);
-
-  if (!visible.length) {
-    return <div className="target disabled">暂无发布任务</div>;
-  }
-
-  return (
-    <>
-      {visible.map((task) => {
-        const platform = PLATFORM_BY_ID.get(task.platformId);
-        const statusClass = task.status === "running"
-          ? "running"
-          : task.status === "awaiting_confirm" || task.status === "waiting_extension" || task.status === "unknown"
-            ? "waiting"
-            : task.status === "failed" ? "failed" : "success";
-        return (
-          <div key={task.id} className={`target ${task.status === "failed" ? "failed" : ""}`} title={platform?.name ?? task.platformId}>
-            <div className="target-main">
-              <div className="target-top">
-                {platform && <PlatformGlyph platform={platform} size={20} />}
-                <span className={`status ${statusClass}`}>
-                  {task.status === "queued" ? "排队"
-                    : task.status === "running" ? "执行中"
-                    : task.status === "awaiting_confirm" ? "等待完成"
-                    : task.status === "waiting_extension" ? "等待扩展"
-                    : task.status === "unknown" ? "结果未知"
-                    : task.status === "failed" ? "失败" : "完成"}
-                </span>
-              </div>
-              <div className="target-desc">
-                {task.status === "success"
-                  ? task.url
-                    ? task.urlSource === "manual" ? "人工回填发布链接" : "自动回执已确认"
-                    : task.noPublicUrl ? "已确认发布，无公开链接" : "已确认发布"
-                  : task.status === "waiting_extension"
-                    ? "扩展重新连接后会继续执行"
-                    : task.status === "unknown"
-                      ? "已观察到提交动作，但未收到稳定回执"
-                      : task.message || task.failReason || task.filePath}
-              </div>
-              {task.sourceChangedAfterStart && (
-                <div className="target-desc warning">源文件在发布开始后已修改；平台内容不会自动更新。</div>
-              )}
-              <div className="target-actions">
-                {task.pageUrl && (
-                  <button className="mini" onClick={() => void services.engine.openPage(task.id)}>打开页面</button>
-                )}
-                {task.status === "success" && task.url && (
-                  <button className="mini primary" onClick={() => window.open(task.url!, "_blank", "noopener,noreferrer")}>打开发布结果</button>
-                )}
-                {(task.status === "awaiting_confirm" || task.status === "unknown" || task.status === "waiting_extension") && (
-                  <button className="mini primary" onClick={() => onComplete(task)}>补充链接</button>
-                )}
-                {task.status === "queued" && (
-                  <button className="mini" onClick={() => void services.engine.cancel(task.id)}>取消</button>
-                )}
-                {(task.status === "failed" || task.status === "success") && (
-                  <button className="mini" onClick={() => void services.engine.retry(task.id)}>按最新内容重试</button>
-                )}
-              </div>
-            </div>
-          </div>
-        );
-      })}
-    </>
-  );
-}
-
-function CompletionModal({
-  task,
-  onClose,
-  onSubmit,
-}: {
-  task: PublishTask;
-  onClose: () => void;
-  onSubmit: (url: string | null, noPublic: boolean) => void;
-}) {
-  const [url, setUrl] = useState("");
-  const [noPublic, setNoPublic] = useState(false);
-  const normalized = url.trim();
-  const invalid = !!normalized && !/^https?:\/\/\S+$/i.test(normalized);
-  const canSubmit = !invalid && (!!normalized || noPublic);
-  return (
-    <div className="completion-backdrop" onClick={onClose}>
-      <div className="completion-modal" onClick={(event) => event.stopPropagation()}>
-        <h3>补充发布结果</h3>
-        <div className="completion-desc">自动回执缺失时才需要手动处理。填写最终链接，或明确确认该结果没有公开链接。</div>
-        <label>发布链接</label>
-        <input
-          type="url"
-          placeholder="https://..."
-          value={url}
-          onChange={(event) => setUrl(event.target.value)}
-        />
-        {invalid && <div className="completion-desc warning">请输入 http(s) 开头的完整链接。</div>}
-        <label className="completion-check">
-          <input
-            type="checkbox"
-            checked={noPublic}
-            onChange={(event) => {
-              setNoPublic(event.target.checked);
-              if (event.target.checked) setUrl("");
-            }}
-          />
-          <span>该结果没有公开链接，我已在平台确认完成</span>
-        </label>
-        <div className="completion-actions">
-          <button className="mini" onClick={onClose}>取消</button>
-          <button className="mini primary" disabled={!canSubmit} onClick={() => onSubmit(normalized || null, noPublic)}>保存发布结果</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export function PublisherApp({ services, host }: PublisherAppProps) {
   const { app, api, engine } = services;
-  const [mode, setMode] = useState<ViewMode>("preview");
-  const [sourceType, setSourceType] = useState<ContentType>("article");
-  const [activePlatform, setActivePlatform] = useState<PlatformId>("zhihu");
+  const [mode, setMode] = useState<ViewMode>("overview");
+  const [publishOpen, setPublishOpen] = useState(false);
+  const [publishType, setPublishType] = useState<ContentType | null>(null);
+  const [defaultsType, setDefaultsType] = useState<ContentType>("article");
   const [defaults, setDefaults] = useState<Record<ContentType, PlatformId[]>>(() => {
     const initial = Object.fromEntries(CONTENT_TYPES.map((type) => [type, services.getDefaultPlatforms(type)]));
     return initial as Record<ContentType, PlatformId[]>;
   });
-  const [selected, setSelected] = useState<PlatformId[]>(() => services.getDefaultPlatforms("article"));
+  const [selected, setSelected] = useState<PlatformId[]>([]);
   const [source, setSource] = useState<SourceDraft | null>(null);
   const [sourceError, setSourceError] = useState<string | null>(null);
-  const [tasks, setTasks] = useState<PublishTask[]>([]);
   const [platformCatalog, setPlatformCatalog] = useState<PlatformCapability[]>(PLATFORMS);
   const [rss, setRss] = useState<PodcastRssDTO | null>(null);
   const [rssOpen, setRssOpen] = useState(false);
-  const [completionTask, setCompletionTask] = useState<PublishTask | null>(null);
-  const previewGeneration = useRef(0);
+  const [running, setRunning] = useState(false);
+  const [feedback, setFeedback] = useState<PublishFeedback | null>(null);
+  const [sessionTasks, setSessionTasks] = useState<PublishTask[]>([]);
+  const sourceGeneration = useRef(0);
   const refreshTimer = useRef<number | null>(null);
-  const previewContentRef = useRef<HTMLDivElement | null>(null);
-  const galleryDrag = useRef<{ pointerId: number; x: number; left: number } | null>(null);
-  const galleryScrollLeft = useRef(0);
-  const galleryScrollKey = useRef<string | null>(null);
-  const galleryRefreshPending = useRef(false);
+  const feedbackTimer = useRef<number | null>(null);
   const acceptedSourceKey = useRef<string | null>(null);
 
-  const supportedPlatforms = useMemo(
-    () => platformCatalog.filter((platform) => platform.supports.includes(sourceType)),
-    [platformCatalog, sourceType],
-  );
-  const rssTargets = sourceType === "audio"
+  const rssTargets = publishType === "audio"
     ? (rss?.claims ?? []).flatMap((claim) => {
         const platform = platformCatalog.find((candidate) => candidate.id === claim.platformId);
         return platform ? [{ claim, platform }] : [];
       })
     : [];
   const rssClaimedIds = new Set(rssTargets.map(({ platform }) => platform.id));
-  const availablePlatforms = supportedPlatforms.filter((platform) =>
+  const publishPlatforms = publishType
+    ? platformCatalog.filter((platform) =>
+        platform.status === "active"
+        && platform.authMode === "extension"
+        && platform.supports.includes(publishType)
+        && !rssClaimedIds.has(platform.id)
+      )
+    : [];
+  const publishAvailableIds = useMemo(
+    () => new Set(publishPlatforms.filter((platform) => platform.syncPhase === "connected").map((platform) => platform.id)),
+    [publishPlatforms],
+  );
+  const selectedPlatforms = selected.filter((platformId) => publishAvailableIds.has(platformId));
+  const selectedCount = selectedPlatforms.length;
+  const settingsPlatforms = platformCatalog.filter((platform) =>
     platform.status === "active"
     && platform.authMode === "extension"
-    && !rssClaimedIds.has(platform.id)
+    && platform.supports.includes(defaultsType)
   );
-  const activeSupported = availablePlatforms.some((platform) => platform.id === activePlatform);
-  const active = activeSupported
-    ? activePlatform
-    : availablePlatforms[0]?.id ?? "zhihu";
-  const availablePlatformIds = useMemo(
-    () => new Set(availablePlatforms.filter((platform) => platform.syncPhase === "connected").map((platform) => platform.id)),
-    [availablePlatforms],
+  const settingsAvailableIds = new Set(
+    settingsPlatforms.filter((platform) => platform.syncPhase === "connected").map((platform) => platform.id),
   );
-  const defaultTargets = (defaults[sourceType] ?? []).filter((platformId) => availablePlatformIds.has(platformId));
-  const selectedPlatforms = selected.filter((platformId) => availablePlatformIds.has(platformId));
-  const selectedCount = selectedPlatforms.length;
   const activeSource = source;
 
   useEffect(() => {
@@ -523,9 +383,8 @@ export function PublisherApp({ services, host }: PublisherAppProps) {
     };
   }, [api]);
 
-  const refreshSource = useCallback(async (requestedType?: ContentType) => {
-    const type = requestedType ?? sourceType;
-    const generation = ++previewGeneration.current;
+  const refreshSource = useCallback(async () => {
+    const generation = ++sourceGeneration.current;
     try {
       const live = readActiveSource(app);
       if (!live) {
@@ -537,36 +396,28 @@ export function PublisherApp({ services, host }: PublisherAppProps) {
       if (!live.raw && live.origin === "vault") {
         live.raw = await app.vault.cachedRead(live.file);
       }
-      const draft = await createSourceDraft(app, live, defaultTargets, { sourceType: type });
-      if (generation !== previewGeneration.current) return;
-
-      // 同一稿件避免反复替换预览 DOM；图片条的滚动位置因此不会被刷新打断。
-      const sourceKey = [
-        draft.filePath,
-        draft.type,
-        draft.contentDigest,
-        JSON.stringify(defaultTargets),
-      ].join("\0");
+      const draft = await createSourceDraft(app, live);
+      if (generation !== sourceGeneration.current) return;
+      const sourceKey = [draft.filePath, draft.contentDigest].join("\0");
       if (acceptedSourceKey.current === sourceKey) {
-        setSourceType(type);
         setSourceError(null);
         return;
       }
       acceptedSourceKey.current = sourceKey;
       setSource(draft);
-      setSourceType(type);
       setSourceError(null);
     } catch (error) {
-      if (generation !== previewGeneration.current) return;
+      if (generation !== sourceGeneration.current) return;
       acceptedSourceKey.current = null;
       setSource(null);
       setSourceError(error instanceof Error ? error.message : String(error));
     }
-  }, [app, defaultTargets, sourceType]);
+  }, [app]);
 
   const setCover = useCallback(async (vaultPath: string) => {
-    const activeFile = app.workspace.getActiveFile();
-    if (!activeFile) return;
+    if (!activeSource) return;
+    const activeFile = app.vault.getAbstractFileByPath(activeSource.filePath);
+    if (!(activeFile instanceof TFile)) return;
     const attachment = app.vault.getAbstractFileByPath(vaultPath);
     const reference = attachment instanceof TFile
       ? app.metadataCache.fileToLinktext(attachment, activeFile.path, false)
@@ -582,11 +433,12 @@ export function PublisherApp({ services, host }: PublisherAppProps) {
     } catch (error) {
       new Notice(error instanceof Error ? error.message : String(error));
     }
-  }, [app, refreshSource]);
+  }, [activeSource, app, refreshSource]);
 
   const uploadCover = useCallback(async (file: File) => {
-    const activeFile = app.workspace.getActiveFile();
-    if (!activeFile) return;
+    if (!activeSource) return;
+    const activeFile = app.vault.getAbstractFileByPath(activeSource.filePath);
+    if (!(activeFile instanceof TFile)) return;
     try {
       const target = await app.fileManager.getAvailablePathForAttachment(file.name, activeFile.path);
       await app.vault.createBinary(target, await file.arrayBuffer());
@@ -594,23 +446,12 @@ export function PublisherApp({ services, host }: PublisherAppProps) {
     } catch (error) {
       new Notice(error instanceof Error ? error.message : String(error));
     }
-  }, [app, setCover]);
+  }, [activeSource, app, setCover]);
 
-  // 输入/切文件防抖刷新。
   useEffect(() => {
     const schedule = () => {
-      if (galleryDrag.current) {
-        galleryRefreshPending.current = true;
-        return;
-      }
       if (refreshTimer.current) window.clearTimeout(refreshTimer.current);
-      refreshTimer.current = window.setTimeout(() => {
-        if (galleryDrag.current) {
-          galleryRefreshPending.current = true;
-          return;
-        }
-        void refreshSource();
-      }, 220);
+      refreshTimer.current = window.setTimeout(() => void refreshSource(), 220);
     };
     const workspaceEvents = [
       app.workspace.on("active-leaf-change", schedule),
@@ -627,367 +468,365 @@ export function PublisherApp({ services, host }: PublisherAppProps) {
 
     return () => {
       if (refreshTimer.current) window.clearTimeout(refreshTimer.current);
-      for (const event of [...workspaceEvents, ...vaultEvents, metadataEvent]) app.workspace.offref(event);
+      for (const event of workspaceEvents) app.workspace.offref(event);
+      for (const event of vaultEvents) app.vault.offref(event);
+      app.metadataCache.offref(metadataEvent);
     };
   }, [app, refreshSource]);
 
-  useEffect(() => engine.subscribe(setTasks), [engine]);
   useEffect(() => {
-    if (!activeSupported) setActivePlatform(availablePlatforms[0]?.id ?? "zhihu");
-  }, [activeSupported, availablePlatforms]);
-
-  // 切换稿件类型时，用该类型的默认通道初始化发布选择。
-  // 注意：默认配置变更不应覆盖发布页里用户刚刚手动调整的 selected。
-  useEffect(() => {
-    setSelected((defaults[sourceType] ?? []).filter((platformId) => availablePlatformIds.has(platformId)));
-  }, [availablePlatformIds, sourceType]);
-
-  const changeSourceType = useCallback(async (type: ContentType) => {
-    if (type === sourceType) return;
-    setSourceType(type);
-    setSelected((defaults[type] ?? []).filter((platformId) => availablePlatformIds.has(platformId)));
-
-    const file = app.workspace.getActiveFile();
-    if (file) {
-      try {
-        await app.fileManager.processFrontMatter(file, (frontmatter) => {
-          const current = typeof frontmatter.tassello === "object" && frontmatter.tassello && !Array.isArray(frontmatter.tassello)
-            ? frontmatter.tassello as Record<string, unknown>
-            : {};
-          frontmatter.tassello = { ...current, type };
-        });
-      } catch (error) {
-        new Notice(error instanceof Error ? error.message : String(error));
-      }
+    const filePath = activeSource?.filePath;
+    if (!filePath) {
+      setSessionTasks([]);
+      return;
     }
-    void refreshSource(type);
-  }, [app, defaults, refreshSource, sourceType]);
-
-  const toggleDefault = useCallback((type: ContentType, platformId: PlatformId) => {
-    if (!availablePlatformIds.has(platformId)) return;
-    setDefaults((previous) => {
-      const current = previous[type] ?? [];
-      const next = current.includes(platformId)
-        ? current.filter((value) => value !== platformId)
-        : [...current, platformId];
-      const updated = { ...previous, [type]: next };
-      void services.setDefaultPlatforms(type, next);
-      return updated;
+    return engine.subscribe((tasks) => {
+      setSessionTasks(latestTasksForDocument(tasks, filePath));
     });
-  }, [availablePlatformIds, services]);
+  }, [engine, activeSource?.filePath]);
 
-  const toggleSelected = useCallback((platformId: PlatformId) => {
-    if (!availablePlatformIds.has(platformId)) return;
+  useEffect(() => () => {
+    if (feedbackTimer.current !== null) host.win.clearTimeout(feedbackTimer.current);
+  }, [host]);
+
+  const selectPublishType = useCallback((type: ContentType) => {
+    const claimed = new Set(
+      type === "audio" ? (rss?.claims ?? []).map((claim) => claim.platformId) : [],
+    );
+    const supportedIds = platformCatalog
+      .filter((platform) =>
+        platform.status === "active"
+        && platform.authMode === "extension"
+        && platform.supports.includes(type)
+        && platform.syncPhase === "connected"
+        && !claimed.has(platform.id)
+      )
+      .map((platform) => platform.id);
+    setPublishType(type);
+    setSelected((defaults[type] ?? []).filter((platformId) => supportedIds.includes(platformId)));
+  }, [defaults, platformCatalog, rss]);
+
+  const togglePublishPlatform = useCallback((platformId: PlatformId) => {
+    if (!publishAvailableIds.has(platformId)) return;
     setSelected((previous) => previous.includes(platformId)
       ? previous.filter((value) => value !== platformId)
       : [...previous, platformId]);
-  }, [availablePlatformIds]);
-  const lastSelectEvent = useRef(0);
-  // pointerdown 服务真实鼠标；click 服务辅助功能/键盘触发。用时间窗避免双重切换。
-  const toggleSelectedFromEvent = useCallback((platformId: PlatformId) => {
-    const now = performance.now();
-    if (now - lastSelectEvent.current < 350) return;
-    lastSelectEvent.current = now;
-    toggleSelected(platformId);
-  }, [toggleSelected]);
+  }, [publishAvailableIds]);
+
+  const toggleDefault = useCallback((platformId: PlatformId) => {
+    if (!settingsAvailableIds.has(platformId)) return;
+    setDefaults((previous) => {
+      const current = previous[defaultsType] ?? [];
+      const next = current.includes(platformId)
+        ? current.filter((value) => value !== platformId)
+        : [...current, platformId];
+      const updated = { ...previous, [defaultsType]: next };
+      void services.setDefaultPlatforms(defaultsType, next);
+      return updated;
+    });
+  }, [defaultsType, services, settingsAvailableIds]);
+
+  const openPublishDialog = useCallback(() => {
+    selectPublishType("article");
+    setFeedback(null);
+    setPublishOpen(true);
+  }, [selectPublishType]);
 
   const publishCurrent = useCallback(async () => {
-    const publishable = selected.filter((platformId) => availablePlatformIds.has(platformId));
-    if (!activeSource?.id) {
-      new Notice("当前 Markdown 缺少 tassello.id，无法创建发布快照");
+    if (!publishType) {
+      new Notice("请选择发布类型");
       return;
     }
-    if (!publishable.length) return;
-    await engine.enqueue(activeSource, publishable);
-  }, [activeSource, availablePlatformIds, engine, selected]);
+    if (!activeSource) {
+      new Notice("没有活动 Markdown 文件");
+      return;
+    }
+    const publishable = selected.filter((platformId) => publishAvailableIds.has(platformId));
+    if (!publishable.length) {
+      new Notice("请选择至少一个发布平台");
+      return;
+    }
+    const activeFile = app.vault.getAbstractFileByPath(activeSource.filePath);
+    if (!(activeFile instanceof TFile)) {
+      new Notice("当前 Markdown 不存在");
+      return;
+    }
+
+    setRunning(true);
+    setSessionTasks([]);
+    setFeedback({ tone: "running", text: `正在发布到 ${publishable.length} 个平台` });
+    try {
+      await saveOpenEditor(app, activeSource.filePath);
+      let documentId = activeSource.id;
+      await app.fileManager.processFrontMatter(activeFile, (frontmatter) => {
+        documentId = ensureTasselloMetadata(frontmatter, publishType);
+      });
+      if (!documentId) throw new Error("无法生成稿件 ID");
+      const adapter = app.vault.adapter;
+      if (!(adapter instanceof FileSystemAdapter)) {
+        throw new Error("当前 Vault 不是本地文件系统，无法交给本机发布服务");
+      }
+      const markdown = await app.vault.read(activeFile);
+      const createdTasks = await engine.enqueue({
+        id: documentId,
+        filePath: activeSource.filePath,
+        vaultPath: adapter.getBasePath(),
+        markdown,
+        fingerprint: await sha256Text(markdown),
+      }, publishable);
+      setSessionTasks(createdTasks);
+      await refreshSource();
+      setPublishOpen(false);
+      setFeedback({
+        tone: "done",
+        text: `已提交到 ${publishable.length} 个平台`,
+      });
+      if (feedbackTimer.current !== null) host.win.clearTimeout(feedbackTimer.current);
+      feedbackTimer.current = host.win.setTimeout(() => {
+        feedbackTimer.current = null;
+        setFeedback(null);
+      }, 4500);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setFeedback({ tone: "failed", text: message });
+      new Notice(message);
+    } finally {
+      setRunning(false);
+    }
+  }, [activeSource, app, engine, host, publishAvailableIds, publishType, refreshSource, selected]);
 
   useEffect(() => {
-    const handler = () => void publishCurrent();
+    const handler = () => openPublishDialog();
     host.addEventListener("tassello:publish-current", handler);
     return () => host.removeEventListener("tassello:publish-current", handler);
-  }, [host, publishCurrent]);
-
-  const previewHtml = useMemo(() => {
-    if (!activeSource || !platformSupportsType(active, activeSource.type)) return "";
-    return previewHtmlForPlatform(activeSource, active);
-  }, [active, activeSource]);
-
-  useEffect(() => {
-    // host 稳定存在；capture 能覆盖模式切换后重建的 preview-content。
-    const recordGalleryScroll = (event: Event) => {
-      const target = event.target;
-      if (target instanceof HTMLElement && target.matches('[data-role="preview-attachments"]')) {
-        galleryScrollLeft.current = target.scrollLeft;
-      }
-    };
-    host.addEventListener("scroll", recordGalleryScroll, true);
-    return () => host.removeEventListener("scroll", recordGalleryScroll, true);
-  }, [host]);
-
-  useEffect(() => {
-    const gallery = previewContentRef.current?.querySelector<HTMLElement>('[data-role="preview-attachments"]');
-    if (!gallery) {
-      galleryScrollKey.current = null;
-      galleryScrollLeft.current = 0;
-      return;
-    }
-    const key = `${active}:${activeSource?.contentDigest ?? ""}`;
-    if (galleryScrollKey.current !== key) {
-      galleryScrollKey.current = key;
-      galleryScrollLeft.current = 0;
-    }
-    gallery.scrollLeft = galleryScrollLeft.current;
-  }, [active, activeSource, previewHtml]);
-
-  const rendered = useMemo(() => {
-    if (!activeSource || !platformSupportsType(active, activeSource.type)) return null;
-    return renderForPlatform(activeSource, active);
-  }, [active, activeSource]);
+  }, [host, openPublishDialog]);
 
   const images = activeSource?.assets.filter((asset) => asset.kind === "image") ?? [];
   const findings = useMemo<Finding[]>(() => {
-    const imageFinding: Finding = images.length
-      ? { level: "ok", message: `已解析图片 ${images.length} 张` }
-      : sourceError
-        ? { level: "error", message: sourceError }
-        : { level: "warning", message: "未检测到图片" };
-    return [imageFinding, ...(rendered?.findings ?? [])];
-  }, [images.length, rendered, sourceError]);
+    if (sourceError) return [{ level: "error", message: sourceError }];
+    if (!activeSource) return [{ level: "warning", message: "没有活动 Markdown 文件" }];
+    return [
+      { level: "ok", message: `Markdown 已读取：${activeSource.filePath}` },
+      ...(images.length ? [{ level: "ok" as const, message: `已解析图片 ${images.length} 张` }] : []),
+      { level: "warning", message: "仅支持 CommonMark + GFM；wiki link、callout 和专有语法不会发布。" },
+    ];
+  }, [activeSource, images.length, sourceError]);
 
-  const sourcePicker = () => (
-    <SourceTypePicker sourceType={sourceType} onChange={(type) => void changeSourceType(type)} />
-  );
+  const toggleDefaults = useCallback(() => {
+    if (mode === "defaults") {
+      setMode("overview");
+      return;
+    }
+    if (activeSource?.type) setDefaultsType(activeSource.type);
+    setMode("defaults");
+  }, [activeSource, mode]);
 
   return (
     <>
       <div className="panel-head">
         <div className="head-top">
           <div className="mark"><i /><i /><i /><i /></div>
-          <div className="panel-title">Publisher</div>
-        </div>
-        <RuntimeStatus api={api} />
-        <div className="mode">
-          <button className={mode === "preview" ? "active" : ""} onClick={() => setMode("preview")}>预览</button>
-          <button className={mode === "defaults" ? "active" : ""} onClick={() => setMode("defaults")}>默认</button>
+          <div className="panel-title">九漾 Onda</div>
+          <RuntimeStatus api={api} />
+          <button
+            type="button"
+            className={`panel-icon-button ${mode === "defaults" ? "active" : ""}`}
+            onClick={toggleDefaults}
+            title="默认发布设置"
+            aria-label="默认发布设置"
+          >
+            ⚙
+          </button>
         </div>
       </div>
 
       <div className="panel-body">
-        {mode === "preview" && (
+        {mode === "overview" ? (
           <>
-            <div className="selector-card">
-              <div className="selector-row">
-                <span className="selector-label">类型</span>
-                {sourcePicker()}
-              </div>
-              <div className="selector-row">
-                <span className="selector-label">平台</span>
-                <div className="platform-options">
-                  {availablePlatforms.map((platform) => (
-                    (() => {
-                      const connected = availablePlatformIds.has(platform.id);
-                      return (
-                        <button
-                          key={platform.id}
-                          type="button"
-                          className={`platform-option ${selectedPlatforms.includes(platform.id) ? "selected" : ""}`}
-                          style={{
-                            background: connected ? platform.color : "var(--tp-hover)",
-                            color: connected ? (platform.fg || "white") : "var(--tp-ink3)",
-                            opacity: connected ? 1 : 0.55,
-                            cursor: connected ? "pointer" : "not-allowed",
-                          }}
-                          title={`${platform.name}${connected
-                            ? selectedPlatforms.includes(platform.id) ? " · 已选" : ""
-                            : ` · ${platform.syncReason ?? "账号未连接"}`}`}
-                          aria-label={`${selectedPlatforms.includes(platform.id) ? "移除" : "选择"} ${platform.name}`}
-                          aria-pressed={selectedPlatforms.includes(platform.id)}
-                          aria-disabled={!connected}
-                          onClick={() => {
-                            if (!connected) return;
-                            setActivePlatform(platform.id);
-                            toggleSelected(platform.id);
-                          }}
-                        >
-                          <PlatformMark
-                            id={platform.id}
-                            char={platform.glyph}
-                            size={19}
-                            tone={connected ? "lit" : "off"}
-                          />
-                        </button>
-                      );
-                    })()
-                  ))}
+            <div className="current-doc">
+              <span className="current-doc-mark">MD</span>
+              <div className="current-doc-copy">
+                <h2>{activeSource?.title ?? "没有活动 Markdown 文件"}</h2>
+                <p>{activeSource?.filePath ?? "打开一篇 Markdown 后即可发布"}</p>
+                <div className="current-doc-meta">
+                  <span>Markdown</span>
+                  <span>发布时选择类型与平台</span>
                 </div>
               </div>
-              <div className="selector-summary">
-                <span className="count">
-                  已选
-                  <strong>{selectedCount}</strong>
-                  <span className="total">/ {availablePlatforms.length}</span>
-                </span>
-                <span className="divider"></span>
-                <span className="summary-link" style={{ cursor: "default" }}>点击图标切换发布目标</span>
-              </div>
             </div>
 
-            {activeSource && <CoverControl source={activeSource} onChoose={(path) => void setCover(path)} onUpload={(file) => void uploadCover(file)} />}
-            {sourceType === "audio" && rss && rssTargets.length > 0 && (
-              <RssSyncStrip rss={rss} targets={rssTargets} open={rssOpen} onToggle={() => setRssOpen((open) => !open)} />
-            )}
+            <div className="publish-action">
+              <button
+                type="button"
+                className="primary-cta"
+                disabled={!activeSource || running}
+                onClick={openPublishDialog}
+              >
+                {running ? "发布任务执行中…" : "发布"}
+              </button>
+              <div className="foot-note">发布前会先保存当前 Markdown</div>
+            </div>
+
             <FindingsPanel findings={findings} />
 
-            <div className="preview-frame" data-role="preview-card">
-              <div
-                ref={previewContentRef}
-                className="preview-content"
-                onPointerDown={(event) => {
-                  if (!(event.target instanceof Element)) return;
-                  const gallery = event.target.closest<HTMLElement>('[data-role="preview-attachments"]');
-                  if (!gallery || (event.pointerType === "mouse" && event.button !== 0)) return;
-
-                  event.preventDefault();
-                  galleryScrollLeft.current = gallery.scrollLeft;
-                  galleryDrag.current = { pointerId: event.pointerId, x: event.clientX, left: gallery.scrollLeft };
-                  gallery.classList.add("dragging");
-                  event.currentTarget.setPointerCapture(event.pointerId);
-                }}
-                onPointerMove={(event) => {
-                  const drag = galleryDrag.current;
-                  if (!drag || drag.pointerId !== event.pointerId) return;
-                  const gallery = previewContentRef.current?.querySelector<HTMLElement>('[data-role="preview-attachments"]');
-                  if (!gallery) return;
-
-                  const nextLeft = Math.max(0, drag.left - (event.clientX - drag.x));
-                  gallery.scrollLeft = nextLeft;
-                  galleryScrollLeft.current = nextLeft;
-                }}
-                onPointerUp={(event) => {
-                  const drag = galleryDrag.current;
-                  if (!drag || drag.pointerId !== event.pointerId) return;
-                  const wrapper = event.currentTarget;
-                  if (wrapper.hasPointerCapture(event.pointerId)) wrapper.releasePointerCapture(event.pointerId);
-                  galleryDrag.current = null;
-
-                  const gallery = previewContentRef.current?.querySelector<HTMLElement>('[data-role="preview-attachments"]');
-                  gallery?.classList.remove("dragging");
-                  if (galleryRefreshPending.current) {
-                    galleryRefreshPending.current = false;
-                    const timer = refreshTimer.current;
-                    if (timer) window.clearTimeout(timer);
-                    refreshTimer.current = window.setTimeout(() => void refreshSource(), 0);
-                  }
-                }}
-                onPointerCancel={(event) => {
-                  const drag = galleryDrag.current;
-                  if (!drag || drag.pointerId !== event.pointerId) return;
-                  const wrapper = event.currentTarget;
-                  if (wrapper.hasPointerCapture(event.pointerId)) wrapper.releasePointerCapture(event.pointerId);
-                  galleryDrag.current = null;
-                  previewContentRef.current?.querySelector<HTMLElement>('[data-role="preview-attachments"]')?.classList.remove("dragging");
-                }}
-              >
-                {activeSource ? (
-                  <>
-                    {activeSource.type !== "image" && activeSource.cover && (
-                      <img
-                        className={"preview-cover " + activeSource.type}
-                        src={activeSource.cover.resourcePath}
-                        alt="封面预览"
-                      />
-                    )}
-                    <div className="rich" dangerouslySetInnerHTML={{ __html: previewHtml }} />
-                  </>
-                ) : (
-                  <div className="plain">{sourceError ?? "没有活动 Markdown 文件"}</div>
-                )}
+            {feedback && (
+              <div className={`publish-feedback ${feedback.tone}`} aria-live="polite">
+                <span className="pulse" />
+                <span>{feedback.text}</span>
               </div>
-            </div>
-            {tasks.length > 0 && (
-              <div className="targets" data-role="task-list">
-                <TaskList tasks={tasks} onComplete={(task) => setCompletionTask(task)} services={services} />
+            )}
+
+            {sessionTasks.length > 0 && (
+              <div className="live-tasks" aria-label="本次发布进度">
+                {sessionTasks.map((task) => {
+                  const platform = PLATFORM_BY_ID.get(task.platformId);
+                  if (!platform) return null;
+                  const targetUrl = task.url ?? task.pageUrl;
+                  return (
+                    <div className="live-task" key={task.id}>
+                      <span className="glyph" style={{ background: platform.color, color: platform.fg || "white" }}>
+                        <PlatformMark id={platform.id} char={platform.glyph} size={19} tone="lit" />
+                      </span>
+                      <span className="live-task-copy">
+                        <b>{platform.name}</b>
+                        <span>{task.message || task.failReason || (task.status === "awaiting_confirm" ? "内容已填入，等待你在平台完成发布" : "已加入发布队列")}</span>
+                        <span className="live-task-bar"><i style={{ width: `${Math.max(0, Math.min(100, task.progress))}%` }} /></span>
+                      </span>
+                      <span className={`live-task-state ${taskStatusClass(task.status)}`}>{taskStatusLabel(task.status)}</span>
+                      {targetUrl && <button type="button" className="mini" onClick={() => activeWindow.open(targetUrl, "_blank", "noopener,noreferrer")}>打开</button>}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </>
-        )}
-
-        {mode === "defaults" && (
+        ) : (
           <>
-            <div className="selector-card">
+            <div className="selector-card default-targets">
               <div className="selector-row">
                 <span className="selector-label">类型</span>
-                {sourcePicker()}
+                <SourceTypePicker sourceType={defaultsType} onChange={setDefaultsType} />
               </div>
               <div className="selector-row">
                 <span className="selector-label">平台</span>
                 <div className="platform-options">
-                  {availablePlatforms.map((platform) => (
-                    (() => {
-                      const connected = availablePlatformIds.has(platform.id);
-                      return (
-                        <button
-                          key={platform.id}
-                          type="button"
-                          className={`platform-option ${defaultTargets.includes(platform.id) ? "active selected" : ""}`}
-                          style={{
-                            background: connected ? platform.color : "var(--tp-hover)",
-                            color: connected ? (platform.fg || "white") : "var(--tp-ink3)",
-                            opacity: connected ? 1 : 0.55,
-                            cursor: connected ? "pointer" : "not-allowed",
-                          }}
-                          title={`${platform.name}${connected ? "" : ` · ${platform.syncReason ?? "账号未连接"}`}`}
-                          aria-label={`保存 ${platform.name} 为默认平台`}
-                          aria-pressed={defaultTargets.includes(platform.id)}
-                          aria-disabled={!connected}
-                          onPointerDown={() => {
-                            if (connected) toggleDefault(sourceType, platform.id);
-                          }}
-                        >
-                          <PlatformMark
-                            id={platform.id}
-                            char={platform.glyph}
-                            size={19}
-                            tone={connected ? "lit" : "off"}
-                          />
-                        </button>
-                      );
-                    })()
-                  ))}
+                  {settingsPlatforms.map((platform) => {
+                    const connected = settingsAvailableIds.has(platform.id);
+                    const active = (defaults[defaultsType] ?? []).includes(platform.id);
+                    return (
+                      <button
+                        key={platform.id}
+                        type="button"
+                        className={`platform-option ${active ? "active selected" : ""}`}
+                        style={{
+                          background: connected ? platform.color : "var(--tp-hover)",
+                          color: connected ? (platform.fg || "white") : "var(--tp-ink3)",
+                          opacity: connected ? 1 : 0.55,
+                          cursor: connected ? "pointer" : "not-allowed",
+                        }}
+                        title={`${platform.name}${connected ? "" : ` · ${platform.syncReason ?? "账号未连接"}`}`}
+                        aria-label={`保存 ${platform.name} 为默认平台`}
+                        aria-pressed={active}
+                        aria-disabled={!connected}
+                        onClick={() => toggleDefault(platform.id)}
+                      >
+                        <PlatformMark
+                          id={platform.id}
+                          char={platform.glyph}
+                          size={19}
+                          tone={connected ? "lit" : "off"}
+                        />
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             </div>
-            {activeSource && <CoverControl source={activeSource} onChoose={(path) => void setCover(path)} onUpload={(file) => void uploadCover(file)} />}
-            {sourceType === "audio" && rss && rssTargets.length > 0 && (
-              <RssSyncStrip rss={rss} targets={rssTargets} open={rssOpen} onToggle={() => setRssOpen((open) => !open)} />
-            )}
             <div className="notice">这里只保存各稿件类型的默认勾选，不创建发布任务。</div>
           </>
         )}
       </div>
 
-      {mode !== "defaults" && (
-        <div className="panel-foot">
-          <button
-            className="primary-cta"
-            disabled={!activeSource?.id || selectedCount === 0}
-            onClick={() => void publishCurrent()}
+      {publishOpen && (
+        <div className="publish-dialog-backdrop" onClick={() => setPublishOpen(false)}>
+          <div
+            className="publish-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="publish-dialog-title"
+            onClick={(event) => event.stopPropagation()}
           >
-            发布到 {selectedCount} 个平台
-          </button>
-          <div className="foot-note">发布前会先保存当前 Markdown，再生成不可变发布快照</div>
-        </div>
-      )}
+            <div className="publish-dialog-kicker">CURRENT NOTE</div>
+            <h3 id="publish-dialog-title">发布当前稿件</h3>
+            <p>{activeSource?.title ?? "当前 Markdown"}</p>
 
-      {completionTask && (
-        <CompletionModal
-          task={completionTask}
-          onClose={() => setCompletionTask(null)}
-          onSubmit={(url, noPublic) => {
-            void engine.markComplete(completionTask.id, url ?? undefined, noPublic);
-            setCompletionTask(null);
-          }}
-        />
+            <section className="publish-field">
+              <div className="publish-field-head">
+                <b>内容类型</b>
+                <span>写入 frontmatter</span>
+              </div>
+              <SourceTypePicker sourceType={publishType} onChange={selectPublishType} />
+            </section>
+
+            {publishType && activeSource && (
+              <CoverControl
+                source={activeSource}
+                contentType={publishType}
+                onChoose={(path) => void setCover(path)}
+                onUpload={(file) => void uploadCover(file)}
+              />
+            )}
+            {publishType === "audio" && rss && rssTargets.length > 0 && (
+              <RssSyncStrip rss={rss} targets={rssTargets} open={rssOpen} onToggle={() => setRssOpen((open) => !open)} />
+            )}
+
+            <section className="publish-field">
+              <div className="publish-field-head">
+                <b>发布平台</b>
+                <span>已选 {selectedCount} / {publishPlatforms.length}</span>
+              </div>
+              {publishType && publishPlatforms.length === 0 && (
+                <div className="publish-platform-empty">该类型暂无可用平台</div>
+              )}
+              <div className="publish-platforms">
+                {publishPlatforms.map((platform) => {
+                  const connected = publishAvailableIds.has(platform.id);
+                  const active = selectedPlatforms.includes(platform.id);
+                  return (
+                    <button
+                      key={platform.id}
+                      type="button"
+                      className={`publish-platform ${active ? "selected" : ""} ${connected ? "" : "off"}`}
+                      style={{ "--platform-color": platform.color } as CSSProperties}
+                      title={`${platform.name}${connected ? "" : ` · ${platform.syncReason ?? "账号未连接"}`}`}
+                      aria-pressed={active}
+                      aria-disabled={!connected}
+                      onClick={() => togglePublishPlatform(platform.id)}
+                    >
+                      <span className="glyph" style={{ background: connected ? platform.color : "var(--tp-hover)", color: connected ? (platform.fg || "white") : "var(--tp-ink3)" }}>
+                        <PlatformMark id={platform.id} char={platform.glyph} size={19} tone={connected ? "lit" : "off"} />
+                      </span>
+                      <span className="publish-platform-name">{platform.name}</span>
+                      <span className="checkmark">✓</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+
+            <div className="publish-dialog-actions">
+              <button type="button" className="mini" onClick={() => setPublishOpen(false)}>取消</button>
+              <button
+                type="button"
+                className="mini primary"
+                disabled={!publishType || selectedCount === 0 || running}
+                onClick={() => void publishCurrent()}
+              >
+                发布到 {selectedCount} 个平台
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   );

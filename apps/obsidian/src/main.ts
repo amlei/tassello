@@ -1,7 +1,8 @@
-import { Notice, Plugin, PluginSettingTab, App, Setting } from "obsidian";
+import { App, Notice, Plugin, PluginSettingTab, Setting } from "obsidian";
 import { BackendApi } from "./core/api/client";
 import { RemoteTaskEngine } from "./core/tasks/remote-task-engine";
 import { PLATFORMS, type PlatformId, type PublishTask } from "./core/types";
+import { saveOpenEditor } from "./core/source/source-resolver";
 import { PUBLISHER_VIEW_TYPE, PublisherView, type PublisherServices } from "./views/publisher-view";
 
 type TasselloData = {
@@ -28,7 +29,6 @@ class TasselloSettingTab extends PluginSettingTab {
   override display(): void {
     const { containerEl } = this;
     containerEl.empty();
-    containerEl.createEl("h2", { text: "Tassello Publisher" });
 
     new Setting(containerEl)
       .setName("本机发布服务")
@@ -41,10 +41,10 @@ class TasselloSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings();
         }));
 
-    containerEl.createEl("h3", { text: "默认发布目标" });
+    new Setting(containerEl).setName("默认发布目标").setHeading();
     for (const type of ["article", "image"] as const) {
       new Setting(containerEl)
-        .setName(type === "article" ? "Article defaults" : "Image defaults")
+        .setName(type === "article" ? "文章默认平台" : "贴图默认平台")
         .setDesc("frontmatter 未指定 platforms 时使用这些目标")
         .addButton((button) => {
           button.setButtonText("全选").onClick(async () => {
@@ -77,17 +77,15 @@ class TasselloSettingTab extends PluginSettingTab {
       }
     }
 
-    containerEl.createEl("h3", { text: "安全" });
-    containerEl.createEl("p", {
-      text: "插件直接编辑当前 Vault 的 Markdown；发布任务与账号状态由本机后端统一管理，扩展不持有平台密码。",
-      cls: "setting-item-description",
-    });
+    new Setting(containerEl).setName("安全").setHeading();
+    new Setting(containerEl)
+      .setName("数据边界")
+      .setDesc("插件直接编辑当前 Vault 的 Markdown；发布任务与账号状态由本机后端统一管理，扩展不持有平台密码。");
 
-    containerEl.createEl("h3", { text: "附件" });
-    containerEl.createEl("p", {
-      text: "插件沿用 Obsidian 的「文件与链接 → 新附件的默认位置」，不覆盖其中设置的 files/ 等目录。",
-      cls: "setting-item-description",
-    });
+    new Setting(containerEl).setName("附件").setHeading();
+    new Setting(containerEl)
+      .setName("附件目录")
+      .setDesc("沿用 Obsidian 的「文件与链接 → 新附件的默认位置」，不覆盖其中设置的 files/ 等目录。");
   }
 }
 
@@ -107,6 +105,8 @@ export class TasselloPublisherPlugin extends Plugin {
   private api!: BackendApi;
   private engine!: RemoteTaskEngine;
   private saveTimer: number | null = null;
+  private publishTimer: number | null = null;
+  private unloading = false;
   services!: PluginServices;
 
   override async onload(): Promise<void> {
@@ -121,7 +121,13 @@ export class TasselloPublisherPlugin extends Plugin {
     this.selectedPlatforms = data?.selectedPlatforms ?? ["weibo", "zhihu", "xhs"];
 
     this.api = new BackendApi(this.settings.apiOrigin);
-    this.engine = new RemoteTaskEngine(this.api);
+    this.engine = this.addChild(new RemoteTaskEngine(this.api));
+    this.register(() => {
+      if (this.saveTimer !== null) window.clearTimeout(this.saveTimer);
+      if (this.publishTimer !== null) activeWindow.clearTimeout(this.publishTimer);
+      this.saveTimer = null;
+      this.publishTimer = null;
+    });
 
     this.services = {
       app: this.app,
@@ -139,13 +145,22 @@ export class TasselloPublisherPlugin extends Plugin {
       },
       saveData: () => this.saveSettings(),
       publishCurrentFile: async () => {
-        const view = this.getActivePublisherView();
-        if (!view) {
-          await this.activateView();
-          window.setTimeout(() => void this.getActivePublisherView()?.publishCurrent(), 80);
+        const file = this.app.workspace.getActiveFile();
+        if (!file || file.extension.toLowerCase() !== "md") {
+          new Notice("请先打开一篇 Markdown 稿件");
           return;
         }
-        await view.publishCurrent();
+        const editorSaved = await saveOpenEditor(this.app, file.path);
+        if (!editorSaved) {
+          new Notice("当前 Markdown 不在编辑器中，将从磁盘读取最新内容");
+        }
+        const view = await this.activateView();
+        if (!view) return;
+        if (this.publishTimer !== null) activeWindow.clearTimeout(this.publishTimer);
+        this.publishTimer = activeWindow.setTimeout(() => {
+          this.publishTimer = null;
+          view.publishCurrent();
+        }, 80);
       },
     };
 
@@ -154,18 +169,27 @@ export class TasselloPublisherPlugin extends Plugin {
       (leaf) => new PublisherView(leaf, this.services),
     );
 
-    this.addRibbonIcon("send", "Tassello Publisher", () => void this.activateView());
-    this.addCommand({ id: "open-publisher", name: "Open publisher", callback: () => void this.activateView() });
-    this.addCommand({ id: "publish-current-note", name: "Publish current note", callback: () => void this.services.publishCurrentFile() });
+    this.addRibbonIcon("send", "九漾 Onda", () => void this.activateView());
+    this.addCommand({ id: "open-publisher", name: "打开发布面板", callback: () => void this.activateView() });
+    this.addCommand({
+      id: "publish-current-note",
+      name: "发布当前稿件",
+      checkCallback: (checking) => {
+        const file = this.app.workspace.getActiveFile();
+        if (!file || file.extension.toLowerCase() !== "md") return false;
+        if (!checking) void this.services.publishCurrentFile();
+        return true;
+      },
+    });
     this.addSettingTab(new TasselloSettingTab(this.app, this));
 
     this.app.workspace.onLayoutReady(() => {
-      void this.activateView(false);
+      if (!this.unloading && this.getActivePublisherView()) void this.activateView(false);
     });
   }
 
   override onunload(): void {
-    this.engine.dispose();
+    this.unloading = true;
   }
 
   private getActivePublisherView(): PublisherView | null {
@@ -173,11 +197,16 @@ export class TasselloPublisherPlugin extends Plugin {
     return leaf?.view instanceof PublisherView ? leaf.view : null;
   }
 
-  private async activateView(focus = true): Promise<void> {
+  private async activateView(focus = true): Promise<PublisherView | null> {
     const existing = this.app.workspace.getLeavesOfType(PUBLISHER_VIEW_TYPE).at(-1);
-    const leaf = existing ?? this.app.workspace.getRightLeaf(false)!;
+    const leaf = existing ?? this.app.workspace.getRightLeaf(false);
+    if (!leaf) {
+      new Notice("无法打开右侧发布面板");
+      return null;
+    }
     if (!existing) await leaf.setViewState({ type: PUBLISHER_VIEW_TYPE, active: focus });
-    if (focus) this.app.workspace.revealLeaf(leaf);
+    if (focus) await this.app.workspace.revealLeaf(leaf);
+    return leaf.view instanceof PublisherView ? leaf.view : null;
   }
 
   async saveSettings(): Promise<void> {

@@ -12,7 +12,7 @@ import {
   connectExtension,
   createImageGeneration,
   createPost,
-  createTasks,
+  createTasksFromSource,
   deleteAsset,
   deletePost,
   deleteTask,
@@ -478,7 +478,7 @@ export const app = new Elysia()
       return { ok: false, error: "参数不合法" };
     }
     try {
-      return ok(await createTasks(parsed.data.postId, parsed.data.platformIds, parsed.data.channelIds));
+      return ok(await createTasksFromSource(parsed.data.source, parsed.data.platformIds, parsed.data.channelIds));
     } catch (error) {
       set.status = 400;
       return { ok: false, error: error instanceof Error ? error.message : String(error) };

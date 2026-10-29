@@ -33,15 +33,28 @@ export async function readVaultSource(app: App, file: TFile): Promise<LiveSource
   return { file, raw: await app.vault.cachedRead(file), origin: "vault" };
 }
 
-/** 发布 worker 用：优先找同一路径仍打开的 MarkdownView，避免读取落后于未保存编辑器。 */
-export function findOpenEditor(app: App, filePath: string): LiveSource | null {
+function findMarkdownView(app: App, filePath: string): MarkdownView | null {
   for (const leaf of app.workspace.getLeavesOfType("markdown")) {
     const view = leaf.view;
     if (view instanceof MarkdownView && view.file && isMarkdownFile(view.file) && view.file.path === filePath) {
-      return { file: view.file, raw: view.editor.getValue(), origin: "active-editor" };
+      return view;
     }
   }
   return null;
+}
+
+/** 发布 worker 用：优先找同一路径仍打开的 MarkdownView，避免读取落后于未保存编辑器。 */
+export function findOpenEditor(app: App, filePath: string): LiveSource | null {
+  const view = findMarkdownView(app, filePath);
+  return view?.file ? { file: view.file, raw: view.editor.getValue(), origin: "active-editor" } : null;
+}
+
+/** 发布前把同一路径的 MarkdownView buffer 通过官方 API 强制落盘。 */
+export async function saveOpenEditor(app: App, filePath: string): Promise<boolean> {
+  const view = findMarkdownView(app, filePath);
+  if (!view) return false;
+  await view.save();
+  return true;
 }
 
 export async function resolveLiveFile(app: App, filePath: string): Promise<LiveSource> {
@@ -71,8 +84,7 @@ export async function createSourceDraft(
   const file = input.file;
   const title = (frontmatter.title || titleFromMarkdown(body, file.basename) || file.basename).trim();
   const bodyForPayload = stripLeadingTitleHeading(body, title);
-  const inferredType = /!\[\[|!\[[^\]]*\]\([^)]+\)/.test(bodyForPayload) ? "image" : "article";
-  const type = options?.sourceType ?? frontmatter.type ?? inferredType;
+  const type = options?.sourceType ?? frontmatter.type ?? "article";
   const html = await markdownToHtml(bodyForPayload);
   const plain = plainFromMarkdown(bodyForPayload);
   const coverReference = frontmatter.cover;

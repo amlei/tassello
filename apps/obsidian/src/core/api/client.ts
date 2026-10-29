@@ -1,4 +1,5 @@
-import type { PlatformDTO, PodcastRssDTO } from "@tassello/shared";
+import { requestUrl } from "obsidian";
+import type { PlatformDTO, PodcastRssDTO, PublishSourceInput } from "@tassello/shared";
 import type { PublishStatus, PublishTask } from "../types";
 
 type ApiResult<T> = { ok: true; data: T } | { ok: false; error: string };
@@ -60,15 +61,19 @@ function taskFromDTO(task: BackendTask): PublishTask {
 export class BackendApi {
   constructor(private readonly origin: string) {}
 
-  private async request<T>(path: string, init?: RequestInit): Promise<T> {
-    const response = await fetch(`${this.origin.replace(/\/+$/, "")}/api/v1${path}`, {
-      ...init,
-      headers: {
-        ...(init?.body ? { "content-type": "application/json" } : {}),
-        ...(init?.headers ?? {}),
-      },
+  private async request<T>(path: string, init?: { method?: string; body?: unknown }): Promise<T> {
+    const body = init?.body === undefined ? undefined : JSON.stringify(init.body);
+    const response = await requestUrl({
+      url: `${this.origin.replace(/\/+$/, "")}/api/v1${path}`,
+      method: init?.method,
+      body,
+      contentType: body ? "application/json" : undefined,
+      throw: false,
     });
-    const payload = await response.json() as ApiResult<T>;
+    const payload = response.json as ApiResult<T> | null;
+    if (!payload || typeof payload !== "object" || !("ok" in payload)) {
+      throw new Error(response.text || `HTTP ${response.status}`);
+    }
     if (!payload.ok) throw new Error(payload.error);
     return payload.data;
   }
@@ -93,25 +98,25 @@ export class BackendApi {
     return this.request<PodcastRssDTO | null>("/podcast-rss");
   }
 
-  async publish(documentId: string, platformIds: string[]): Promise<PublishTask[]> {
-    if (!documentId) throw new Error("Markdown frontmatter 缺少 tassello.id");
+  async publish(source: PublishSourceInput, platformIds: string[]): Promise<PublishTask[]> {
+    if (!source.id) throw new Error("Markdown frontmatter 缺少 tassello.id");
     return (await this.request<BackendTask[]>("/publish", {
       method: "POST",
-      body: JSON.stringify({ postId: documentId, platformIds }),
+      body: { source, platformIds },
     })).map(taskFromDTO);
   }
 
   async confirm(taskId: string, url: string | null, noPublicUrl: boolean): Promise<PublishTask> {
     return taskFromDTO(await this.request<BackendTask>(`/tasks/${encodeURIComponent(taskId)}`, {
       method: "POST",
-      body: JSON.stringify({ action: "confirm", url, noPublicUrl }),
+      body: { action: "confirm", url, noPublicUrl },
     }));
   }
 
   async retry(taskId: string): Promise<PublishTask> {
     return taskFromDTO(await this.request<BackendTask>(`/tasks/${encodeURIComponent(taskId)}`, {
       method: "POST",
-      body: JSON.stringify({ action: "retry" }),
+      body: { action: "retry" },
     }));
   }
 }

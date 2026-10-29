@@ -19,7 +19,7 @@ const CONTENT_TYPES = new Set<ContentType>(["article", "image", "video", "audio"
 const PLATFORM_IDS = new Set<PlatformId>(["weibo", "zhihu", "xhs", "jike", "douban", "x"]);
 
 /** Obsidian properties may serialize a nested value as a JSON/YAML string; accept both forms. */
-function normalizeConfig(raw: unknown): Record<string, unknown> {
+export function normalizeTasselloConfig(raw: unknown): Record<string, unknown> {
   if (!raw || typeof raw !== "object") {
     if (typeof raw === "string" && raw.trim()) {
       try {
@@ -46,7 +46,7 @@ export function splitNote(raw: string): SplitNote {
 
   try {
     const parsed = parseYaml(match[1] ?? "") as Record<string, unknown> | null;
-    const config = normalizeConfig(parsed?.tassello);
+    const config = normalizeTasselloConfig(parsed?.tassello);
     const id = typeof config.id === "string" && config.id.trim() ? config.id.trim() : undefined;
     const type = typeof config.type === "string" && CONTENT_TYPES.has(config.type as ContentType)
       ? config.type as ContentType
@@ -71,4 +71,31 @@ export function splitNote(raw: string): SplitNote {
       body: raw,
     };
   }
+}
+
+export function createDocumentId(randomUuid = () => crypto.randomUUID()): string {
+  return `m${randomUuid().replace(/-/g, "").slice(0, 10)}`;
+}
+
+/** 原子补齐发布需要的身份与类型，已有 ID 永不替换。 */
+export function ensureTasselloMetadata(
+  frontmatter: Record<string, unknown>,
+  type: ContentType,
+  createId: () => string = createDocumentId,
+): string {
+  const current = normalizeTasselloConfig(frontmatter.tassello);
+  const existingId = typeof current.id === "string" ? current.id.trim() : "";
+  const {
+    version: _version,
+    createdAt: _createdAt,
+    updatedAt: _updatedAt,
+    ...rest
+  } = current;
+  const id = existingId || createId();
+  frontmatter.tassello = {
+    ...rest,
+    id,
+    type,
+  };
+  return id;
 }

@@ -2,11 +2,8 @@ import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import { CONTENT_TYPES, type ContentType } from "@tassello/shared";
 
 export type TasselloFrontmatter = {
-  version: 1;
   id: string;
   type: ContentType;
-  createdAt: string;
-  updatedAt: string;
   manualOrder?: number;
   platforms?: string[];
   cover?: string;
@@ -21,12 +18,6 @@ export type ParsedFrontmatter = {
 };
 
 const CONTENT_TYPE_SET = new Set<string>(CONTENT_TYPES);
-
-function isoDate(value: unknown): string | undefined {
-  if (typeof value !== "string" || !value.trim()) return undefined;
-  const timestamp = Date.parse(value);
-  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : undefined;
-}
 
 function normalizeConfig(raw: unknown): Record<string, unknown> {
   if (raw && typeof raw === "object" && !Array.isArray(raw)) return raw as Record<string, unknown>;
@@ -69,8 +60,6 @@ export function splitFrontmatter(raw: string): ParsedFrontmatter {
     ? config.type as ContentType
     : undefined;
   const id = typeof config.id === "string" && config.id.trim() ? config.id.trim() : undefined;
-  const createdAt = isoDate(config.createdAt);
-  const updatedAt = isoDate(config.updatedAt);
   const manualOrder = typeof config.manualOrder === "number" && Number.isFinite(config.manualOrder)
     ? config.manualOrder
     : undefined;
@@ -85,20 +74,14 @@ export function splitFrontmatter(raw: string): ParsedFrontmatter {
     : undefined;
 
   const missing = [
-    config.version !== 1 ? "version=1" : null,
     !id ? "id" : null,
     !type ? "type" : null,
-    !createdAt ? "createdAt" : null,
-    !updatedAt ? "updatedAt" : null,
   ].filter(Boolean);
 
   return {
     data: {
-      version: 1,
       id,
       type,
-      createdAt,
-      updatedAt,
       manualOrder,
       platforms,
       cover,
@@ -115,14 +98,18 @@ export function stringifyDocument(
   body: string,
   preserve: Record<string, unknown> = {},
 ): string {
+  const {
+    version: _version,
+    createdAt: _createdAt,
+    updatedAt: _updatedAt,
+    ...preservedConfig
+  } = normalizeConfig(preserve.tassello);
   const root: Record<string, unknown> = {
     ...preserve,
     tassello: {
-      version: 1,
+      ...preservedConfig,
       id: frontmatter.id,
       type: frontmatter.type,
-      createdAt: frontmatter.createdAt,
-      updatedAt: frontmatter.updatedAt,
       ...(frontmatter.manualOrder !== undefined ? { manualOrder: frontmatter.manualOrder } : {}),
       ...(frontmatter.platforms !== undefined ? { platforms: frontmatter.platforms } : {}),
       ...(frontmatter.cover !== undefined ? { cover: frontmatter.cover } : {}),

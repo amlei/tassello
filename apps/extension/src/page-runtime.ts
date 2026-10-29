@@ -1,10 +1,36 @@
 type PageFunction<T> = (arg: any) => T | Promise<T>;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const ONDA_GROUP_TITLE = "九漾 Onda";
+
+async function groupOndaTab(tab: chrome.tabs.Tab): Promise<void> {
+  if (tab.id == null || !chrome.tabGroups) return;
+  try {
+    const groups = await chrome.tabGroups.query({
+      title: ONDA_GROUP_TITLE,
+      windowId: tab.windowId,
+    });
+    const existing = groups[0];
+    const groupId = await chrome.tabs.group({
+      tabIds: tab.id,
+      ...(existing
+        ? { groupId: existing.id }
+        : { createProperties: { windowId: tab.windowId } }),
+    });
+    await chrome.tabGroups.update(groupId, {
+      title: ONDA_GROUP_TITLE,
+      color: "purple",
+      collapsed: false,
+    });
+  } catch {
+    // 分组失败不能阻断发布；扩展仍可继续在独立标签页中执行任务。
+  }
+}
 
 export async function openTab(url: string, active = true): Promise<number> {
   const tab = await chrome.tabs.create({ url, active });
   if (tab.id == null) throw new Error("无法创建平台标签页");
+  await groupOndaTab(tab);
   await waitForTabReady(tab.id);
   return tab.id;
 }

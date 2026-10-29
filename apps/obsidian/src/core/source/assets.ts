@@ -1,4 +1,3 @@
-import { normalize, join } from "path";
 import { FileSystemAdapter, normalizePath, TFile, type App } from "obsidian";
 import { parseImageEmbeds, type ParsedImageEmbed } from "./image-embeds";
 import type { ResolvedAsset } from "../types";
@@ -33,15 +32,11 @@ async function resolveImageEmbed(
   const metadataFile = app.metadataCache.getFirstLinkpathDest(embed.linkpath, sourcePath);
   const directFile = app.vault.getAbstractFileByPath(normalizedLinkpath)
     ?? app.vault.getAbstractFileByPath(embed.linkpath);
-  const allFiles = app.vault.getFiles();
-  const basename = normalizedLinkpath.split("/").pop()?.toLowerCase() ?? "";
-  const exactPathFile = allFiles.find((candidate) => candidate.path.toLowerCase() === normalizedLinkpath.toLowerCase());
-  const exactNameFile = allFiles.find((candidate) => candidate.name.toLowerCase() === basename);
   const resolved = metadataFile instanceof TFile
     ? metadataFile
     : directFile instanceof TFile
       ? directFile
-      : exactPathFile ?? exactNameFile;
+      : null;
   if (!resolved) {
     return {
       asset: null,
@@ -67,7 +62,7 @@ async function resolveImageEmbed(
       kind: "image",
       vaultPath: resolved.path,
       resourcePath: app.vault.getResourcePath(resolved),
-      absolutePath: normalize(join(adapter.getBasePath(), resolved.path)),
+      absolutePath: adapter.getFullPath(resolved.path),
       alt: embed.alt || resolved.basename,
     },
     finding: null,

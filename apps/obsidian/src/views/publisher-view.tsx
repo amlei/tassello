@@ -33,7 +33,7 @@ export class PublisherView extends ItemView {
   }
 
   override getDisplayText(): string {
-    return "Tassello Publisher";
+    return "九漾 Onda";
   }
 
   override getIcon(): string {
@@ -41,7 +41,9 @@ export class PublisherView extends ItemView {
   }
 
   publishCurrent(): void {
-    this.contentEl.dispatchEvent(new Event("tassello:publish-current"));
+    const event = this.contentEl.doc.createEvent("Event");
+    event.initEvent("tassello:publish-current", false, false);
+    this.contentEl.dispatchEvent(event);
   }
 
   override async onOpen(): Promise<void> {

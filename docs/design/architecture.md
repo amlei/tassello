@@ -177,11 +177,8 @@ Obsidian 自己粘贴资源时继续使用 Obsidian 的「文件与链接 → �
 ```yaml
 ---
 tassello:
-  version: 1
   id: m5xk2q9f
   type: article
-  createdAt: 2026-10-26T10:00:00+08:00
-  updatedAt: 2026-10-26T11:20:00+08:00
   manualOrder: 100
   platforms:
     - wechat
@@ -198,11 +195,8 @@ tassello:
 
 | 字段 | 必需 | 说明 |
 |---|---|---|
-| `version` | 是 | frontmatter schema 版本，当前为 `1` |
 | `id` | 是 | 稳定唯一 ID；文件重命名、移动后仍保持发布关联 |
 | `type` | 是 | `article` / `image` / `video` / `audio` |
-| `createdAt` | 是 | 创建时间，用于稳定排序 |
-| `updatedAt` | 是 | 内容最后更新时间；Web 与 Obsidian 插件在正文变化时更新，缺失时以文件 mtime 兜底 |
 | `manualOrder` | 否 | 自定义排序值 |
 | `platforms` | 否 | 默认发布平台 |
 | `cover` | 否 | 稿件封面引用；相对路径、绝对路径或 HTTP(S) URL |
@@ -211,6 +205,7 @@ tassello:
 约束：
 
 - 标题取第一个非代码块 H1；frontmatter 不重复存 title。
+- 创建时间和更新时间分别从文件 birthtime / mtime 派生，不写入 frontmatter。
 - 未知 frontmatter 字段必须原样保留。
 - `cover` 是稿件级资产引用。没有显式封面时，任务快照默认使用第一张有效图片。
 - 上传的新封面写入当前稿件的资源目录，并以 `role: "cover"` 标记；独立封面不进入正文媒体顺序。
@@ -219,7 +214,7 @@ tassello:
 - frontmatter 损坏、缺 ID 或类型非法时标为 `invalid_frontmatter`，不自动修复。
 - 发布状态、任务 ID、发布链接、失败原因不得写入 frontmatter。
 - 文件外部重命名由 watcher 更新路径；不按标题反推路径。
-- Obsidian 插件在 `modify` 后用 `processFrontMatter` 更新 `updatedAt`；只有正文 hash 变化才更新，并忽略由自身产生的下一条 watcher 事件。
+- Obsidian 插件只维护身份、类型等必要元数据，不写时间戳。
 
 ### 5.3 Markdown 支持范围
 
@@ -499,7 +494,24 @@ WebSocket：
 
 ### 9.1 快照
 
-入队时读取 Markdown，冻结：
+发布请求显式提交当前 Markdown 来源，不再由后端按全局 Vault 猜测稿件：
+
+```ts
+type PublishSource = {
+  id: string;
+  filePath: string;
+  vaultPath?: string;
+  markdown: string;
+  fingerprint: string;
+};
+```
+
+- `filePath` 是相对 Vault 的 Markdown 路径；Obsidian 同时提交当前 Vault 的绝对根路径。
+- 后端只在该文件目录下解析相对资源路径，不读取或切换全局 Vault。
+- `fingerprint` 是提交 Markdown 的 SHA-256，用于防止传输内容与声明不一致。
+- `id` 继续稳定标识稿件；文件重命名后 ID 不变，发布任务仍可保留身份关联。
+
+校验来源后冻结：
 
 ```ts
 type PublishSnapshot = {
@@ -746,8 +758,8 @@ storage, scripting, tabs, alarms, nativeMessaging
 1. 用户点击发布。
 2. 插件获取当前 `MarkdownView`。
 3. 调用 `save()`，确保编辑器 Buffer 已写入磁盘。
-4. 插件向后端提交文档 ID、平台与频道。
-5. 后端从磁盘读取 Markdown 并生成不可变快照。
+4. 插件向后端提交文档 ID、当前 Vault、相对路径、Markdown、fingerprint、平台与频道。
+5. 后端按显式文件路径解析本地资源，并生成不可变快照，不依赖全局 Vault 查找。
 6. 插件订阅任务事件并显示进度、平台标签页和发布链接。
 7. 任务完成后链接保存在后端任务文件中，插件从 API 读取。
 
