@@ -26,16 +26,20 @@ const SURFACES = [
 
 const OBSIDIAN_SHOTS = [
   {
-    key: "preview",
-    title: "Payload 预览",
-    image: "/assets/screenshots/obsidian-publisher-4k.png",
-    alt: "Obsidian 插件在当前笔记右侧展示 Publisher payload 预览",
+    key: "image",
+    title: "贴图发布",
+    image: "/assets/screenshots/07-obsidian-publish-image.png",
+    width: 1716,
+    height: 1606,
+    alt: "Obsidian 插件选择贴图类型，并勾选小红书和微博作为发布目标",
   },
   {
-    key: "publish",
-    title: "发布目标",
-    image: "/assets/screenshots/obsidian-publisher-publish-4k.png",
-    alt: "Obsidian 插件展示发布目标选择与 Chrome 授权提示",
+    key: "article",
+    title: "文章发布",
+    image: "/assets/screenshots/08-obsidian-publish-article.png",
+    width: 1694,
+    height: 1574,
+    alt: "Obsidian 插件选择文章类型和知乎发布目标，并展示稿件封面",
   },
 ];
 
@@ -64,6 +68,12 @@ const CONTROL_POINTS = [
   { title: "内容与账号先确认", detail: "发布前检查内容、素材和目标账号，降低误发风险。" },
   { title: "等待不是故障", detail: "扫码、验证或人工点击发布时，任务会停在明确确认位。" },
   { title: "进度集中可见", detail: "不用逐个平台打开后台，也能知道每条内容走到哪里。" },
+];
+
+const EXTENSION_POINTS = [
+  ["无需复制 profile", "平台登录态继续留在你日常使用的 Chrome 或 Edge 中。"],
+  ["自动发现本机", "Native Messaging 自动连接当前 Onda，不需要地址或配对码。"],
+  ["两端共用一条通道", "桌面工作台、Obsidian 和 CLI 复用同一个浏览器扩展。"],
 ];
 
 export function SiteHome() {
@@ -127,14 +137,14 @@ export function SiteHome() {
           <div className="hero-copy">
             <p className="eyebrow">面向创作者与运营人员</p>
             <h1 id="hero-title">写一次，<br /><em>两端发布</em>。</h1>
-            <p className="subtitle">桌面工作台管理素材、预览与队列；Obsidian 插件直接读取当前笔记并生成平台 payload。两条入口共享同一条发布链路。</p>
+            <p className="subtitle">桌面工作台管理素材、预览与队列；Obsidian 插件直接读取当前笔记。两条编辑入口共用本机后端和同一条浏览器扩展发布链路。</p>
             <div className="cta-row">
               <Link className="btn btn-primary" href="/download">下载</Link>
               <Link className="btn btn-ghost" href="#obsidian">了解 Obsidian 插件</Link>
             </div>
           </div>
 
-          <aside className="hero-surfaces" aria-label="两个产品入口">
+          <aside className="hero-surfaces" aria-label="两个编辑入口">
             {SURFACES.map((surface, index) => (
               <Link
                 key={surface.key}
@@ -191,7 +201,7 @@ export function SiteHome() {
             <iframe
               ref={mosaicRef}
               id="mosaicFrame"
-              src={assetUrl("/experience/mosaic/index.html")}
+              src={assetUrl("/experience/mosaic/index.html?v=32")}
               title="Onda 编辑器可交互演示，可切换导航、编辑内容和查看手机预览"
               loading="lazy"
               onLoad={() => setDemoReady(true)}
@@ -252,12 +262,43 @@ export function SiteHome() {
         </div>
       </section>
 
+      <section className="section" id="extension" aria-labelledby="extension-title">
+        <div className="shell extension-grid">
+          <div>
+            <p className="eyebrow">浏览器扩展</p>
+            <h2 id="extension-title">发布发生在你正在用的浏览器里。</h2>
+            <p className="section-copy">Onda 把任务交给 Chrome / Edge 扩展，由扩展在真实平台页面完成填写。登录态留在浏览器，关键发布动作仍由你确认。</p>
+            <div className="extension-points">
+              {EXTENSION_POINTS.map(([title, detail]) => (
+                <article key={title}>
+                  <i aria-hidden="true">✓</i>
+                  <div>
+                    <strong>{title}</strong>
+                    <span>{detail}</span>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </div>
+          <figure className="extension-shot">
+            <img
+              src={assetUrl("/assets/screenshots/06-browser-extension-connected.png")}
+              width={708}
+              height={510}
+              alt="九漾 Onda 浏览器扩展已连接，Chrome 由本机宿主验证，可以接收发布任务"
+              decoding="async"
+            />
+            <figcaption>扩展连接后直接显示任务通道状态，并可打开桌面工作台的发布队列。</figcaption>
+          </figure>
+        </div>
+      </section>
+
       <section className="section" id="obsidian" aria-labelledby="obsidian-title">
         <div className="shell">
           <div className="section-head">
             <div>
               <h2 id="obsidian-title">Obsidian 里，笔记直接进入发布</h2>
-              <p className="section-copy">当前 Markdown 读取为稿件，Frontmatter 决定类型与目标；预览展示真实 payload，而不是复刻平台客户端。</p>
+              <p className="section-copy">当前 Markdown 读取为稿件，选择内容类型与目标后交给本机后端，再由同一个浏览器扩展完成平台页面操作。</p>
             </div>
           </div>
           <Tabs.Root
@@ -283,7 +324,7 @@ export function SiteHome() {
                   className={`gallery-shot-frame${index === activeObsidianShot ? " current" : ""}`}
                   aria-hidden={index !== activeObsidianShot}
                 >
-                  <img src={assetUrl(shot.image)} width={3840} height={2400} alt={shot.alt} decoding="async" />
+                  <img src={assetUrl(shot.image)} width={shot.width} height={shot.height} alt={shot.alt} decoding="async" />
                 </figure>
               ))}
             </Tabs.Panel>
@@ -295,10 +336,10 @@ export function SiteHome() {
         <div className="shell theme-compact">
           <div className="theme-stage" ref={themeStageRef}>
             <figure className="stage-layer light">
-              <img src={assetUrl("/assets/screenshots/04-platform-settings-light.png")} width={3840} height={2400} alt="Onda 浅色主题的平台设置界面" />
+              <img src={assetUrl("/assets/screenshots/04-platform-settings-light.png")} width={3840} height={2400} alt="Onda 浅色主题的基础设置界面，浏览器扩展已连接" />
             </figure>
             <figure className="stage-layer dark" aria-hidden="true">
-              <img src={assetUrl("/assets/screenshots/05-platform-settings-dark.png")} width={3840} height={2400} alt="Onda 深色主题的平台设置界面" />
+              <img src={assetUrl("/assets/screenshots/05-platform-settings-dark.png")} width={3840} height={2400} alt="Onda 深色主题的基础设置界面，浏览器扩展已连接" />
             </figure>
             <svg className="stage-edge" viewBox="0 0 100 62.5" preserveAspectRatio="none" aria-hidden="true">
               <line ref={edgeLineRef} x1="42" y1="0" x2="58" y2="62.5" />

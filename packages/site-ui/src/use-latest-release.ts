@@ -70,7 +70,7 @@ function normalizeVersion(tag: string): string {
  * 持久缓存 latest stable release。二次访问先显示缓存，再用 ETag 条件请求；
  * GitHub 返回 304 时不计入 API 配额，release 未更新则数据不变。
  */
-export function useLatestRelease(fallbackVersion = "0.1.2") {
+export function useLatestRelease(fallbackVersion = "0.2.0") {
   const cachedVersion = useSyncExternalStore(
     subscribeToCache,
     getCachedVersion,

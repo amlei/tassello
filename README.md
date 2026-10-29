@@ -19,9 +19,52 @@
 - Chrome / Edge 浏览器发布扩展
 - Bun + ElysiaJS 本机后端
 
+## 界面预览
+
+### 编辑器 — 实时手机预览
+
+![九漾 Onda 编辑器界面，左侧编辑富文本内容，右侧实时显示手机端预览效果](assets/01-editor-preview.png)
+
+### 多平台发布设置
+
+![九漾 Onda 多平台发布设置界面，正在为一条内容选择多个目标平台](assets/02-multi-platform-publish.png)
+
+### 发布队列 — 集中管理发布状态
+
+![九漾 Onda 发布队列界面，展示多个发布任务的阶段、进度和状态](assets/03-publish-queue.png)
+
+### 浅色 / 深色主题
+
+<table>
+  <tr>
+    <th>浅色模式</th>
+    <th>深色模式</th>
+  </tr>
+  <tr>
+    <td><img src="assets/04-platform-settings-light.png" width="520" alt="九漾 Onda 浅色设置界面，显示浏览器扩展已连接、内容目录和资源目录"></td>
+    <td><img src="assets/05-platform-settings-dark.png" width="520" alt="九漾 Onda 深色设置界面，显示浏览器扩展已连接、内容目录和资源目录"></td>
+  </tr>
+</table>
+
+### Obsidian 发布
+
+| 贴图发布 | 文章发布 |
+|---|---|
+| ![Obsidian 插件选择贴图类型和小红书、微博两个发布目标](assets/07-obsidian-publish-image.png) | ![Obsidian 插件选择文章类型和知乎发布目标，并展示稿件封面](assets/08-obsidian-publish-article.png) |
+
+插件直接读取当前 Markdown，在侧栏选择内容类型与平台，再把发布任务交给同一个本机后端。
+
+### 浏览器扩展
+
+<p align="center">
+  <img src="assets/06-browser-extension-connected.png" width="640" alt="九漾 Onda 浏览器扩展已连接，Chrome 由本机宿主验证，可以接收发布任务" />
+</p>
+
+Chrome 与 Edge 共用一个 MV3 扩展。扩展通过 Native Messaging 自动发现本机 Onda 并连接，不需要复制 Chrome profile，也不需要输入地址或配对码。
+
 ## 当前状态
 
-Markdown 直编与独立本机后端已经落地；旧平台 CDP 逻辑仍在按扩展驱动逐步迁移：
+Markdown 直编、独立本机后端和浏览器扩展发布链路已经落地；平台页面驱动与真机验收仍在持续补齐：
 
 | 能力 | 状态 |
 |---|---|
@@ -32,7 +75,7 @@ Markdown 直编与独立本机后端已经落地；旧平台 CDP 逻辑仍在按
 | Obsidian | 直接编辑 Markdown，发布和任务经本机 API |
 | 桌面 | Electron 同时托管 API 与 Web |
 | CLI | 按需启动，通过本机 API 查询平台能力、发布 Markdown、跟踪任务并使用豆包生图 |
-| 浏览器扩展 | Native Messaging 自动发现/配对、连接、任务协议和 popup 已完成；平台页面驱动仍迁移中 |
+| 浏览器扩展 | Chrome / Edge MV3 扩展、Native Messaging 自动连接、账号检测、发布任务和 popup 已完成；平台真机验收持续进行 |
 
 目标架构和迁移边界见 [`docs/design/architecture.md`](docs/design/architecture.md)。
 

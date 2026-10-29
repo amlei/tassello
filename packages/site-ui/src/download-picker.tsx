@@ -1,7 +1,7 @@
 "use client";
 
 import { Accordion, Button, Link } from "@heroui/react";
-import { Download } from "reicon-react";
+import { Download, Puzzle } from "reicon-react";
 import NextLink from "next/link";
 import React from "react";
 import { ChromeIcon, EdgeIcon } from "./browser-icons";
@@ -30,8 +30,6 @@ const DOWNLOAD_CARDS = [
 ] as const;
 
 const RELEASES_URL = "https://github.com/amlei/tassello/releases";
-const CHROME_INSPECT_URL = "chrome://inspect/#remote-debugging";
-const EDGE_INSPECT_URL = "edge://inspect/#remote-debugging";
 
 function getWebGLRenderer(): string {
   try {
@@ -118,9 +116,9 @@ export function DownloadPicker() {
     <>
       <div className="download-hero">
         <div>
-          <p className="eyebrow">桌面工作台 · Obsidian 插件 v{releaseVersion}</p>
+          <p className="eyebrow">桌面工作台 · Obsidian 插件 · 浏览器扩展 v{releaseVersion}</p>
           <h1 id="download-title">下载 <em>Onda</em>，<br />让发布更有序。</h1>
-          <p className="subtitle">桌面工作台与 Obsidian 插件的官方入口。桌面安装包按系统芯片推荐，Obsidian 插件复制到 Vault 后启用。</p>
+          <p className="subtitle">桌面工作台、Obsidian 插件和 Chrome / Edge 发布扩展的官方入口。三者共用本机后端与同一条浏览器发布链路。</p>
 
           <div className="download-action-row">
             <Button
@@ -139,11 +137,15 @@ export function DownloadPicker() {
             <NextLink className="download-secondary" href="#obsidian-download">
               安装 Obsidian 插件
             </NextLink>
+            <NextLink className="download-secondary" href="#extension-download">
+              安装浏览器扩展
+            </NextLink>
           </div>
 
           <div className="download-meta">
             <span className="download-version-pill">桌面 v{releaseVersion}</span>
-            <span className="download-version-pill">插件 v{releaseVersion}</span>
+            <span className="download-version-pill">Obsidian v{releaseVersion}</span>
+            <span className="download-version-pill">扩展 v{releaseVersion}</span>
             <NextLink href="/changelog">更新日志</NextLink>
             <Link className="download-external-link" href={RELEASES_URL} target="_blank" rel="noopener">
               GitHub Releases
@@ -159,7 +161,7 @@ export function DownloadPicker() {
           <span className="download-surface-chip">Desktop</span>
           <div className="download-obsidian-shot">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={assetUrl("/assets/screenshots/obsidian-publisher-4k.png")} alt="" width={3840} height={2400} />
+            <img src={assetUrl("/assets/screenshots/07-obsidian-publish-image.png")} alt="" width={1716} height={1606} />
           </div>
           <span className="download-surface-chip obsidian">Obsidian</span>
         </div>
@@ -169,7 +171,7 @@ export function DownloadPicker() {
         <div className="download-picker-head">
           <div>
             <h2>选择获取方式</h2>
-            <p className="section-copy">桌面安装包按系统架构区分；Obsidian 插件目前通过插件目录手动安装。</p>
+            <p className="section-copy">桌面安装包按系统架构区分；Obsidian 插件通过插件目录安装；浏览器扩展由桌面端连接并自动完成本机配对。</p>
           </div>
         </div>
 
@@ -229,10 +231,10 @@ export function DownloadPicker() {
               <span className="download-version-pill">v{releaseVersion}</span>
             </div>
             <h3>Obsidian 插件</h3>
-            <p>插件目前是桌面端 Obsidian 插件，安装后从命令或侧栏打开 Publisher。</p>
+            <p>把当前 Vault 中的 Markdown 交给本机发布服务，发布状态和任务与桌面工作台共用。</p>
 
             <Accordion className="download-guide" hideSeparator>
-              <Accordion.Item id="operation-guide">
+              <Accordion.Item id="obsidian-operation-guide">
                 <Accordion.Heading>
                   <Accordion.Trigger className="download-guide-trigger">
                     操作方法
@@ -242,32 +244,8 @@ export function DownloadPicker() {
                   <Accordion.Body className="download-guide-body">
                     <p>将插件目录复制到你的 Vault，然后启用 <strong>Tassello Publisher</strong>。</p>
                     <code>.obsidian/plugins/tassello-publisher/</code>
-                    <p>授权前，先在浏览器打开 Remote debugging，并允许当前浏览器实例被外部应用控制。</p>
-                    <div className="download-browser-actions">
-                      <Link
-                        className="download-browser-link chrome"
-                        href={CHROME_INSPECT_URL}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        <ChromeIcon size={16} />
-                        Chrome
-                      </Link>
-                      <Link
-                        className="download-browser-link edge"
-                        href={EDGE_INSPECT_URL}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        <EdgeIcon size={16} />
-                        Edge
-                      </Link>
-                    </div>
-                    <figure className="download-chrome-shot">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={assetUrl("/assets/screenshots/chrome-remote-debugging.png")} alt="Chrome Remote debugging 页面，Allow remote debugging for this browser instance 已勾选" width={1472} height={802} decoding="async" />
-                      <figcaption>在 Chrome 中勾选 Allow remote debugging，随后回到 Obsidian 完成连接。Edge 使用相同地址。</figcaption>
-                    </figure>
+                    <p>保持九漾 Onda 运行，然后在笔记右侧打开 <strong>九漾 Onda</strong> 面板。插件会通过本机 API 读取平台能力与账号状态。</p>
+                    <p>选择内容类型和发布平台后创建任务；需要人工确认的平台会停在平台页面，不会由插件复制 Cookie 或维护第二套浏览器连接。</p>
                   </Accordion.Body>
                 </Accordion.Panel>
               </Accordion.Item>
@@ -275,6 +253,57 @@ export function DownloadPicker() {
 
             <div className="download-github">
               <span>获取插件文件与安装说明</span>
+              <Link className="download-external-link strong" href={RELEASES_URL} target="_blank" rel="noopener">
+                GitHub Releases →
+              </Link>
+            </div>
+          </article>
+
+          <article className="download-surface" id="extension-download">
+            <div className="download-surface-top">
+              <span className="download-surface-icon" aria-hidden="true">
+                <Puzzle size={24} strokeWidth={1.8} />
+              </span>
+              <span className="download-version-pill">v{releaseVersion}</span>
+            </div>
+            <h3>浏览器扩展</h3>
+            <p>使用日常 Chrome 或 Edge 中的登录态发布。桌面工作台、Obsidian 和 CLI 共用这一条执行通道。</p>
+
+            <Accordion className="download-guide" hideSeparator>
+              <Accordion.Item id="extension-operation-guide">
+                <Accordion.Heading>
+                  <Accordion.Trigger className="download-guide-trigger">
+                    安装与连接
+                  </Accordion.Trigger>
+                </Accordion.Heading>
+                <Accordion.Panel className="download-guide-panel">
+                  <Accordion.Body className="download-guide-body">
+                    <p>打开九漾 Onda 的 <strong>设置 → 基础设置 → 浏览器扩展</strong>，选择 Chrome 或 Edge。</p>
+                    <p>应用会打开对应浏览器的安装入口。安装完成后，扩展通过 Native Messaging 自动发现本机服务并连接。</p>
+                    <p>无法访问扩展商店时，从 GitHub Releases 下载并解压扩展包，在开发者模式中“加载已解压的扩展程序”。</p>
+                    <code>chrome://extensions · edge://extensions</code>
+                    <div className="download-browser-actions" aria-label="支持的浏览器">
+                      <span className="download-browser-link chrome">
+                        <ChromeIcon size={16} />
+                        Chrome
+                      </span>
+                      <span className="download-browser-link edge">
+                        <EdgeIcon size={16} />
+                        Edge
+                      </span>
+                    </div>
+                    <figure className="download-extension-shot">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={assetUrl("/assets/screenshots/06-browser-extension-connected.png")} alt="九漾 Onda 浏览器扩展已连接，可以接收发布任务" width={708} height={510} decoding="async" />
+                      <figcaption>连接成功后，popup 会显示当前浏览器与任务通道状态。</figcaption>
+                    </figure>
+                  </Accordion.Body>
+                </Accordion.Panel>
+              </Accordion.Item>
+            </Accordion>
+
+            <div className="download-github">
+              <span>获取扩展包与版本说明</span>
               <Link className="download-external-link strong" href={RELEASES_URL} target="_blank" rel="noopener">
                 GitHub Releases →
               </Link>
