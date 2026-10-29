@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>九漾 Onda 发布驱动测试</title>
+    <style>
+      body { margin: 32px; font: 14px/1.6 -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif; }
+      h1 { font-size: 20px; }
+      button { margin: 0 8px 8px 0; padding: 8px 12px; }
+      pre { max-width: 960px; padding: 16px; overflow: auto; background: #f4f4f2; white-space: pre-wrap; }
+    </style>
+  </head>
+  <body>
+    <h1>九漾 Onda 发布驱动测试</h1>
+    <p>仅在本地开发扩展中访问。测试会创建平台草稿，但不会点击最终发布。</p>
+    <div id="actions">
+      <button data-case="toutiao-article">头条号文章 + 图片</button>
+      <button data-case="toutiao-image">头条号微头条 + 图片</button>
+      <button data-case="toutiao-video">头条号视频</button>
+      <button data-case="toutiao-audio">头条号音频信息</button>
+      <button data-case="baijiahao-article">百家号图文 + 图片</button>
+      <button data-case="baijiahao-image">百家号动态 + 图片</button>
+      <button data-case="baijiahao-video">百家号视频</button>
+      <button data-case="verify-toutiao">验证头条号账号</button>
+      <button data-case="verify-baijiahao">验证百家号账号</button>
+      <button data-case="inspect-baijiahao-title">检查百家号标题编辑器</button>
+    </div>
+    <pre id="output">等待测试</pre>
+    <script type="module" src="./e2e-browser.js"></script>
+  </body>
+</html>

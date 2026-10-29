@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "bun run scripts/build.ts",
+    "build:e2e": "bun build scripts/e2e-browser.ts --outdir dist --target browser --format esm && cp scripts/e2e-browser.html dist/e2e-browser.html",
     "dev": "bun run scripts/build.ts --watch",
     "package": "bun run scripts/package.ts"
   },

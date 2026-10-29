@@ -772,12 +772,12 @@ export function SettingsSheet({
                                   ? { background: p.color, color: p.fg || "#fff" }
                                   : { background: `color-mix(in srgb, ${p.color} 18%, transparent)`, color: p.fg ? "var(--color-ink)" : p.color };
                               return (
-                                <span key={p.id} title={p.name + (off ? " · 账号未连接" : on ? ` · 已是${t.zh}的默认平台` : ` · 点一下设为${t.zh}的默认平台`)}>
+                                <span key={p.id} title={`${p.name} · ${p.contentLabels?.[k] ?? t.zh}${off ? " · 账号未连接" : on ? ` · 已是${t.zh}的默认平台` : ` · 点一下设为${t.zh}的默认平台`}`}>
                                   <Button
                                     className="relative flex h-[38px] w-[38px] items-center justify-center rounded-[12px] p-0"
                                     style={skin}
                                     onPress={() => (off && p.status === "active" ? onOpenLogin(p.id) : onToggleDefault(k, p.id))}
-                                    aria-label={p.name}
+                                    aria-label={`${p.name} ${p.contentLabels?.[k] ?? t.zh}`}
                                   >
                                     <PlatformMark id={p.id} char={p.char} size={20} imgScale={1.4} tone={off ? "off" : on ? "lit" : "dim"} className="m-0 h-5 w-5" />
                                     {on && !off && <span className="absolute -right-[5px] -top-[5px] flex h-4 w-4 items-center justify-center rounded-[5px] bg-accent text-white"><Check size={9} strokeWidth={4} /></span>}

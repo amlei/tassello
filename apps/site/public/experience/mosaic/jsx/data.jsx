@@ -49,6 +49,10 @@ function supportsType(platform, type) {
   return platform.supports?.includes(type) ?? false;
 }
 
+function contentLabelOf(platform, type) {
+  return platform?.contentLabels?.[type] || TYPES[type]?.zh || type;
+}
+
 function channelsOf(platform) {
   return platform.account?.channels || [];
 }
@@ -66,14 +70,13 @@ function channelsOf(platform) {
  *  · B站 —— 视频投稿 / 专栏文章 / 动态图文；音频分区已停止投稿（改为 BGM 投稿）
  *  · 知乎 —— 文章（专栏）/ 想法（图文）/ 视频；官方不支持上传音频
  *  · 豆瓣 —— 日记（长文）/ 广播与相册（图文）；不支持直发视频与音频
- *  · 头条号 —— 创作栏含 文章 / 视频 / 微头条 / 问答（自家也有音频，但音频出口统一交给播客平台）
- *  · 百家号 —— 图文 / 图集 / 视频 / 动态 / 直播（同上：音频不列）
+ *  · 头条号 —— 文章 / 视频 / 音频 / 微头条
+ *  · 百家号 —— 图文 / 视频 / 动态
  *  · 抖音 —— 视频 / 图文；2025 年底上线长图文（文章，最多 8000 字、30 图）；音频只作背景音
  *  · 小宇宙 / 喜马拉雅 / 荔枝播客 —— 音频出口：收声音（喜马拉雅在自家后台另有视频形态，
  *    但对本工作台只当音频目的地用），因此 supports 只写 audio
  *
- * 一条产品判断：音频＝播客，所以「audio」只留给播客平台与微信公众号（语音），
- * 综合平台的音频能力（X 语音推文、头条音频、百家号音频）不在这里当出口。
+ * 产品判断：音频不再等同于播客；头条号「音频」是独立发布出口，百家号当前不列音频。
  *
  * state：账号凭据的获取状态 —— ok = 已获取，fail = 获取失败（可重新获取）
  * account：拿到的是哪个账号 —— 「已获取」本身说明不了会发到哪儿，
@@ -100,10 +103,12 @@ const PLATFORMS = [
     account: { name: "九漾 Onda", kind: "机构号授权", uid: "zhuanlan.zhihu.com/people/onda", until: "2026-12-08", checked: "09-16 08:30", lands: "存成一篇专栏草稿，发布按钮在知乎后台" } },
   { id: "douban",    name: "豆瓣",       char: "豆", color: "#2E963D", state: "ok",   link: "www.douban.com/note/",       supports: ["article", "image"],
     account: { name: "九漾", kind: "个人号", uid: "豆瓣 ID 197364821", until: "2026-11-11", checked: "09-13 19:22", lands: "直接发成一篇日记" } },
-  { id: "toutiao",   name: "头条号",     char: "头", color: "#F04142", state: "ok",   link: "www.toutiao.com/article/",   supports: ["article", "image", "video"],
-    account: { name: "九漾 Onda", kind: "头条号", uid: "头条号 ID 1736…", until: "2026-12-20", checked: "09-16 10:15", lands: "进创作栏草稿，需要你手动点发布" } },
+  { id: "toutiao",   name: "头条号",     char: "头", color: "#F04142", state: "ok",   link: "www.toutiao.com/article/",   supports: ["article", "image", "video", "audio"],
+    contentLabels: { article: "文章", image: "微头条", video: "视频", audio: "音频" },
+    account: { name: "九漾 Onda", kind: "头条号", uid: "头条号 ID 1736…", until: "2026-12-20", checked: "09-16 10:15", lands: "文章、视频和微头条可存草稿；音频填好专辑信息后，由你上传音频并确认发布" } },
   { id: "baijiahao", name: "百家号",     char: "百", color: "#2932E1", state: "ok",   link: "baijiahao.baidu.com/s?id=",  supports: ["article", "image", "video"],
-    account: { name: "九漾Onda", kind: "百家号", uid: "百家号 ID 9f3c…", until: "2027-02-01", checked: "09-16 10:20", lands: "直接发布，发完能在百家号后台撤下" } },
+    contentLabels: { article: "图文", image: "动态", video: "视频" },
+    account: { name: "九漾Onda", kind: "百家号", uid: "百家号 ID 9f3c…", until: "2027-02-01", checked: "09-16 10:20", lands: "图文和视频存入草稿；动态填好后停在发布前，由你在百家号后台确认" } },
   { id: "douyin",    name: "抖音",       char: "抖", color: "#25F4EE", fg: "#16130E", state: "ok", link: "www.douyin.com/video/", supports: ["article", "image", "video"],
     account: { name: "九漾 Onda", kind: "企业号", uid: "抖音号 onda2026", until: "2026-10-05", checked: "09-12 16:40", lands: "传成草稿，发布要你在抖音 App 里点" } },
   /* 四个音频出口：只收声音，不收图文/视频 —— 音频稿的发布面就是靠它们撑起来的 */

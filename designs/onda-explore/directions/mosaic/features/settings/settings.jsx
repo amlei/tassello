@@ -273,6 +273,7 @@ function accountPhaseCopy(p) {
   return ACCOUNT_PHASE_COPY[accountPhase(p)] || ACCOUNT_PHASE_COPY.failed;
 }
 function AccountRow({ p, active, busy, onToggle }) {
+  busy = busy || accountPhase(p) === "checking";
   const off = accountPhase(p) !== "connected";
   const a = p.account;
   const [chip, reason] = accountPhaseCopy(p);
@@ -577,8 +578,8 @@ function SettingsSheet({ platforms, defaults, rss, onRssChange, extension, exten
                                     className={"m-platico sm" + (on ? " sel" : "") + (off ? " muted" : "")}
                                     style={skin}
                                     onClick={() => (off ? onOpenLogin(p.id) : onToggle(k, p.id))}
-                                    title={p.name + (off ? " · 账号未连接，点一下可修复" : on ? " · 已是" + t.zh + "的默认平台" : " · 点一下设为" + t.zh + "的默认平台")}
-                                    aria-label={p.name}
+                                    title={p.name + " · " + contentLabelOf(p, k) + (off ? " · 账号未连接，点一下可修复" : on ? " · 已是" + t.zh + "的默认平台" : " · 点一下设为" + t.zh + "的默认平台")}
+                                    aria-label={p.name + " " + contentLabelOf(p, k)}
                                   >
                                     {p.char}
                                     {on && !off && <span className="m-platck"><IcCheck size={9} /></span>}
@@ -610,7 +611,7 @@ function SettingsSheet({ platforms, defaults, rss, onRssChange, extension, exten
               p={p}
               side={pop.side}
               style={{ top: pop.top, left: pop.left, width: POP_W }}
-              busy={false}
+              busy={accountPhase(p) === "checking"}
               onOpenLogin={() => onOpenLogin(p.id)}
               onVerify={() => onVerify(p.id)}
               onClose={() => setPop(null)}

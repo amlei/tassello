@@ -56,6 +56,8 @@ export type PlatformMeta = {
   /** 登录页地址：导入的登录态失效时，「重新获取」打开它让用户在应用浏览器里登录 */
   loginUrl?: string;
   supports: ContentType[];
+  /** 平台内对内容形态的专用名称，例如头条号 image = 微头条。 */
+  contentLabels?: Partial<Record<ContentType, string>>;
   authMode: AuthMode;
   /** true = 适配器可自动点发布；false = 停在人工确认 */
   autoSubmit: boolean;

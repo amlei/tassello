@@ -125,6 +125,8 @@ type ExtensionLoginOpened = {
 | X | `x.com/home` | account switcher / avatar test id | 无 |
 | 知乎 | `www.zhihu.com` | `/api/v4/me` | 无 |
 | 豆瓣 | `www.douban.com` | `__INIT_STATE__`、`_GLOBAL_NAV`、导航文案 | 无 |
+| 头条号 | `mp.toutiao.com/profile_v4/index` | `/c/user/<uid>/` 账号链接、账号名和头像 | 无 |
+| 百家号 | `baijiahao.baidu.com/builder/rc/home` | `window.user_id`、账号菜单问候语和头像 | 无 |
 | 小宇宙 | `podcaster.xiaoyuzhoufm.com` | `/v1/profile/get` + `/v1/podcast/list` | 节目 |
 | 喜马拉雅 | `studio.ximalaya.com` | `/api/home/userInfo` + 专辑列表 | 专辑 |
 | 荔枝播客 | `nj.lizhi.fm` | `getCurrentUserInfo` + `playsheet/list` | 播单 |
@@ -142,6 +144,11 @@ type ExtensionLoginOpened = {
 
 ```text
 https://passport.weibo.com/*
+https://mp.toutiao.com/*
+https://www.toutiao.com/*
+https://sso.toutiao.com/*
+https://baijiahao.baidu.com/*
+https://passport.baidu.com/*
 https://web.okjike.com/*
 https://podcaster.xiaoyuzhoufm.com/*
 https://studio.ximalaya.com/*
@@ -254,10 +261,10 @@ Web 编辑器、内容库、发布队列、导航角标和设置页都消费同�
 
 ## 11. 算法与资源
 
-设 `P` 为 active 扩展平台数，`C` 为同时验证数，当前 `C = 1`，`P = 11`。
+设 `P` 为 active 扩展平台数，`C` 为同时验证数，当前 `C = 1`，`P = 13`。
 
 - 时间复杂度：一次全量扫描为 `Σ O(D_i + R_i)`，其中 `D_i` 是第 `i` 个平台页面 DOM 上限，`R_i` 是网络响应量；在平台数上为 `O(P)`，不随 Vault 文章数或媒体大小增长。
-- 最坏时间：单平台等待上限 30 秒，扩展请求上限 45 秒；11 个平台串行最坏约 495 秒。用户主动登录耗时不计入。
+- 最坏时间：单平台等待上限 30 秒，扩展请求上限 45 秒；13 个平台串行最坏约 585 秒。用户主动登录不计入。
 - 网络：每平台一次页面加载和 1–2 个账号接口请求；典型账号接口响应小于 100 KiB。页面资源由平台站点决定，X 等重页面最坏可显著高于 5 MiB，必须按实际站点观测，不能承诺固定上限。
 - 内存：扩展同时最多保有一个验证页面；账号 profile 上限 64 KiB，待处理账号 Promise 为 `O(P)` 个轻量对象。
 - 磁盘：每个平台一次原子 JSON 写入，典型小于 100 KiB；不会扫描或复制 Markdown、图片、音频、视频。

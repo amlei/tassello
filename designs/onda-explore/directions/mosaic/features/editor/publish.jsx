@@ -48,14 +48,15 @@ function PublishSheet({ post, platforms, rss, extensionConnected, onToggle, onIm
           {directSupported.map((p) => {
             const problem = problemOf(p);
             const failed = p.state !== "ok";
+            const contentLabel = contentLabelOf(p, post.type);
             return (
               <button
                 key={p.id}
                 className={"m-platico" + (p.selected ? " sel" : "") + (failed ? " fail" : "")}
                 style={skinOf(p)}
                 onClick={() => (failed ? onImport() : onToggle(p.id))}
-                title={p.name + (failed ? " · 账号未连接，点一下可修复" : problem ? " · " + problem : "")}
-                aria-label={p.name}
+                title={p.name + " · " + contentLabel + (failed ? " · 账号未连接，点一下可修复" : problem ? " · " + problem : "")}
+                aria-label={p.name + " " + contentLabel}
               >
                 <PlatformMark
                   id={p.id}

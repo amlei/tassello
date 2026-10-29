@@ -10,6 +10,8 @@ describe("正式发布驱动注册表", () => {
       "x",
       "zhihu",
       "qingting",
+      "toutiao",
+      "baijiahao",
       "douban",
       "jike",
       "xiaoyuzhou",

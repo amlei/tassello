@@ -37,6 +37,7 @@ export function PublishSheet({
     p.authMode !== "rss-downstream" && !rssClaimedIds.has(p.id)
   );
   const failed = (p: PlatformDTO) => p.sync.phase !== "connected";
+  const contentLabel = (p: PlatformDTO) => p.contentLabels?.[post.type] ?? TYPE_META[post.type].zh;
   const selected = directSupported.filter((p) => selectedIds.includes(p.id) && !failed(p));
   /* 多频道平台的目标行始终展示；未选平台时置灰并禁用选择。 */
   const channelTargets = directSupported.filter((p) => (p.account?.channels?.length ?? 0) > 1);
@@ -85,7 +86,7 @@ export function PublishSheet({
                 const off = failed(p);
                 const on = selectedIds.includes(p.id);
                 return (
-                  <span key={p.id} title={p.name + (off ? " · 账号未连接，点一下可修复" : "")} className="inline-flex">
+                  <span key={p.id} title={`${p.name} · ${contentLabel(p)}${off ? " · 账号未连接，点一下可修复" : ""}`} className="inline-flex">
                     <Button
                       className={
                         "relative flex h-14 w-14 items-center justify-center rounded-[16px] p-0 shadow-[0_1px_2px_rgba(15,15,15,0.04)] transition-[translate,transform,box-shadow] duration-150 data-[off=true]:shadow-none" +
@@ -97,7 +98,7 @@ export function PublishSheet({
                         if (!off) return onToggle(p.id);
                         onOpenLogin(p.id);
                       }}
-                      aria-label={p.name}
+                      aria-label={`${p.name} ${contentLabel(p)}`}
                     >
                       <PlatformMark id={p.id} char={p.char} size={24} imgScale={1.4} tone={off ? "off" : on ? "lit" : "dim"} className="m-0 h-6 w-6" />
                       {on && !off && (

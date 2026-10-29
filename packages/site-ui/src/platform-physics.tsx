@@ -44,10 +44,10 @@ const PLATFORM_TOKENS: PlatformToken[] = [
   { id: "ximalaya", name: "喜马拉雅", color: "#F86442", shape: "shard", status: "active" },
   { id: "qingting", name: "蜻蜓 FM", color: "#F04438", shape: "blob", status: "active" },
   { id: "lizhi", name: "荔枝播客", color: "#FF5E7E", shape: "wave", status: "active" },
+  { id: "toutiao", name: "头条号", color: "#F04142", shape: "shard", status: "active" },
+  { id: "baijiahao", name: "百家号", color: "#2932E1", shape: "triangle", status: "active" },
   { id: "douyin", name: "抖音", color: "#161823", shape: "triangle", status: "planned" },
   { id: "bili", name: "B站", color: "#00A1D6", shape: "hex", status: "planned" },
-  { id: "toutiao", name: "头条号", color: "#FF0000", shape: "shard", status: "planned" },
-  { id: "baijiahao", name: "百家号", color: "#2932E1", shape: "triangle", status: "planned" },
 ];
 
 const createShapes = (): Record<ShapeName, Path2D> => {

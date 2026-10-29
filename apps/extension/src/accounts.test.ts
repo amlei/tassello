@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { ACCOUNT_PLATFORM_IDS, accountResult, normalizeAccountProbe } from "./accounts";
+import {
+  ACCOUNT_PLATFORM_IDS,
+  accountResult,
+  normalizeAccountProbe,
+  parseBaijiaAccountName,
+  parseToutiaoUserId,
+} from "./accounts";
 
 describe("浏览器扩展账号验证器", () => {
   test("覆盖当前 active 的平台", () => {
@@ -15,6 +21,8 @@ describe("浏览器扩展账号验证器", () => {
       "ximalaya",
       "zhihu",
       "qingting",
+      "toutiao",
+      "baijiahao",
     ];
     expect(new Set(ACCOUNT_PLATFORM_IDS)).toEqual(new Set(expected));
   });
@@ -52,5 +60,13 @@ describe("浏览器扩展账号验证器", () => {
       expect(probe.profile.uid).toBe("391908628");
       expect(probe.profile.channels[0]?.id).toBe("81728805");
     }
+  });
+
+  test("头条号用户链接和百家号问候语可归一化为稳定身份", () => {
+    expect(parseToutiaoUserId("//www.toutiao.com/c/user/2979050131305220/?enter_from=mp_profile"))
+      .toBe("2979050131305220");
+    expect(parseToutiaoUserId("https://mp.toutiao.com/profile_v4/index")).toBeNull();
+    expect(parseBaijiaAccountName("晚上好,相向行")).toBe("相向行");
+    expect(parseBaijiaAccountName("普通文案")).toBeNull();
   });
 });

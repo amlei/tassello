@@ -16,9 +16,9 @@ git show HEAD:designs/onda-explore/directions/mosaic/jsx/home.jsx > /tmp/home.js
 ## 跑起来
 
 ```bash
-python3 -m http.server 4311 --directory designs
-# http://localhost:4311/onda-explore/directions/mosaic/index.html
-# 对比画布：http://localhost:4311/onda-explore/Explore.html
+bunx --bun serve designs -l 4312
+# http://127.0.0.1:4312/onda-explore/directions/mosaic/index.html
+# 对比画布：http://127.0.0.1:4312/onda-explore/Explore.html
 ```
 
 原型是 React + Babel 多文件形式（`components/**`、`features/**`、`mock/**`、`screens/**`），必须走 HTTP，`file://` 打不开。
@@ -166,4 +166,23 @@ python3 -m http.server 4311 --directory designs
     一级 28px/700（栏目名、正在编辑的稿子），二级 22px/700（弹层标题），行/格子标题 15–17px/700。
 15. 主题切换器与实现（`apps/web/features/settings/theme-switcher.tsx`）同源：localStorage key 同为 `onda-theme`，
     「跟随系统」由首屏脚本常驻监听，切到浅/深只落偏好。
-16. 音频＝播客：`audio` 只留给播客平台（小宇宙 / 喜马拉雅 / 荔枝播客）和微信公众号的语音消息。
+16. 头条号与百家号按平台真实入口命名：头条号的 `image` 显示为「微头条」，并新增独立 `audio` 出口；
+    百家号的 `article` 显示为「图文」、`image` 显示为「动态」。发布弹层的图标按钮标题与默认目标选择器都使用这组名称。
+
+## 头条号 / 百家号原型验收
+
+启动原型后可从设置页检查两个新平台。账号连接态和异常态可直接通过查询参数复现：
+
+```text
+?settings=1&platform=toutiao&state=connected
+?settings=1&platform=toutiao&state=checking
+?settings=1&platform=toutiao&state=needs_login
+?settings=1&platform=baijiahao&state=failed
+?settings=1&extension=error
+```
+
+- 正常态：两个平台均可选，名称分别为文章 / 微头条 / 视频 / 音频与图文 / 动态 / 视频。
+- 等待态：平台账号行显示「检查中…」，不可误选。
+- 失败态：登录失效和页面结构失败分别给出可重试入口。
+- 权限/连接异常态：浏览器扩展离线时发布动作被阻断，并显示安装或连接入口。
+- 空态：筛选尚无内容的类型，以及无发布记录时的队列空态。

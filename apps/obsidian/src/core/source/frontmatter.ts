@@ -1,5 +1,5 @@
 import { parse as parseYaml } from "yaml";
-import type { ContentType, PlatformId } from "../types";
+import { PLATFORMS, type ContentType, type PlatformId } from "../types";
 
 export type NoteFrontmatter = {
   id?: string;
@@ -16,7 +16,7 @@ export type SplitNote = {
 };
 
 const CONTENT_TYPES = new Set<ContentType>(["article", "image", "video", "audio"]);
-const PLATFORM_IDS = new Set<PlatformId>(["weibo", "zhihu", "xhs", "jike", "douban", "x"]);
+const PLATFORM_IDS = new Set<PlatformId>(PLATFORMS.map((platform) => platform.id));
 
 /** Obsidian properties may serialize a nested value as a JSON/YAML string; accept both forms. */
 export function normalizeTasselloConfig(raw: unknown): Record<string, unknown> {

@@ -24,6 +24,12 @@ describe("Obsidian property compatibility", () => {
     expect(parsed.frontmatter.type).toBe("article");
     expect(parsed.frontmatter.platforms).toEqual(["zhihu"]);
   });
+
+  test("保留头条号与百家号默认平台", () => {
+    const raw = `---\ntassello:\n  type: article\n  platforms: [toutiao, baijiahao]\n---\n\n正文`;
+    const parsed = splitNote(raw);
+    expect(parsed.frontmatter.platforms).toEqual(["toutiao", "baijiahao"]);
+  });
 });
 
 describe("ensureTasselloMetadata", () => {

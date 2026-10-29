@@ -33,6 +33,18 @@ const TAB_READY_TIMEOUT_MS = 10_000;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+export function parseToutiaoUserId(href: string | null | undefined): string | null {
+  if (!href) return null;
+  const match = href.match(/\/c\/user\/(\d+)(?:[/?#]|$)/);
+  return match?.[1] ?? null;
+}
+
+export function parseBaijiaAccountName(value: string | null | undefined): string | null {
+  const text = value?.replace(/\s+/g, " ").trim() ?? "";
+  const match = text.match(/^(?:上午好|下午好|晚上好|你好)[,，]\s*(.+)$/);
+  return match?.[1]?.trim() || null;
+}
+
 function httpUrl(value: unknown): string | null {
   if (typeof value !== "string" || !value.trim()) return null;
   try {
@@ -415,6 +427,74 @@ const ACCOUNT_PLATFORMS: Record<string, AccountPlatform> = {
       if (raw.state === "needs_login") return raw;
       if (raw.state === "pending") return raw;
       return normalizeAccountProbe(raw);
+    },
+  },
+
+  toutiao: {
+    verifyUrl: "https://mp.toutiao.com/profile_v4/index",
+    loginUrl: "https://mp.toutiao.com/",
+    async probe(tabId) {
+      const raw = await runInPage(tabId, async () => {
+        const text = document.body?.innerText ?? "";
+        if (/passport|login|sso/i.test(location.hostname + location.pathname)) {
+          return { state: "needs_login" as const };
+        }
+        const link = Array.from(document.querySelectorAll("a"))
+          .find((candidate) => /\/c\/user\/\d+/.test(candidate.getAttribute("href") ?? ""));
+        if (!link) {
+          if (/扫码登录|手机号登录|验证码登录/.test(text)) return { state: "needs_login" as const };
+          return { state: "pending" as const };
+        }
+        return {
+          state: "identity" as const,
+          uid: link.getAttribute("href"),
+          name: link.querySelector(".auth-avator-name")?.textContent?.trim() ?? link.textContent?.trim(),
+          avatarUrl: (link.querySelector("img.auth-avator-img") as HTMLImageElement | null)?.src ?? null,
+        };
+      });
+      if (raw.state === "needs_login" || raw.state === "pending") return raw;
+      const uid = parseToutiaoUserId(typeof raw.uid === "string" ? raw.uid : null);
+      if (!uid) return { state: "failed", error: "头条号已登录但没有返回账号标识" };
+      return normalizeAccountProbe({ ...raw, uid });
+    },
+  },
+
+  baijiahao: {
+    verifyUrl: "https://baijiahao.baidu.com/builder/rc/home",
+    loginUrl: "https://baijiahao.baidu.com/",
+    async probe(tabId) {
+      const raw = await runInPage(tabId, async () => {
+        if (/passport|login/i.test(location.hostname + location.pathname)) {
+          return { state: "needs_login" as const };
+        }
+        const globals = globalThis as typeof globalThis & { user_id?: unknown };
+        const uid = typeof globals.user_id === "string" || typeof globals.user_id === "number"
+          ? String(globals.user_id).trim()
+          : "";
+        if (!uid) {
+          const text = document.body?.innerText ?? "";
+          if (/登录百度账号|扫码登录|请登录/.test(text)) return { state: "needs_login" as const };
+          return { state: "pending" as const };
+        }
+        const avatarElement = document.querySelector('img[alt="头像"], [class*="portrait"]') as HTMLImageElement | null;
+        const avatar = avatarElement?.src ?? null;
+        let name: string | null = null;
+        if (avatarElement) {
+          avatarElement.closest(".user-avatar, [class*='avatar-inner']")?.dispatchEvent(
+            new MouseEvent("click", { bubbles: true, cancelable: true }),
+          );
+          await new Promise((resolve) => setTimeout(resolve, 150));
+          const accountLink = Array.from(document.querySelectorAll("a"))
+            .find((candidate) => /^(?:上午好|下午好|晚上好|你好)[,，]/.test((candidate.textContent ?? "").trim()));
+          name = accountLink?.textContent?.trim() ?? null;
+        }
+        return { state: "identity" as const, uid, name, avatarUrl: avatar };
+      });
+      if (raw.state === "needs_login" || raw.state === "pending") return raw;
+      return normalizeAccountProbe({
+        ...raw,
+        name: parseBaijiaAccountName(typeof raw.name === "string" ? raw.name : null),
+      });
     },
   },
 

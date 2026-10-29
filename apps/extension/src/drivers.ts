@@ -11,6 +11,8 @@ import { publishXiaoyuzhou } from "./drivers/xiaoyuzhou.ts";
 import { publishXimalaya } from "./drivers/ximalaya.ts";
 import { publishZhihu } from "./drivers/zhihu.ts";
 import { publishQingting } from "./drivers/qingting.ts";
+import { publishToutiao } from "./drivers/toutiao.ts";
+import { publishBaijiahao } from "./drivers/baijiahao.ts";
 
 export type PlatformDriver = (runtime: PublishRuntime) => Promise<ExtensionJobResult["result"]>;
 
@@ -25,6 +27,8 @@ export const drivers: Record<string, PlatformDriver> = {
   x: publishX,
   zhihu: publishZhihu,
   qingting: publishQingting,
+  toutiao: publishToutiao,
+  baijiahao: publishBaijiahao,
   douban: publishDouban,
   jike: publishJike,
   xiaoyuzhou: publishXiaoyuzhou,

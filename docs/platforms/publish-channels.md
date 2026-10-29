@@ -190,6 +190,13 @@ Channel 是一等模型，表示：
 | `weibo:image` | 微博 | `image` | 微博 / 图文 | active |
 | `jike:image` | 即刻 | `image` | 动态 / 图文 | active |
 | `douban:image` | 豆瓣 | `image` | 图文 | active |
+| `toutiao:article` | 头条号 | `article` | 文章 | active |
+| `toutiao:image` | 头条号 | `image` | 微头条 | active |
+| `toutiao:video` | 头条号 | `video` | 视频 | active |
+| `toutiao:audio` | 头条号 | `audio` | 音频 | active |
+| `baijiahao:article` | 百家号 | `article` | 图文 | active |
+| `baijiahao:image` | 百家号 | `image` | 动态 | active |
+| `baijiahao:video` | 百家号 | `video` | 视频 | active |
 | `wechat:article` | 公众号 | `article` | 公众号文章 | active |
 | `wechat:audio` | 公众号 | `audio` | 公众号音频 | active |
 

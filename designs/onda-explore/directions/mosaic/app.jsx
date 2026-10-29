@@ -96,6 +96,8 @@ function nowStamp() {
 
 function App() {
   const initialQuery = new URLSearchParams(window.location.search);
+  const demoPlatformId = initialQuery.get("platform");
+  const demoPlatformState = initialQuery.get("state");
   const [view, setView] = React.useState(initialQuery.get("view") === "queue" ? "queue" : "library"); // library | queue | editor
   const [scope, setScope] = React.useState("article"); // article | image | video | audio
   const [sort, setSort] = React.useState("recent");
@@ -105,7 +107,33 @@ function App() {
     bodyHtml: p.bodyHtml || mdToHtml(p.body || "", TYPES[p.type].color, p.images || []),
   })));
   const [editingId, setEditingId] = React.useState(null);
-  const [platforms, setPlatforms] = React.useState(() => PLATFORMS.map((p) => ({ ...p, selected: false })));
+  const [platforms, setPlatforms] = React.useState(() => PLATFORMS.map((p) => {
+    if (p.id !== demoPlatformId) return { ...p, selected: false };
+    if (demoPlatformState === "checking") {
+      return { ...p, selected: false, state: "ok", syncPhase: "checking" };
+    }
+    if (demoPlatformState === "needs_login") {
+      return {
+        ...p,
+        selected: false,
+        state: "fail",
+        syncPhase: "needs_login",
+        account: null,
+        accountError: "浏览器中未检测到登录态",
+      };
+    }
+    if (demoPlatformState === "failed") {
+      return {
+        ...p,
+        selected: false,
+        state: "fail",
+        syncPhase: "failed",
+        account: null,
+        accountError: "平台页面结构检查失败，请稍后重试",
+      };
+    }
+    return { ...p, selected: false, state: "ok", syncPhase: "connected" };
+  }));
   const [extension, setExtension] = React.useState(() => (
     initialQuery.get("extension") === "error"
       ? { ...EXTENSION, status: "disconnected", browser: null, clientId: null, lastSeen: "—" }
@@ -355,6 +383,8 @@ function App() {
       x: "https://x.com/",
       douban: "https://www.douban.com/",
       jike: "https://web.okjike.com/",
+      toutiao: "https://mp.toutiao.com/",
+      baijiahao: "https://baijiahao.baidu.com/",
       xiaoyuzhou: "https://www.xiaoyuzhoufm.com/",
       ximalaya: "https://www.ximalaya.com/",
       lizhi: "https://nj.lizhi.fm/",

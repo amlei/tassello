@@ -157,6 +157,32 @@ export async function clickText(
   }, { list, selector: options.selector, timeoutMs, exact: options.exact === true }, timeoutMs + 5_000);
 }
 
+export async function waitForEnabledButton(
+  tabId: number,
+  texts: string | string[],
+  timeoutMs = 60_000,
+): Promise<void> {
+  const list = typeof texts === "string" ? [texts] : texts;
+  const ready = await executeInPage(tabId, async ({ list, timeoutMs }) => {
+    const started = Date.now();
+    while (Date.now() - started < timeoutMs) {
+      const button = Array.from(document.querySelectorAll("button"))
+        .find((element) => {
+          const text = (element.textContent || "").trim();
+          const rect = element.getBoundingClientRect();
+          return rect.width > 0
+            && rect.height > 0
+            && !(element as HTMLButtonElement).disabled
+            && list.includes(text);
+        });
+      if (button) return true;
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    return false;
+  }, { list, timeoutMs }, timeoutMs + 5_000);
+  if (!ready) throw new Error(`等待按钮可点击超时：${list.join(" / ")}`);
+}
+
 export async function setControlValue(
   tabId: number,
   selector: string,
@@ -224,6 +250,24 @@ export async function setEditableText(
   }, { selector, value });
 }
 
+export async function clearEditable(tabId: number, selector: string): Promise<boolean> {
+  return await executeInPage(tabId, ({ selector }) => {
+    const element = document.querySelector(selector) as HTMLElement | null;
+    if (!element || !element.isContentEditable) return false;
+    element.focus();
+    document.execCommand("selectAll");
+    document.execCommand("delete");
+    if ((element.textContent ?? "").trim()) {
+      element.replaceChildren();
+      element.dispatchEvent(new InputEvent("input", {
+        bubbles: true,
+        inputType: "deleteContentBackward",
+      }));
+    }
+    return !(element.textContent ?? "").trim();
+  }, { selector });
+}
+
 export async function pasteInto(
   tabId: number,
   selector: string,
@@ -273,6 +317,73 @@ export async function pasteInto(
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
     return false;
+  }, { selector, text, html });
+}
+
+export async function replaceEditableHtml(
+  tabId: number,
+  selector: string,
+  text: string,
+  html?: string,
+): Promise<boolean> {
+  return await executeInPage(tabId, async ({ selector, text, html }) => {
+    const element = document.querySelector(selector) as HTMLElement | null;
+    if (!element) return false;
+    element.focus();
+    const clearSelection = window.getSelection();
+    const clearRange = document.createRange();
+    clearRange.selectNodeContents(element);
+    clearSelection?.removeAllRanges();
+    clearSelection?.addRange(clearRange);
+    document.execCommand("delete");
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    if ((element.textContent ?? "").trim()) {
+      element.replaceChildren();
+      element.dispatchEvent(new InputEvent("input", {
+        bubbles: true,
+        inputType: "deleteContentBackward",
+      }));
+    }
+    const transfer = new DataTransfer();
+    transfer.setData("text/plain", text);
+    if (html) transfer.setData("text/html", html);
+    element.dispatchEvent(new ClipboardEvent("paste", {
+      bubbles: true,
+      cancelable: true,
+      clipboardData: transfer,
+    }));
+    const expected = text.replace(/\s+/g, "").slice(0, 32);
+    const deadline = Date.now() + 3_000;
+    while (Date.now() < deadline) {
+      const actual = (element.textContent ?? "").replace(/\s+/g, "");
+      const first = expected ? actual.indexOf(expected) : -1;
+      if (!expected || (first >= 0 && actual.indexOf(expected, first + expected.length) < 0)) return true;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    const current = (element.textContent ?? "").replace(/\s+/g, "");
+    const first = expected ? current.indexOf(expected) : -1;
+    if (expected && (first < 0 || current.indexOf(expected, first + expected.length) >= 0)) {
+      element.replaceChildren();
+      const selection = window.getSelection();
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      if (html) document.execCommand("insertHTML", false, html);
+      else document.execCommand("insertText", false, text);
+      if (!html && !(element.textContent ?? "").includes(text)) element.textContent = text;
+      if (html && !(element.textContent ?? "").replace(/\s+/g, "").includes(expected)) {
+        element.innerHTML = html;
+      }
+    }
+    element.dispatchEvent(new InputEvent("input", {
+      bubbles: true,
+      inputType: "insertFromPaste",
+      data: text,
+    }));
+    const finalText = (element.textContent ?? "").replace(/\s+/g, "");
+    const finalFirst = expected ? finalText.indexOf(expected) : -1;
+    return !expected || (finalFirst >= 0 && finalText.indexOf(expected, finalFirst + expected.length) < 0);
   }, { selector, text, html });
 }
 

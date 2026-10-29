@@ -82,6 +82,7 @@ export type PlatformCapability = {
   fg?: string;
   glyph: string;
   supports: ContentType[];
+  contentLabels?: Partial<Record<ContentType, string>>;
   description: string;
   status: "active" | "planned";
   authMode: PlatformMeta["authMode"];
@@ -98,6 +99,7 @@ export const PLATFORMS: PlatformCapability[] = PLATFORM_METAS.map((meta) => ({
   fg: meta.fg,
   glyph: meta.char,
   supports: meta.supports,
+  contentLabels: meta.contentLabels,
   description: meta.lands,
   status: meta.status,
   authMode: meta.authMode,

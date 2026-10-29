@@ -310,8 +310,8 @@ function SettingsSheet({ platforms, defaults, onToggle, onImport, onVerify, impo
                               className={"m-platico sm" + (on ? " sel" : "") + (off ? " muted" : "")}
                               style={skin}
                               onClick={() => (off ? onImport() : onToggle(k, p.id))}
-                              title={p.name + (off ? " · 账号未连接，点一下可修复" : on ? " · 已是" + t.zh + "的默认平台" : " · 点一下设为" + t.zh + "的默认平台")}
-                              aria-label={p.name}
+                              title={p.name + " · " + contentLabelOf(p, k) + (off ? " · 账号未连接，点一下可修复" : on ? " · 已是" + t.zh + "的默认平台" : " · 点一下设为" + t.zh + "的默认平台")}
+                              aria-label={p.name + " " + contentLabelOf(p, k)}
                             >
                               {p.char}
                               {on && !off && <span className="m-platck"><IcCheck size={9} /></span>}
