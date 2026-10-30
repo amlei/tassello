@@ -5,7 +5,7 @@
  * 让最终产物只包含真实文件和目录。Elysia API 由独立 Bun 二进制提供，不再
  * 需要把 Prisma、libsql 或数据库运行时塞进 Web 产物。
  */
-import { cp, lstat, mkdir, readdir, readFile, realpath, readlink, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, readdir, readFile, realpath, readlink, rm, stat, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -24,21 +24,26 @@ await rm(outputDir, { recursive: true, force: true });
 
 async function copyDeref(src, dest, ancestors = new Set()) {
   const real = await realpath(src).catch(() => null);
-  if (!real || ancestors.has(real)) return;
+  if (!real || ancestors.has(real)) return false;
   const nextAncestors = new Set(ancestors);
   nextAncestors.add(real);
-  const entry = await lstat(real);
+  /* stat 跟随符号链接与 Windows junction，避免 lstat 把链接本体判成
+   * 既非目录也非文件而静默跳过 */
+  const entry = await stat(real).catch(() => null);
+  if (!entry) return false;
   if (entry.isDirectory()) {
     await mkdir(dest, { recursive: true });
     for (const name of await readdir(real)) {
       await copyDeref(path.join(real, name), path.join(dest, name), nextAncestors);
     }
-    return;
+    return true;
   }
   if (entry.isFile()) {
     await mkdir(path.dirname(dest), { recursive: true });
     await writeFile(dest, await readFile(real));
+    return true;
   }
+  return false;
 }
 
 async function copyTree(src, dest) {
@@ -104,6 +109,7 @@ function fail(message) {
  * 闭包来源 = next 同级依赖 + Web 应用自身 dependencies。后者必须显式物化：
  * Windows 上 Next 文件追踪在 junction 布局下会漏掉应用级符号链接（0.2.0 CI
  * 实测 react 缺失），不能只靠 copyTree 解引用 standalone 里的链接。
+ * 每个名字按候选源序拷贝并在拷贝后校验产物落地，单源无效时自动回退下一个；
  * 同名多版本时优先取依赖声明版本能对上的 store 条目。 */
 async function materializePackageClosure(targetNodeModules) {
   const standaloneStore = path.join(standaloneDir, "node_modules", ".bun");
@@ -135,13 +141,24 @@ async function materializePackageClosure(targetNodeModules) {
   while (pending.length > 0) {
     const item = pending.shift();
     if (!item || materialized.has(item.name)) continue;
-    const source = resolveSource(item);
-    if (!source || !existsSync(path.join(source, "package.json"))) continue;
+    const destination = path.join(targetNodeModules, item.name);
+    /* 逐个候选源尝试拷贝，拷完校验 package.json 真的落地；
+     * Windows 上 store 链接形态（junction）可能让单个源拷贝无效 */
+    let copiedFrom = null;
+    for (const source of resolveSources(item)) {
+      if (!existsSync(path.join(source, "package.json"))) continue;
+      await rm(destination, { recursive: true, force: true });
+      await copyDeref(source, destination);
+      if (existsSync(path.join(destination, "package.json"))) {
+        copiedFrom = source;
+        break;
+      }
+    }
+    if (!copiedFrom) continue;
     materialized.add(item.name);
-    await copyDeref(source, path.join(targetNodeModules, item.name));
 
-    const pkg = JSON.parse(await readFile(path.join(source, "package.json"), "utf8"));
-    const sourceParent = path.dirname(source);
+    const pkg = JSON.parse(await readFile(path.join(copiedFrom, "package.json"), "utf8"));
+    const sourceParent = path.dirname(copiedFrom);
     for (const dependency of Object.keys(pkg.dependencies ?? {})) {
       if (materialized.has(dependency)) continue;
       const sibling = path.join(sourceParent, dependency);
@@ -154,18 +171,21 @@ async function materializePackageClosure(targetNodeModules) {
 
   log(`物化 Web 运行时依赖 ${materialized.size} 个`);
 
-  /* 依次从：应用级链接 realpath → standalone store → 工作区 store 兜底 */
-  function resolveSource(item) {
-    if (item.preferred && existsSync(path.join(item.preferred, "package.json"))) return item.preferred;
+  /* 候选源按序：next 同级邻接 → 应用级链接 realpath → standalone store → 工作区 store */
+  function resolveSources(item) {
+    const candidates = [];
+    if (item.preferred) candidates.push(item.preferred);
     const appLinked = preferredByApp.get(item.name);
-    if (appLinked) return appLinked;
+    if (appLinked) candidates.push(appLinked);
     for (const pool of [standaloneCandidates, workspaceCandidates]) {
       const list = pool.get(item.name);
       if (!list?.length) continue;
       const range = webPkg.dependencies?.[item.name];
-      return (range && matchVersion(list, item.name, range)) ?? list[0];
+      const matched = (range && matchVersion(list, item.name, range)) || undefined;
+      if (matched) candidates.push(matched);
+      candidates.push(...list);
     }
-    return undefined;
+    return [...new Set(candidates)];
   }
 }
 
