@@ -156,7 +156,7 @@ describe("API 路由", { concurrency: false }, () => {
         platform: "doubao",
         model: "Seedream 5.0 Flash",
         name: "autumn-window",
-        items: [{ prompt: "秋日窗边的橘猫", ratio: "16:9", slug: "orange-cat" }],
+        items: [{ prompt: "秋日窗边的橘猫，16:9 横版构图", slug: "orange-cat" }],
       }),
     }));
     const created = await createdResponse.json() as {
@@ -410,7 +410,7 @@ describe("API 路由", { concurrency: false }, () => {
           platform: "doubao",
           model: "Seedream 5.0 Flash",
           name: "window-scene",
-          items: [{ prompt: "窗边的橘猫插画", ratio: "16:9", slug: "orange-cat" }],
+          items: [{ prompt: "窗边的橘猫插画，16:9 横版构图", slug: "orange-cat" }],
         }),
       }));
       const created = await createdResponse.json() as {

@@ -81,10 +81,10 @@ describe("Onda CLI API 客户端", () => {
       platform: "doubao",
       model: "Seedream 5.0 Flash",
       name: "sample",
-      items: [{ prompt: "窗边植物插画", ratio: "16:9" }],
+      items: [{ prompt: "窗边植物插画，16:9 横版构图" }],
     });
     expect(task.id).toBe("g1234567890abcdef");
-    expect(JSON.parse(body).items[0].ratio).toBe("16:9");
+    expect(JSON.parse(body).items[0]).toEqual({ prompt: "窗边植物插画，16:9 横版构图" });
   });
 
   test("发布客户端提交 source、平台和频道", async () => {

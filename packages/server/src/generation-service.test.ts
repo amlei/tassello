@@ -53,7 +53,7 @@ describe("应用内网页生图任务", { concurrency: false }, () => {
       model: "Seedream 5.0 Flash",
       name: "autumn-window",
       items: [
-        { prompt: "秋日窗边的橘猫", ratio: "16:9", slug: "orange-cat" },
+        { prompt: "秋日窗边的橘猫，16:9 横版构图", slug: "orange-cat" },
       ],
     });
     assert.equal(task.status, "waiting_extension");
@@ -69,7 +69,7 @@ describe("应用内网页生图任务", { concurrency: false }, () => {
       model: "Seedream 5.0 Flash",
       name: "autumn-window",
       items: [
-        { prompt: "秋日窗边的橘猫", ratio: "16:9", slug: "orange-cat" },
+        { prompt: "秋日窗边的橘猫，16:9 横版构图", slug: "orange-cat" },
       ],
     });
     const png = Uint8Array.from(Buffer.from(
@@ -118,7 +118,7 @@ describe("应用内网页生图任务", { concurrency: false }, () => {
     const task = await createImageGeneration({
       platform: "doubao",
       model: "Seedream 5.0 Flash",
-      items: [{ prompt: "清晨山谷插画", ratio: "16:9" }],
+      items: [{ prompt: "清晨山谷插画，16:9 横版构图" }],
     });
     await onImageGenerationResult({
       type: "generation.result",
@@ -141,7 +141,7 @@ describe("应用内网页生图任务", { concurrency: false }, () => {
     const task = await createImageGeneration({
       platform: "doubao",
       model: "Seedream 5.0 Flash",
-      items: [{ prompt: "雨后的青色石阶", ratio: "16:9", slug: "after-rain" }],
+      items: [{ prompt: "雨后的青色石阶，16:9 横版构图", slug: "after-rain" }],
     });
     await onImageGenerationEvent({
       type: "generation.event",
@@ -196,7 +196,7 @@ describe("应用内网页生图任务", { concurrency: false }, () => {
     const request = {
       platform: "doubao" as const,
       model: "Seedream 5.0 Flash" as const,
-      items: [{ prompt: "夜色中的城市窗景", ratio: "16:9" as const }],
+      items: [{ prompt: "夜色中的城市窗景，16:9 横版构图" }],
       idempotencyKey: "same-agent-request",
     };
     const first = await createImageGeneration(request);
