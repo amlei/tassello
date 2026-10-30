@@ -185,8 +185,7 @@ onda publish <platform> <type> <file>
   "idempotencyKey": "article-cover-20261029",
   "items": [
     {
-      "prompt": "温暖的生活方式插画，一只戴着深绿色围巾的橘猫坐在木质窗台上，柔和纸张纹理，画面中不要出现文字",
-      "ratio": "16:9",
+      "prompt": "温暖的生活方式插画，16:9 横版构图，一只戴着深绿色围巾的橘猫坐在木质窗台上，柔和纸张纹理，画面中不要出现文字",
       "slug": "orange-cat"
     }
   ]
@@ -211,7 +210,7 @@ onda generate image ./request.json --wait --timeout 20m --json
 onda generate image - --json < request.json
 ```
 
-默认模型为 `Seedream 5.0 Flash`，默认比例为 `16:9`。同一任务中的提示词会按顺序在同一个豆包对话里执行。
+默认模型为 `Seedream 5.0 Flash`。画面比例直接写入提示词，不提供单独的 `ratio` 参数。同一任务中的提示词会按顺序在同一个豆包对话里执行。
 
 ### 发布任务
 

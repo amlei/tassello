@@ -11,7 +11,6 @@ import {
   executeInPage,
   openTab,
   pageUrl,
-  setEditableText,
 } from "../page-runtime";
 
 const CHAT_URL = "https://www.doubao.com/chat/";
@@ -155,10 +154,63 @@ async function selectMenuValue(
   await new Promise((resolve) => setTimeout(resolve, 800));
 }
 
+async function writePrompt(
+  tabId: number,
+  prompt: string,
+): Promise<"missing" | "failed" | "written"> {
+  return executeInPage(tabId, async ({ selector, prompt }) => {
+    const deadline = Date.now() + 15_000;
+    let composer: HTMLElement | null = null;
+    while (Date.now() < deadline && !composer) {
+      composer = Array.from(document.querySelectorAll(selector) as NodeListOf<HTMLElement>)
+        .find((candidate) => {
+          const rect = candidate.getBoundingClientRect();
+          return rect.width > 0 && rect.height > 0;
+        }) ?? null;
+      if (!composer) await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    if (!composer) return "missing";
+
+    composer.scrollIntoView({ block: "center" });
+    composer.click();
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    composer.focus();
+    const selection = window.getSelection();
+    const range = document.createRange();
+    range.selectNodeContents(composer);
+    range.collapse(false);
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    document.execCommand("insertText", false, prompt);
+    await new Promise((resolve) => setTimeout(resolve, 600));
+
+    const normalizedPrompt = prompt.replace(/[\s\u200B]+/g, "");
+    const normalizedText = () => (composer?.textContent ?? "").replace(/[\s\u200B]+/g, "");
+    if (normalizedText().includes(normalizedPrompt)) return "written";
+
+    const clearSelection = window.getSelection();
+    const clearRange = document.createRange();
+    clearRange.selectNodeContents(composer);
+    clearSelection?.removeAllRanges();
+    clearSelection?.addRange(clearRange);
+    document.execCommand("delete");
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    const transfer = new DataTransfer();
+    transfer.setData("text/plain", prompt);
+    composer.dispatchEvent(new ClipboardEvent("paste", {
+      bubbles: true,
+      cancelable: true,
+      clipboardData: transfer,
+    }));
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    return normalizedText().includes(normalizedPrompt) ? "written" : "failed";
+  }, { selector: COMPOSER, prompt }, 18_000);
+}
+
 async function sendPrompt(tabId: number, prompt: string): Promise<void> {
-  if (!(await setEditableText(tabId, COMPOSER, prompt))) {
-    throw new Error("豆包提示词写入失败");
-  }
+  const written = await writePrompt(tabId, prompt);
+  if (written === "missing") throw new Error("豆包提示词输入框未出现");
+  if (written === "failed") throw new Error("豆包提示词写入后未生效");
   const sent = await executeInPage(tabId, async ({ selector }) => {
     const deadline = Date.now() + 5_000;
     while (Date.now() < deadline) {
@@ -188,7 +240,6 @@ async function generateOne(
   report: GenerationReport,
 ): Promise<ImageGenerationJobResult["result"]["outputs"]> {
   const item = job.request.items[promptIndex]!;
-  if (item.ratio) await selectMenuValue(tabId, "比例", item.ratio, false);
   for (const image of await latestResultImages(tabId)) seen.add(generatedImageKey(image.src));
 
   report({

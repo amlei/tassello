@@ -44,7 +44,7 @@ DELETE /api/v1/generations/:id
 - `platform: "doubao"`
 - `model`：默认 `Seedream 5.0 Flash`
 - `name`：可选的批次目录名
-- `items[]`：提示词、可选比例、可选文件名 slug
+- `items[]`：提示词、可选文件名 slug
 - `idempotencyKey`：可选；重复请求返回同一任务
 
 任务记录包含状态、进度、页签、错误和已保存图片。图片结果包含绝对路径、相对 Vault 路径、分辨率、字节数和 SHA-256。
@@ -70,8 +70,8 @@ queued → waiting_extension → waiting_login → generating → downloading
 ## 当前限制
 
 - 平台只有豆包。
-- 比例只支持 `自动 / 9:16 / 2:3 / 3:4 / 1:1 / 4:3 / 3:2 / 16:9`。
 - 默认模型为 `Seedream 5.0 Flash`。
+- 不提供独立的画面比例参数；需要固定比例时，应在提示词中写明构图要求。
 - 单张登录等待上限 180 秒，出图等待上限 300 秒。
 - 同一任务逐张生成，不并发访问豆包。
 - 仅接受宽度不小于 1500 的稳定原图。

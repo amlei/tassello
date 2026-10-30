@@ -391,20 +391,7 @@ export const IMAGE_GENERATION_MODELS = [
 ] as const;
 export type ImageGenerationModel = (typeof IMAGE_GENERATION_MODELS)[number];
 
-export const IMAGE_GENERATION_RATIOS = [
-  "自动",
-  "9:16",
-  "2:3",
-  "3:4",
-  "1:1",
-  "4:3",
-  "3:2",
-  "16:9",
-] as const;
-export type ImageGenerationRatio = (typeof IMAGE_GENERATION_RATIOS)[number];
-
 export const DEFAULT_IMAGE_GENERATION_MODEL = "Seedream 5.0 Flash" as const;
-export const DEFAULT_IMAGE_GENERATION_RATIO = "16:9" as const;
 export const IMAGE_GENERATION_TIMEOUT_MS = 300_000;
 export const IMAGE_GENERATION_LOGIN_TIMEOUT_MS = 180_000;
 
@@ -428,7 +415,6 @@ const generationSlugSchema = z.string().trim().toLowerCase()
 
 export const imageGenerationItemSchema = z.object({
   prompt: z.string().trim().min(1).max(20_000),
-  ratio: z.enum(IMAGE_GENERATION_RATIOS).default(DEFAULT_IMAGE_GENERATION_RATIO),
   slug: generationSlugSchema.optional(),
 }).strict();
 export type ImageGenerationItemInput = z.infer<typeof imageGenerationItemSchema>;
