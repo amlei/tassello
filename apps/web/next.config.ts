@@ -9,15 +9,8 @@ const nextConfig: NextConfig = {
     "@tassello/shared",
     "@tassello/ui",
   ],
-  async rewrites() {
-    const apiPort = process.env.TASSELLO_API_PORT ?? "4311";
-    return [
-      {
-        source: "/api/:path*",
-        destination: `http://127.0.0.1:${apiPort}/api/v1/:path*`,
-      },
-    ];
-  },
+  // /api/* 的代理在 app/api/[...path]/route.ts 用 Route Handler 实现：
+  // rewrites 的目的地在构建期烘焙进 standalone，无法感知运行时 API 端口。
 };
 
 export default nextConfig;

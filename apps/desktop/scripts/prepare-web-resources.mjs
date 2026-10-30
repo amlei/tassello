@@ -81,6 +81,8 @@ for (const required of [
   path.join(appDir, "server.js"),
   path.join(appDir, ".next", "server"),
   path.join(appDir, "node_modules", "next", "package.json"),
+  path.join(appDir, "node_modules", "react", "package.json"),
+  path.join(appDir, "node_modules", "react-dom", "package.json"),
   path.join(appDir, "node_modules", "@swc", "helpers", "package.json"),
 ]) {
   if (!existsSync(required)) fail(`Web 产物缺少运行时文件: ${required}`);
@@ -99,39 +101,41 @@ function fail(message) {
 
 /* Next standalone 的 Bun 依赖图把 next 与运行时依赖作为 .bun 下的同级目录。
  * 展平到 apps/web/node_modules，避免把 electron-builder 会丢弃的 .bun 带入产物。
- * 只沿 package.json dependencies 递归，平台可选的 sharp 二进制仍由 Next 运行时
- * 按需加载，不在构建脚本里跨平台改写。 */
+ * 闭包来源 = next 同级依赖 + Web 应用自身 dependencies。后者必须显式物化：
+ * Windows 上 Next 文件追踪在 junction 布局下会漏掉应用级符号链接（0.2.0 CI
+ * 实测 react 缺失），不能只靠 copyTree 解引用 standalone 里的链接。
+ * 同名多版本时优先取依赖声明版本能对上的 store 条目。 */
 async function materializePackageClosure(targetNodeModules) {
-  const bunStore = path.join(standaloneDir, "node_modules", ".bun");
-  let storeEntries;
-  try {
-    storeEntries = await readdir(bunStore);
-  } catch {
-    return;
+  const standaloneStore = path.join(standaloneDir, "node_modules", ".bun");
+  const workspaceStore = path.resolve(desktopDir, "..", "..", "node_modules", ".bun");
+  const standaloneCandidates = await scanStore(standaloneStore);
+  if (standaloneCandidates.size === 0) {
+    fail("standalone 的 Bun store 缺失或为空，无法物化 Web 运行时依赖");
   }
+  const workspaceCandidates = await scanStore(workspaceStore);
+  const preferredByApp = await preferredAppLinks();
 
-  const nextEntry = storeEntries.find((name) => name.startsWith("next@"));
+  /* store 条目目录名带版本后缀（next@16.3.5），按条目名定位 next 的同级依赖 */
+  const storeEntryNames = await readdir(standaloneStore).catch(() => []);
+  const nextEntry = storeEntryNames.find((name) => name.startsWith("next@"));
   if (!nextEntry) fail("standalone 的 Bun store 中找不到 next");
-  const nextSiblings = path.join(bunStore, nextEntry, "node_modules");
-  const candidates = new Map();
-  for (const entry of storeEntries) {
-    const nodeModulesDir = path.join(bunStore, entry, "node_modules");
-    for (const [name, dir] of await listPackages(nodeModulesDir)) {
-      const list = candidates.get(name) ?? [];
-      list.push(dir);
-      candidates.set(name, list);
-    }
-  }
+  const nextSiblings = path.join(standaloneStore, nextEntry, "node_modules");
 
   const materialized = new Set(["next"]);
   const pending = [...(await listPackages(nextSiblings))]
     .filter(([name]) => name !== "next")
     .map(([name, dir]) => ({ name, preferred: dir }));
 
+  /* Web 应用自身依赖（react、react-dom 等）按名字入队，版本在出队时解析 */
+  const webPkg = JSON.parse(await readFile(path.join(webDir, "package.json"), "utf8"));
+  for (const name of Object.keys(webPkg.dependencies ?? {})) {
+    if (name !== "next") pending.push({ name });
+  }
+
   while (pending.length > 0) {
     const item = pending.shift();
     if (!item || materialized.has(item.name)) continue;
-    const source = item.preferred ?? candidates.get(item.name)?.[0];
+    const source = resolveSource(item);
     if (!source || !existsSync(path.join(source, "package.json"))) continue;
     materialized.add(item.name);
     await copyDeref(source, path.join(targetNodeModules, item.name));
@@ -147,6 +151,65 @@ async function materializePackageClosure(targetNodeModules) {
       });
     }
   }
+
+  log(`物化 Web 运行时依赖 ${materialized.size} 个`);
+
+  /* 依次从：应用级链接 realpath → standalone store → 工作区 store 兜底 */
+  function resolveSource(item) {
+    if (item.preferred && existsSync(path.join(item.preferred, "package.json"))) return item.preferred;
+    const appLinked = preferredByApp.get(item.name);
+    if (appLinked) return appLinked;
+    for (const pool of [standaloneCandidates, workspaceCandidates]) {
+      const list = pool.get(item.name);
+      if (!list?.length) continue;
+      const range = webPkg.dependencies?.[item.name];
+      return (range && matchVersion(list, item.name, range)) ?? list[0];
+    }
+    return undefined;
+  }
+}
+
+/* 扫描 Bun isolated store，返回 包名 → 真实目录列表（含多版本） */
+async function scanStore(storePath) {
+  const candidates = new Map();
+  let storeEntries;
+  try {
+    storeEntries = await readdir(storePath);
+  } catch {
+    return candidates;
+  }
+  for (const entry of storeEntries) {
+    const nodeModulesDir = path.join(storePath, entry, "node_modules");
+    for (const [name, dir] of await listPackages(nodeModulesDir)) {
+      const list = candidates.get(name) ?? [];
+      list.push(dir);
+      candidates.set(name, list);
+    }
+  }
+  return candidates;
+}
+
+/* standalone 里 apps/web/node_modules 的链接指向应用实际解析到的版本 */
+async function preferredAppLinks() {
+  const preferred = new Map();
+  for (const [name, dir] of await listPackages(path.join(standaloneDir, "apps", "web", "node_modules"))) {
+    const real = await realpath(dir).catch(() => null);
+    if (real && existsSync(path.join(real, "package.json"))) preferred.set(name, real);
+  }
+  return preferred;
+}
+
+/* 目录名 name@version 与 semver 区间做宽松前缀匹配（^、~ 已剥离）；
+ * 路径分隔符收尾，避免 react@19.2.8 误配 react@19.2.80 */
+function matchVersion(list, name, range) {
+  const prefix = String(range).replace(/^[^0-9]+/, "");
+  if (!prefix) return undefined;
+  const marker = `${storeEntryName(name, prefix)}${path.sep}`;
+  return list.find((dir) => dir.includes(marker));
+}
+
+function storeEntryName(name, version) {
+  return `${name.replace("/", "+")}@${version}`;
 }
 
 async function listPackages(nodeModulesDir) {

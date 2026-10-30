@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { renderForPlatform } from "/Users/amlei/Data/codespaces/projects/tassello/apps/obsidian/src/core/render/renderers";
-import type { SourceDraft } from "/Users/amlei/Data/codespaces/projects/tassello/apps/obsidian/src/core/types";
+import { renderForPlatform } from "./renderers";
+import type { SourceDraft } from "../types";
 
 function source(overrides: Partial<SourceDraft> = {}): SourceDraft {
   return {

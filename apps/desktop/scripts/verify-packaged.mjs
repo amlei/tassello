@@ -56,6 +56,8 @@ for (const required of [
   path.join(webDir, "server.js"),
   path.join(webDir, ".next", "server"),
   path.join(webDir, "node_modules", "next", "package.json"),
+  path.join(webDir, "node_modules", "react", "package.json"),
+  path.join(webDir, "node_modules", "react-dom", "package.json"),
 ]) {
   if (!existsSync(required)) fail(`Web 产物缺文件: ${required}`);
 }
