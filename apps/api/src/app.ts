@@ -181,6 +181,7 @@ export const app = new Elysia()
   .get("/api/v1/health", async () => ok({ ready: true, capability: await getPublishCapability() }))
   .get("/api/v1/runtime", async () => ok({
     apiOrigin: process.env.TASSELLO_API_ORIGIN ?? `http://127.0.0.1:${process.env.TASSELLO_API_PORT ?? "4311"}`,
+    webOrigin: process.env.TASSELLO_WEB_ORIGIN ?? null,
     protocolVersion: 1,
     cliProtocolVersion: CLI_PROTOCOL_VERSION,
   }))
@@ -636,9 +637,12 @@ export const app = new Elysia()
           extensionConnectionId = connectionId;
           extensionClientId = record.clientId;
           ws.send(JSON.stringify({ type: "ready", installationId: record.installationId }));
-          if (typeof message.activeJobId === "string" && message.activeJobId) {
-            await onExtensionJobInterrupted(message.activeJobId);
-            await onImageGenerationInterrupted(message.activeJobId);
+          const activeJobIds = Array.isArray(message.activeJobIds)
+            ? message.activeJobIds.filter((jobId): jobId is string => typeof jobId === "string" && jobId.length > 0)
+            : [];
+          for (const jobId of new Set(activeJobIds)) {
+            await onExtensionJobInterrupted(jobId);
+            await onImageGenerationInterrupted(jobId);
           }
           const parsedProtocolVersion = Number(message.accountProtocolVersion);
           const accountProtocolVersion = Number.isInteger(parsedProtocolVersion)

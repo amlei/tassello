@@ -453,6 +453,10 @@
   .publish-field-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
   .publish-field-head b{font-size:11px;color:var(--ink)}
   .publish-field-head span{font-size:9.8px;color:var(--ink3)}
+  .publish-account-actions{display:flex;align-items:center;gap:7px}
+  .publish-account-actions button{color:var(--accent);font-size:10.2px;font-weight:750}
+  .publish-account-actions button:hover{text-decoration:underline}
+  .publish-account-actions button:disabled{opacity:.45;cursor:default;text-decoration:none}
   .publish-type-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
   .publish-type{min-height:54px;border:1px solid transparent;border-radius:11px;background:var(--hover);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:10.5px;font-weight:700;color:var(--ink2)}
   .publish-type i{width:9px;height:9px;border-radius:3px;background:var(--type-color)}
@@ -463,11 +467,14 @@
   .publish-platform.selected{background:color-mix(in srgb,var(--platform-color) 11%,var(--card));box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--platform-color) 46%,transparent);color:var(--ink)}
   .publish-platform.off{opacity:.46;cursor:not-allowed}
   .publish-platform .glyph{width:25px;height:25px;border-radius:7px;display:grid;place-items:center;color:#fff;font-size:9px;font-weight:800;flex:0 0 auto}
-  .publish-platform-copy{min-width:0;display:flex;align-items:center}
+  .publish-platform-copy{min-width:0;display:flex;flex-direction:column;align-items:flex-start;gap:2px}
   .publish-platform-copy b{font-size:10.8px;font-weight:700}
+  .publish-platform-account{max-width:122px;overflow:hidden;color:var(--ink2);font-size:10px;line-height:1.25;text-overflow:ellipsis;white-space:nowrap}
   .publish-platform .checkmark{margin-left:auto;width:16px;height:16px;border-radius:50%;display:grid;place-items:center;background:var(--card);color:transparent;font-size:9px;font-weight:900}
   .publish-platform.selected .checkmark{background:var(--platform-color);color:#fff}
   .publish-platform-empty{min-height:64px;border-radius:11px;background:var(--hover);display:grid;place-items:center;color:var(--ink3);font-size:10.5px}
+  .publish-account-status{margin-top:-1px;color:var(--warn);font-size:9.2px;line-height:1.45}
+  .publish-account-status.done{color:var(--green)}
   .publish-modal .modal-actions{margin-top:20px}
 
   .empty{
@@ -503,16 +510,16 @@ const TYPE_META = {
 const TYPE_ORDER = ["article", "image", "video", "audio"];
 
 const PLATFORMS = [
-  {id:"wechat", name:"微信公众号", short:"微", color:"#07C160", supports:["article","image","video","audio"], kind:"文章 / 图片 / 视频 / 音频"},
-  {id:"weibo", name:"微博", short:"博", color:"#FF8200", supports:["image","video"], kind:"贴图 / 视频"},
-  {id:"xhs", name:"小红书", short:"红", color:"#FF2442", supports:["article","image","video","audio"], kind:"长文 / 图文 / 视频 / 音频"},
-  {id:"jike", name:"即刻", short:"即", color:"#FFD400", fg:"#16130E", supports:["image","video"], kind:"图文 / 视频"},
-  {id:"x", name:"X", short:"X", color:"var(--plat-x)", fg:"var(--plat-x-fg)", supports:["article","image","video"], kind:"帖子 / 图片 / 视频"},
-  {id:"zhihu", name:"知乎", short:"知", color:"#0084FF", supports:["article","image","video"], kind:"文章 / 想法 / 视频"},
-  {id:"douban", name:"豆瓣", short:"豆", color:"#2E963D", supports:["article","image"], kind:"日记 / 图文"},
-  {id:"xiaoyuzhou", name:"小宇宙", short:"宇", color:"#6E4AFF", supports:["audio"], kind:"播客节目"},
-  {id:"ximalaya", name:"喜马拉雅", short:"喜", color:"#F86442", supports:["audio"], kind:"播客专辑"},
-  {id:"lizhi", name:"荔枝播客", short:"荔", color:"#D6336C", supports:["audio"], kind:"播客播单"},
+  {id:"wechat", name:"微信公众号", short:"微", color:"#07C160", accountName:"九漾 Onda", supports:["article","image","video","audio"], kind:"文章 / 图片 / 视频 / 音频"},
+  {id:"weibo", name:"微博", short:"博", color:"#FF8200", accountName:"九漾 Onda", supports:["image","video"], kind:"贴图 / 视频"},
+  {id:"xhs", name:"小红书", short:"红", color:"#FF2442", accountName:"九漾 Onda", supports:["article","image","video","audio"], kind:"长文 / 图文 / 视频 / 音频"},
+  {id:"jike", name:"即刻", short:"即", color:"#FFD400", fg:"#16130E", accountName:"九漾 Onda", supports:["image","video"], kind:"图文 / 视频"},
+  {id:"x", name:"X", short:"X", color:"var(--plat-x)", fg:"var(--plat-x-fg)", accountName:"九漾 Onda", supports:["article","image","video"], kind:"帖子 / 图片 / 视频"},
+  {id:"zhihu", name:"知乎", short:"知", color:"#0084FF", accountName:"九漾 Onda", supports:["article","image","video"], kind:"文章 / 想法 / 视频"},
+  {id:"douban", name:"豆瓣", short:"豆", color:"#2E963D", accountName:"九漾 Onda", supports:["article","image"], kind:"日记 / 图文"},
+  {id:"xiaoyuzhou", name:"小宇宙", short:"宇", color:"#6E4AFF", accountName:"九漾 Onda", supports:["audio"], kind:"播客节目"},
+  {id:"ximalaya", name:"喜马拉雅", short:"喜", color:"#F86442", accountName:"九漾 Onda", supports:["audio"], kind:"播客专辑"},
+  {id:"lizhi", name:"荔枝播客", short:"荔", color:"#D6336C", accountName:"九漾 Onda", supports:["audio"], kind:"播客播单"},
 ];
 
 
@@ -652,6 +659,7 @@ function App(){
   const [extension, setExtension] = useState("connected");
   const [running, setRunning] = useState(false);
   const [publishFeedback, setPublishFeedback] = useState(null);
+  const [accountCheck, setAccountCheck] = useState("idle");
   const [sessionTasks, setSessionTasks] = useState([]);
   const timers = useRef([]);
 
@@ -743,6 +751,13 @@ function App(){
     setExtension("waiting");
     const t = setTimeout(() => setExtension("connected"), 1100);
     timers.current.push(t);
+  }
+
+  function checkAccounts(){
+    if(accountCheck === "checking") return;
+    setAccountCheck("checking");
+    const timer = setTimeout(() => setAccountCheck("done"), 1300);
+    timers.current.push(timer);
   }
 
   function startPublish(){
@@ -1031,7 +1046,12 @@ function App(){
             <section className="publish-field">
               <div className="publish-field-head">
                 <b>发布平台</b>
-                <span>已选 {selectedCount} / {supportedCount}</span>
+                <span className="publish-account-actions">
+                  <span>已选 {selectedCount} / {supportedCount}</span>
+                  <button onClick={checkAccounts} disabled={accountCheck === "checking"}>
+                    {accountCheck === "checking" ? "检查中…" : "重新检查"}
+                  </button>
+                </span>
               </div>
               <div className="publish-platforms">
                 {supportedPlatforms.map(p => {
@@ -1047,11 +1067,21 @@ function App(){
                       <span className="glyph" style={{background:p.color,color:p.fg || "#fff"}}>{p.short}</span>
                       <span className="publish-platform-copy">
                         <b>{p.name}</b>
+                        <span className="publish-platform-account">
+                          {accountCheck === "checking" ? "正在检查账号…" : p.accountName}
+                        </span>
                       </span>
                       <span className="checkmark">✓</span>
                     </button>
                   );
                 })}
+              </div>
+              <div className={`publish-account-status ${accountCheck === "done" ? "done" : ""}`}>
+                {accountCheck === "checking"
+                  ? "正在重新读取浏览器登录态…"
+                  : accountCheck === "done"
+                    ? "平台账号已重新检查。"
+                    : "公众号账号建议重新检查。"}
               </div>
             </section>
 

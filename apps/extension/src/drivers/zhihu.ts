@@ -6,6 +6,7 @@ import type { PublishRuntime } from "../publish-runtime.ts";
 import { md5Base64 } from "../md5.ts";
 
 const WRITE_URL = "https://zhuanlan.zhihu.com/write";
+const HOME_URL = "https://www.zhihu.com/";
 const PIN_DRAFT_URL = "https://www.zhihu.com/creator/manage/creation/draft?type=pin";
 
 type ZhihuImage = {
@@ -204,7 +205,7 @@ function stripFigures(html: string): string {
 }
 
 async function publishPin(runtime: PublishRuntime): Promise<ExtensionJobResult["result"]> {
-  const tabId = await runtime.open(WRITE_URL, false);
+  const tabId = await runtime.open(HOME_URL, false);
   const images = await runtime.loadMedia(mediaOfKind(runtime, "image"));
   runtime.report({ status: "uploading", stage: 1, progress: 20, message: images.length ? "上传知乎想法图片" : "准备想法内容" });
   const uploads: ZhihuImage[] = [];
@@ -265,8 +266,13 @@ async function publishPin(runtime: PublishRuntime): Promise<ExtensionJobResult["
     throw new Error(`知乎想法提交失败（HTTP ${response.status}）：${response.body.slice(0, 180)}`);
   }
   const id = response.body.match(/"id"\s*:\s*"?(\d{10,25})"?/)?.[1] ?? null;
+  if (intent === "draft") {
+    runtime.report({ stage: 2, progress: 90, message: "知乎想法草稿已创建，正在打开草稿页" });
+    await runtime.navigate(tabId, PIN_DRAFT_URL, true);
+    runtime.report({ message: "已打开知乎想法草稿页" });
+  }
   return intent === "draft"
-    ? { status: "awaiting_confirm", url: PIN_DRAFT_URL, pageUrl: PIN_DRAFT_URL, tabId, error: null }
+    ? { status: "awaiting_confirm", url: PIN_DRAFT_URL, pageUrl: await runtime.currentUrl(tabId), tabId, error: null }
     : { status: "success", url: id ? `https://www.zhihu.com/pin/${id}` : null, pageUrl: runtime.job.snapshot.platformId, tabId, error: null };
 }
 

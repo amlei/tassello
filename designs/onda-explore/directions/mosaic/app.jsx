@@ -210,9 +210,9 @@ function App() {
       url: platformLink("wechat", "M3P8T2WD"), urlSource: "manual", createdAt: "09-12 14:20", finishedAt: "09-12 14:21:08",
     },
     {
-      /* 多频道平台：任务上记着落进了哪个频道（小宇宙的「九漾电台」节目） */
+      /* 多频道平台：任务上记着落进了哪个频道（小宇宙的「九漾 Onda」节目） */
       id: "seed-2b", postId: "p1", postTitle: "EP.12 和夜班出租车司机聊一座城市的背面", platformId: "xiaoyuzhou",
-      channelName: "九漾电台",
+      channelName: "九漾 Onda",
       progress: 100, stage: 3, status: "success", willFail: false, failReason: null,
       url: platformLink("xiaoyuzhou", "R2K7M4XQ"), urlSource: "auto", createdAt: "09-12 10:02", finishedAt: "09-12 10:03:44",
     },

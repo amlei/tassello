@@ -60,6 +60,14 @@ async function setupVault(type: "article" | "image" | "audio" = "image"): Promis
   return document.id;
 }
 
+async function writeTestPng(file: string): Promise<void> {
+  await fs.mkdir(path.dirname(file), { recursive: true });
+  await fs.writeFile(
+    file,
+    Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]),
+  );
+}
+
 test("无扩展时任务等待，扩展接入后派发且回执落盘", async () => {
   const documentId = await setupVault();
   const paired = await autoPairExtension({
@@ -179,6 +187,99 @@ test("按请求中的 Markdown 文件路径创建快照，不依赖全局 Vault"
   assert.equal(task?.status, "waiting_extension");
 });
 
+test("发布快照解码含空格的本地素材路径", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "tassello-encoded-media-"));
+  tempDirs.push(root);
+  const vault = path.join(root, "vault");
+  process.env.TASSELLO_DATA_DIR = path.join(root, "data");
+  process.env.TASSELLO_VAULT_DIR = vault;
+  const mediaDir = path.join(vault, "images", "files");
+  await writeTestPng(path.join(mediaDir, "Pasted image 20261101144914.png"));
+  const document = await createDocument(vault, {
+    type: "image",
+    title: "路径解码测试",
+    markdown: "正文\n\n![](files/Pasted%20image%2020261101144914.png)",
+  });
+  const covered = await updateDocument(vault, document.id, {
+    cover: "files/Pasted%20image%2020261101144914.png",
+    expectedFingerprint: document.fingerprint,
+  });
+  const paired = await autoPairExtension({
+    origin: extensionOrigin(BUNDLED_EXTENSION_ID),
+    extensionId: BUNDLED_EXTENSION_ID,
+    clientId: "encoded-media-extension",
+    browserLabel: "Chrome",
+    userAgent: "test",
+    version: "0.1.0",
+  });
+  await connectExtension(paired.extension.clientId);
+  await saveAccountVerification({
+    platformId: "xhs",
+    outcome: "ok",
+    error: null,
+    profile: {
+      uid: "encoded-media-user",
+      name: "九漾",
+      avatarUrl: null,
+      authExpiresAt: null,
+      channels: [],
+    },
+    extensionClientId: paired.extension.clientId,
+    browserLabel: paired.extension.browserLabel,
+  });
+  await disconnectExtension(paired.extension.clientId);
+
+  const [task] = await createTasks(covered.id, ["xhs"]);
+  const stored = (await listStoredTasks()).find((item) => item.id === task?.id);
+  const media = stored?.snapshot.media[0];
+  assert.equal(media?.resolved, "images/files/Pasted image 20261101144914.png");
+  assert.equal(media?.role, "cover");
+  assert.ok(media?.assetId);
+  assert.equal(stored?.snapshot.cover?.resolved, "images/files/Pasted image 20261101144914.png");
+});
+
+test("本地素材无法读取时拒绝创建快照并保留明确错误", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "tassello-missing-media-"));
+  tempDirs.push(root);
+  const vault = path.join(root, "vault");
+  process.env.TASSELLO_DATA_DIR = path.join(root, "data");
+  process.env.TASSELLO_VAULT_DIR = vault;
+  const document = await createDocument(vault, {
+    type: "image",
+    title: "缺失素材测试",
+    markdown: "正文\n\n![](files/missing.png)",
+  });
+  const paired = await autoPairExtension({
+    origin: extensionOrigin(BUNDLED_EXTENSION_ID),
+    extensionId: BUNDLED_EXTENSION_ID,
+    clientId: "missing-media-extension",
+    browserLabel: "Chrome",
+    userAgent: "test",
+    version: "0.1.0",
+  });
+  await connectExtension(paired.extension.clientId);
+  await saveAccountVerification({
+    platformId: "xhs",
+    outcome: "ok",
+    error: null,
+    profile: {
+      uid: "missing-media-user",
+      name: "九漾",
+      avatarUrl: null,
+      authExpiresAt: null,
+      channels: [],
+    },
+    extensionClientId: paired.extension.clientId,
+    browserLabel: paired.extension.browserLabel,
+  });
+  await disconnectExtension(paired.extension.clientId);
+
+  await assert.rejects(
+    createTasks(document.id, ["xhs"]),
+    /无法读取本地素材 files\/missing\.png/,
+  );
+});
+
 test("显式发布快照拒绝指纹不匹配和越界路径", async () => {
   const documentId = await setupVault();
   const original = await getDocument(process.env.TASSELLO_VAULT_DIR!, documentId);
@@ -244,6 +345,7 @@ test("已通过 RSS 同步的平台拒绝重复创建直传任务", async () => 
     cover: "../files/cover.png",
     expectedFingerprint: document.fingerprint,
   });
+  await writeTestPng(path.join(process.env.TASSELLO_VAULT_DIR!, "files", "cover.png"));
   const paired = await autoPairExtension({
     origin: extensionOrigin(BUNDLED_EXTENSION_ID),
     extensionId: BUNDLED_EXTENSION_ID,
@@ -469,6 +571,7 @@ test("发布快照冻结统一 Markdown 渲染结果与有序媒体占位", asyn
     title: "渲染测试",
     markdown: "**加粗**\n\n![配图](../files/missing.png)",
   });
+  await writeTestPng(path.join(process.env.TASSELLO_VAULT_DIR, "files", "missing.png"));
   const covered = await updateDocument(process.env.TASSELLO_VAULT_DIR, document.id, {
     cover: "../files/missing.png",
     expectedFingerprint: document.fingerprint,

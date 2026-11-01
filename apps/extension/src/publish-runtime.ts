@@ -5,7 +5,7 @@ import type {
   UploadCacheQuery,
   UploadCacheRef,
 } from "@tassello/shared";
-import { closeTab, executeInPage, focusTab, openTab, pageUrl } from "./page-runtime";
+import { closeTab, executeInPage, focusTab, navigateTab, openTab, pageUrl } from "./page-runtime";
 
 const MAX_MEDIA_BYTES = 64 * 1024 * 1024;
 const MAX_TOTAL_MEDIA_BYTES = 128 * 1024 * 1024;
@@ -80,6 +80,11 @@ export class PublishRuntime {
 
   async currentUrl(tabId: number): Promise<string> {
     return pageUrl(tabId);
+  }
+
+  async navigate(tabId: number, url: string, active = true): Promise<void> {
+    await navigateTab(tabId, url, active);
+    this.report({ pageUrl: url, tabId });
   }
 
   async focus(tabId: number): Promise<void> {

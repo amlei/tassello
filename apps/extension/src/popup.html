@@ -30,6 +30,17 @@
       <span class="task-value">可接收发布任务</span>
     </section>
 
+    <section id="accounts-card" class="accounts-card" hidden>
+      <div class="accounts-head">
+        <b>平台账号</b>
+        <button id="check-accounts" class="text-action">重新检查</button>
+      </div>
+      <div id="accounts-list" class="accounts-list">
+        <span class="accounts-empty">读取账号状态…</span>
+      </div>
+      <div id="account-result" class="account-result" role="status" hidden></div>
+    </section>
+
     <div class="actions">
       <button id="open-app" class="primary">打开发布队列</button>
       <button id="retry" class="secondary" hidden>重新检查连接</button>

@@ -9,6 +9,7 @@ import { autoPairExtension, setPreferredExtensionBrowser } from "@tassello/serve
 const originalDataDir = process.env.TASSELLO_DATA_DIR;
 const originalVaultDir = process.env.TASSELLO_VAULT_DIR;
 const originalDisableReconcile = process.env.TASSELLO_DISABLE_ACCOUNT_RECONCILE;
+const originalWebOrigin = process.env.TASSELLO_WEB_ORIGIN;
 const tempDirs: string[] = [];
 
 function nextMessageOfType(socket: WebSocket, type: string): Promise<Record<string, unknown>> {
@@ -35,6 +36,8 @@ afterEach(async () => {
   else process.env.TASSELLO_VAULT_DIR = originalVaultDir;
   if (originalDisableReconcile === undefined) delete process.env.TASSELLO_DISABLE_ACCOUNT_RECONCILE;
   else process.env.TASSELLO_DISABLE_ACCOUNT_RECONCILE = originalDisableReconcile;
+  if (originalWebOrigin === undefined) delete process.env.TASSELLO_WEB_ORIGIN;
+  else process.env.TASSELLO_WEB_ORIGIN = originalWebOrigin;
   await Promise.all(tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })));
 });
 
@@ -51,13 +54,15 @@ async function setup(): Promise<typeof import("./app").app> {
 describe("API 路由", { concurrency: false }, () => {
   test("运行信息包含 CLI 协议版本", async () => {
     const app = await setup();
+    process.env.TASSELLO_WEB_ORIGIN = "http://localhost:3000";
     const response = await app.handle(new Request("http://localhost/api/v1/runtime"));
     const payload = await response.json() as {
       ok: true;
-      data: { protocolVersion: number; cliProtocolVersion: number };
+      data: { webOrigin: string | null; protocolVersion: number; cliProtocolVersion: number };
     };
     assert.equal(payload.data.protocolVersion, 1);
     assert.equal(payload.data.cliProtocolVersion, CLI_PROTOCOL_VERSION);
+    assert.equal(payload.data.webOrigin, "http://localhost:3000");
   });
 
   test("文档 API 以 Markdown 文件为事实源", async () => {

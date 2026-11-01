@@ -15,10 +15,12 @@ const runtimeFile = path.join(resolveDataDir(), "runtime.json");
 const discoveryFile = resolveRuntimeDiscoveryPath();
 const runtimeId = randomUUID();
 const apiOrigin = process.env.TASSELLO_API_ORIGIN ?? `http://127.0.0.1:${port}`;
+const webOrigin = process.env.TASSELLO_WEB_ORIGIN ?? null;
 const runtime = {
   runtimeId,
   installationId: "",
   apiOrigin,
+  webOrigin,
   port,
   pid: process.pid,
   protocolVersion: 1,

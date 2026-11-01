@@ -2,6 +2,7 @@ type PageFunction<T> = (arg: any) => T | Promise<T>;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const ONDA_GROUP_TITLE = "九漾 Onda";
+let tabGroupingTail: Promise<void> = Promise.resolve();
 
 async function groupOndaTab(tab: chrome.tabs.Tab): Promise<void> {
   if (tab.id == null || !chrome.tabGroups) return;
@@ -30,7 +31,9 @@ async function groupOndaTab(tab: chrome.tabs.Tab): Promise<void> {
 export async function openTab(url: string, active = true): Promise<number> {
   const tab = await chrome.tabs.create({ url, active });
   if (tab.id == null) throw new Error("无法创建平台标签页");
-  await groupOndaTab(tab);
+  const grouping = tabGroupingTail.catch(() => undefined).then(() => groupOndaTab(tab));
+  tabGroupingTail = grouping;
+  await grouping;
   await waitForTabReady(tab.id);
   return tab.id;
 }
@@ -60,6 +63,35 @@ export async function waitForTabReady(tabId: number, timeoutMs = 30_000): Promis
     chrome.tabs.onUpdated.addListener(onUpdated);
     chrome.tabs.onRemoved.addListener(onRemoved);
   });
+}
+
+function isTransientNavigationError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /Frame with ID .* was removed|The frame was detached|Execution context was destroyed|Cannot access contents|Document was unloaded|平台页面脚本执行超时/i
+    .test(message);
+}
+
+export async function navigateTab(tabId: number, url: string, active = true): Promise<void> {
+  const previous = await chrome.tabs.get(tabId).catch(() => null);
+  const targetHost = new URL(url).host;
+  const sameHost = (candidate: string | undefined): boolean => {
+    if (!candidate) return false;
+    try {
+      return new URL(candidate).host === targetHost;
+    } catch {
+      return false;
+    }
+  };
+  await chrome.tabs.update(tabId, { url, active });
+  const deadline = Date.now() + 30_000;
+  while (Date.now() < deadline) {
+    const current = await chrome.tabs.get(tabId).catch(() => null);
+    const navigated = current?.url === url
+      || (!!current?.url && current.url !== previous?.url && sameHost(current.url));
+    if (navigated && current.status === "complete") return;
+    await sleep(200);
+  }
+  throw new Error(`平台标签页没有打开目标页面：${url}`);
 }
 
 export async function executeInPage<T>(
@@ -104,29 +136,65 @@ export async function waitForSelector(
 ): Promise<void> {
   const visible = options.visible !== false;
   const timeoutMs = options.timeoutMs ?? 30_000;
-  const found = await executeInPage(tabId, async ({ selector, visible, timeoutMs }) => {
-    const started = Date.now();
-    while (Date.now() - started < timeoutMs) {
-      const element = document.querySelector(selector);
-      const shown = !!element && (!visible || (element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0));
-      if (shown) return true;
-      await new Promise((resolve) => setTimeout(resolve, 250));
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    let found = false;
+    try {
+      found = await executeInPage(tabId, async ({ selector, visible }) => {
+        const started = Date.now();
+        while (Date.now() - started < 900) {
+          const element = document.querySelector(selector);
+          const shown = !!element && (!visible || (element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0));
+          if (shown) return true;
+          await new Promise((resolve) => setTimeout(resolve, 200));
+        }
+        return false;
+      }, { selector, visible }, 2_000);
+    } catch (error) {
+      if (!isTransientNavigationError(error)) throw error;
     }
-    return false;
-  }, { selector, visible, timeoutMs }, timeoutMs + 5_000);
-  if (!found) throw new Error(`等待页面元素超时：${selector}`);
+    if (found) return;
+    await sleep(250);
+  }
+  throw new Error(`等待页面元素超时：${selector}`);
 }
 
 export async function waitForText(tabId: number, text: string, timeoutMs = 30_000): Promise<void> {
-  const found = await executeInPage(tabId, async ({ text, timeoutMs }) => {
-    const started = Date.now();
-    while (Date.now() - started < timeoutMs) {
-      if ((document.body?.innerText ?? "").includes(text)) return true;
-      await new Promise((resolve) => setTimeout(resolve, 250));
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    let found = false;
+    try {
+      found = await executeInPage(tabId, async ({ text }) => {
+        const started = Date.now();
+        while (Date.now() - started < 900) {
+          if ((document.body?.innerText ?? "").includes(text)) return true;
+          await new Promise((resolve) => setTimeout(resolve, 200));
+        }
+        return false;
+      }, { text }, 2_000);
+    } catch (error) {
+      if (!isTransientNavigationError(error)) throw error;
     }
-    return false;
-  }, { text, timeoutMs }, timeoutMs + 5_000);
-  if (!found) throw new Error(`等待页面文案超时：${text}`);
+    if (found) return;
+    await sleep(250);
+  }
+  throw new Error(`等待页面文案超时：${text}`);
+}
+
+export async function waitForImageCount(tabId: number, selector: string, minimum: number, timeoutMs = 30_000): Promise<number> {
+  const deadline = Date.now() + timeoutMs;
+  let latest = 0;
+  while (Date.now() < deadline) {
+    try {
+      latest = await executeInPage(tabId, ({ selector }) =>
+        document.querySelectorAll(selector).length, { selector }, 2_000);
+      if (latest >= minimum) return latest;
+    } catch (error) {
+      if (!isTransientNavigationError(error)) throw error;
+    }
+    await sleep(400);
+  }
+  return latest;
 }
 
 export async function clickText(

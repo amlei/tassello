@@ -84,6 +84,17 @@ describe("markdown media", () => {
     ]);
   });
 
+  test("解码本地媒体路径中的 URI 转义并保留远程 URL", () => {
+    const media = extractMedia([
+      "![local](files/Pasted%20image%20%2320261101144914.png)",
+      "![remote](https://example.com/a%20b.png)",
+    ].join("\n"));
+    assert.deepEqual(media.map((item) => item.resolved), [
+      "files/Pasted image #20261101144914.png",
+      "https://example.com/a%20b.png",
+    ]);
+  });
+
   test("音频和视频保留图片作为封面等附加素材", () => {
     const media = extractMedia("![封面](../图/cover.png)\n![音频](../音频/episode.mp3)");
     assert.deepEqual(normalizeMediaOrder("audio", media).map((item) => item.kind), ["image", "audio"]);

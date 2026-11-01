@@ -135,7 +135,7 @@
   }
   .browser {
     width: min(620px, 100%);
-    min-height: 600px;
+    min-height: 720px;
     border: 1px solid var(--line);
     border-radius: 18px;
     overflow: hidden;
@@ -175,7 +175,7 @@
     object-fit: contain;
   }
   .popup-wrap {
-    height: 552px;
+    height: 672px;
     display: flex;
     justify-content: flex-end;
     align-items: flex-start;
@@ -184,7 +184,7 @@
   }
   .popup {
     width: 360px;
-    min-height: 400px;
+    min-height: 540px;
     display: flex;
     flex-direction: column;
     padding: 18px;
@@ -302,6 +302,69 @@
   .meta-row:first-child { border-top: 0; }
   .meta-row span { color: var(--ink2); }
   .meta-row b { margin-left: auto; max-width: 210px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono); font-size: 10.5px; font-weight: 600; }
+  .section-action {
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    padding: 3px 5px;
+    color: var(--accent);
+    font-size: 10px;
+    font-weight: 700;
+  }
+  .section-action:hover { background: var(--accent-tint); }
+  .section-action:disabled { opacity: .45; cursor: default; }
+  .accounts {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .account-row {
+    display: grid;
+    grid-template-columns: 24px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 9px;
+    min-height: 42px;
+    padding: 6px 10px;
+    border-top: 1px solid var(--line);
+  }
+  .account-row:first-child { border-top: 0; }
+  .account-glyph {
+    width: 24px;
+    height: 24px;
+    display: grid;
+    place-items: center;
+    border-radius: 7px;
+    color: #fff;
+    font-size: 9px;
+    font-weight: 800;
+  }
+  .account-copy { min-width: 0; }
+  .account-copy b { display: block; font-size: 11.5px; }
+  .account-copy span {
+    display: block;
+    margin-top: 2px;
+    overflow: hidden;
+    color: var(--ink2);
+    font-size: 10px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .account-state {
+    border-radius: 999px;
+    background: var(--green-tint);
+    padding: 3px 7px;
+    color: var(--green);
+    font-family: var(--mono);
+    font-size: 9px;
+    font-weight: 700;
+  }
+  .account-row.warn .account-state { background: var(--warn-tint); color: var(--warn); }
+  .account-row.checking .account-state { background: var(--accent-tint); color: var(--accent); }
+  .account-result {
+    margin-top: 8px;
+    color: var(--ink2);
+    font-size: 10.5px;
+  }
   .task-card {
     padding: 12px;
     border: 1px solid var(--line);
@@ -443,6 +506,31 @@
           </div>
         </section>
 
+        <section class="section" data-role="connected">
+          <div class="section-label">
+            <span>平台账号</span>
+            <button class="section-action" data-role="check-accounts">重新检查</button>
+          </div>
+          <div class="accounts" aria-label="平台账号状态">
+            <div class="account-row" data-account="jike">
+              <span class="account-glyph" style="background:#ffd400;color:#16130e">即</span>
+              <span class="account-copy"><b>即刻</b><span>九漾 Onda</span></span>
+              <span class="account-state">已连接</span>
+            </div>
+            <div class="account-row" data-account="zhihu">
+              <span class="account-glyph" style="background:#0084ff">知</span>
+              <span class="account-copy"><b>知乎</b><span>九漾 Onda</span></span>
+              <span class="account-state">已连接</span>
+            </div>
+            <div class="account-row warn" data-account="wechat">
+              <span class="account-glyph" style="background:#07c160">微</span>
+              <span class="account-copy"><b>微信公众号</b><span>登录状态需要重新确认</span></span>
+              <span class="account-state">需要检查</span>
+            </div>
+          </div>
+          <div class="account-result hidden" data-role="account-result" role="status"></div>
+        </section>
+
         <div class="popup-foot">
           <button class="primary" data-role="open-app">打开发布队列</button>
           <button class="secondary hidden" data-role="retry">重新检查连接</button>
@@ -459,6 +547,8 @@
   var themeButton = document.getElementById("theme-toggle");
   var moreButton = document.querySelector('[data-role="more"]');
   var menu = document.querySelector('[data-role="menu"]');
+  var accountButton = document.querySelector('[data-role="check-accounts"]');
+  var accountResult = document.querySelector('[data-role="account-result"]');
   var themeMedia = window.matchMedia("(prefers-color-scheme: dark)");
 
   function isDarkTheme(theme) {
@@ -504,6 +594,7 @@
     visible('[data-role="open-app"]', true);
     visible('[data-role="retry"]', state !== "connected");
     visible('[data-role="toast"]', false);
+    visible('[data-role="account-result"]', false);
     document.querySelector('[data-role="open-app"]').textContent = state === "connected"
       ? "打开发布队列"
       : "打开 Onda";
@@ -535,7 +626,34 @@
     }, 1100);
   }
 
+  function checkAccounts() {
+    accountButton.disabled = true;
+    accountButton.textContent = "检查中…";
+    visible('[data-role="account-result"]', false);
+    document.querySelectorAll("[data-account]").forEach(function (row) {
+      row.classList.remove("warn");
+      row.classList.add("checking");
+      row.querySelector(".account-copy span").textContent = "正在读取浏览器登录态";
+      row.querySelector(".account-state").textContent = "检查中";
+    });
+    window.setTimeout(function () {
+      document.querySelectorAll("[data-account]").forEach(function (row) {
+        row.classList.remove("checking");
+        row.classList.remove("warn");
+        row.querySelector(".account-state").textContent = "已连接";
+      });
+      document.querySelector('[data-account="jike"] .account-copy span').textContent = "九漾 Onda";
+      document.querySelector('[data-account="zhihu"] .account-copy span').textContent = "九漾 Onda";
+      document.querySelector('[data-account="wechat"] .account-copy span').textContent = "九漾 Onda";
+      accountResult.textContent = "3 个平台账号已重新检查。";
+      visible('[data-role="account-result"]', true);
+      accountButton.disabled = false;
+      accountButton.textContent = "重新检查";
+    }, 1300);
+  }
+
   document.querySelector('[data-role="retry"]').addEventListener("click", reconnect);
+  accountButton.addEventListener("click", checkAccounts);
 
   moreButton.addEventListener("click", function (event) {
     event.stopPropagation();

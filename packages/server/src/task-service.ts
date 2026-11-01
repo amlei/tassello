@@ -168,7 +168,7 @@ async function buildSnapshot(
   // 产品默认只填充平台编辑页，最终发布始终由用户在平台内完成。
   const intent = "draft" as const;
   const coverIndex = document.cover
-    ? document.media.findIndex((item) => item.kind === "image" && item.resolved === document.cover)
+    ? document.media.findIndex((item) => item.kind === "image" && item.role === "cover")
     : document.media.findIndex((item) => item.kind === "image");
   const media = await Promise.all(document.media.map(async (item) => {
     const relative = item.source === "url" || item.source === "absolute"
@@ -179,7 +179,15 @@ async function buildSnapshot(
       : item.source === "absolute"
         ? path.resolve(item.resolved)
         : path.resolve(vaultPath, relative);
-    const assetId = absolute ? await createMediaToken(absolute, item.kind).catch(() => null) : null;
+    let assetId: string | null = null;
+    if (absolute) {
+      try {
+        assetId = await createMediaToken(absolute, item.kind);
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        throw new Error(`无法读取本地素材 ${item.resolved}：${detail}`);
+      }
+    }
     return {
       ...item,
       resolved: relative,

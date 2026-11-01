@@ -8,8 +8,8 @@
         {
           "path": "right-panel.html",
           "createdAt": "2026-10-03T05:06:12.732Z",
-          "status": "needs-review",
-          "subtitle": "发布后显示本次平台级进度与等待完成状态，不展示历史任务",
+          "status": "approved",
+          "subtitle": "发布平台行展示账号名称，并在发布弹层内重新检查账号",
           "viewport": {
             "width": 1920,
             "height": 1080
@@ -19,5 +19,5 @@
     }
   },
   "createdAt": "2026-10-03T05:06:12.733Z",
-  "updatedAt": "2026-10-29T14:32:27.383Z"
+  "updatedAt": "2026-11-01T07:51:50.813Z"
 }

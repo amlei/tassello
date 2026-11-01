@@ -80,6 +80,81 @@ button { font: inherit; color: inherit; cursor: pointer; }
   font-size: 11px;
 }
 .task-value { color: var(--green); font-weight: 700; }
+.accounts-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+}
+.accounts-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.accounts-head b { font-size: 11px; }
+.text-action {
+  border: 0;
+  padding: 2px 0;
+  background: transparent;
+  color: var(--accent);
+  font-size: 10.5px;
+  font-weight: 700;
+}
+.text-action:hover { text-decoration: underline; }
+.text-action:disabled { opacity: .45; cursor: default; text-decoration: none; }
+.accounts-list {
+  max-height: 202px;
+  overflow: auto;
+  border-top: 1px solid var(--line);
+}
+.account-row {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  border-bottom: 1px solid var(--line);
+}
+.account-row:last-child { border-bottom: 0; }
+.account-glyph {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 8px;
+  font-weight: 800;
+}
+.account-copy { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.account-copy b { font-size: 11px; }
+.account-copy span {
+  overflow: hidden;
+  color: var(--ink2);
+  font-size: 9.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.account-state {
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--green) 10%, transparent);
+  color: var(--green);
+  font-size: 9px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.account-row.wait .account-state {
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
+  color: var(--warn);
+}
+.account-row.bad .account-state {
+  background: color-mix(in srgb, var(--error) 10%, transparent);
+  color: var(--error);
+}
+.accounts-empty { display: block; padding: 10px 0 2px; color: var(--ink2); font-size: 10.5px; }
+.account-result { color: var(--ink2); font-size: 10px; line-height: 1.45; }
+.account-result.done { color: var(--green); }
+.account-result.failed { color: var(--error); }
 .actions { display: flex; flex-direction: column; gap: 8px; }
 .primary, .secondary {
   min-height: 38px;

@@ -15,7 +15,7 @@ import {
 } from "../core/types";
 import type { BackendApi } from "../core/api/client";
 import { PlatformMark } from "@tassello/ui/platform-icons";
-import type { PodcastRssClaimDTO, PodcastRssDTO } from "@tassello/shared";
+import type { PlatformDTO, PodcastRssClaimDTO, PodcastRssDTO } from "@tassello/shared";
 import type { PublisherServices } from "./publisher-view";
 
 type ViewMode = "overview" | "defaults";
@@ -73,6 +73,20 @@ function platformCatalogSignature(platforms: PlatformCapability[]): string {
       platform.accountName ?? "",
     ].join("\u0000"))
     .join("\u0001");
+}
+
+function platformCatalogFromLive(live: PlatformDTO[]): PlatformCapability[] {
+  return PLATFORMS.map((base) => {
+    const remote = live.find((platform) => platform.id === base.id);
+    return remote
+      ? {
+        ...base,
+        syncPhase: remote.sync.phase,
+        syncReason: remote.sync.reason,
+        accountName: remote.account?.name ?? null,
+      }
+      : base;
+  });
 }
 
 function RuntimeStatus({ api }: { api: BackendApi }) {
@@ -312,6 +326,8 @@ export function PublisherApp({ services, host }: PublisherAppProps) {
   const [running, setRunning] = useState(false);
   const [feedback, setFeedback] = useState<PublishFeedback | null>(null);
   const [sessionTasks, setSessionTasks] = useState<PublishTask[]>([]);
+  const [accountChecks, setAccountChecks] = useState<Record<PlatformId, "checking" | "done" | "failed">>({});
+  const [accountCheckMessage, setAccountCheckMessage] = useState<string | null>(null);
   const sourceGeneration = useRef(0);
   const refreshTimer = useRef<number | null>(null);
   const feedbackTimer = useRef<number | null>(null);
@@ -354,17 +370,7 @@ export function PublisherApp({ services, host }: PublisherAppProps) {
       try {
         const live = await api.platforms();
         if (disposed) return;
-        const next = PLATFORMS.map((base) => {
-          const remote = live.find((platform) => platform.id === base.id);
-          return remote
-            ? {
-              ...base,
-              syncPhase: remote.sync.phase,
-              syncReason: remote.sync.reason,
-              accountName: remote.account?.name ?? null,
-            }
-            : base;
-        });
+        const next = platformCatalogFromLive(live);
         setPlatformCatalog((previous) =>
           platformCatalogSignature(previous) === platformCatalogSignature(next) ? previous : next,
         );
@@ -504,6 +510,8 @@ export function PublisherApp({ services, host }: PublisherAppProps) {
       .map((platform) => platform.id);
     setPublishType(type);
     setSelected((defaults[type] ?? []).filter((platformId) => supportedIds.includes(platformId)));
+    setAccountChecks({});
+    setAccountCheckMessage(null);
   }, [defaults, platformCatalog, rss]);
 
   const togglePublishPlatform = useCallback((platformId: PlatformId) => {
@@ -512,6 +520,28 @@ export function PublisherApp({ services, host }: PublisherAppProps) {
       ? previous.filter((value) => value !== platformId)
       : [...previous, platformId]);
   }, [publishAvailableIds]);
+
+  const checkPublishAccounts = useCallback(async () => {
+    const targets = publishPlatforms.map((platform) => platform.id);
+    if (!targets.length) return;
+    setAccountChecks(Object.fromEntries(targets.map((platformId) => [platformId, "checking"])));
+    setAccountCheckMessage("正在读取浏览器登录态…");
+    let failed = 0;
+    for (const platformId of targets) {
+      try {
+        await api.verifyAccount(platformId);
+        setAccountChecks((current) => ({ ...current, [platformId]: "done" }));
+      } catch {
+        failed += 1;
+        setAccountChecks((current) => ({ ...current, [platformId]: "failed" }));
+      }
+      const live = await api.platforms();
+      setPlatformCatalog(platformCatalogFromLive(live));
+    }
+    setAccountCheckMessage(failed
+      ? `${failed} 个平台需要重新登录或稍后再试。`
+      : "平台账号已重新检查。");
+  }, [api, publishPlatforms]);
 
   const toggleDefault = useCallback((platformId: PlatformId) => {
     if (!settingsAvailableIds.has(platformId)) return;
@@ -783,7 +813,16 @@ export function PublisherApp({ services, host }: PublisherAppProps) {
             <section className="publish-field">
               <div className="publish-field-head">
                 <b>发布平台</b>
-                <span>已选 {selectedCount} / {publishPlatforms.length}</span>
+                <span className="publish-account-actions">
+                  <span>已选 {selectedCount} / {publishPlatforms.length}</span>
+                  <button
+                    type="button"
+                    onClick={() => void checkPublishAccounts()}
+                    disabled={!publishPlatforms.length || Object.values(accountChecks).includes("checking")}
+                  >
+                    {Object.values(accountChecks).includes("checking") ? "检查中…" : "重新检查"}
+                  </button>
+                </span>
               </div>
               {publishType && publishPlatforms.length === 0 && (
                 <div className="publish-platform-empty">该类型暂无可用平台</div>
@@ -792,6 +831,12 @@ export function PublisherApp({ services, host }: PublisherAppProps) {
                 {publishPlatforms.map((platform) => {
                   const connected = publishAvailableIds.has(platform.id);
                   const active = selectedPlatforms.includes(platform.id);
+                  const accountCheck = accountChecks[platform.id];
+                  const accountLabel = accountCheck === "checking"
+                    ? (platform.accountName ? `${platform.accountName} · 检查中…` : "正在检查账号…")
+                    : accountCheck === "failed"
+                      ? (platform.accountName ? `${platform.accountName} · 检查失败` : "检查失败")
+                      : platform.accountName ?? platform.syncReason ?? "账号未连接";
                   return (
                     <button
                       key={platform.id}
@@ -806,12 +851,25 @@ export function PublisherApp({ services, host }: PublisherAppProps) {
                       <span className="glyph" style={{ background: connected ? platform.color : "var(--tp-hover)", color: connected ? (platform.fg || "white") : "var(--tp-ink3)" }}>
                         <PlatformMark id={platform.id} char={platform.glyph} size={19} tone={connected ? "lit" : "off"} />
                       </span>
-                      <span className="publish-platform-name">{platform.name}</span>
+                      <span className="publish-platform-copy">
+                        <span className="publish-platform-name">{platform.name}</span>
+                        <span className={`publish-platform-account ${accountCheck === "failed" ? "failed" : ""}`}>
+                          {accountLabel}
+                        </span>
+                      </span>
                       <span className="checkmark">✓</span>
                     </button>
                   );
                 })}
               </div>
+              {accountCheckMessage && (
+                <div
+                  className={`publish-account-status ${Object.values(accountChecks).includes("checking") ? "" : "done"} ${Object.values(accountChecks).includes("failed") ? "failed" : ""}`}
+                  role="status"
+                >
+                  {accountCheckMessage}
+                </div>
+              )}
             </section>
 
             <div className="publish-dialog-actions">

@@ -157,9 +157,13 @@ export async function publishDouban(runtime: PublishRuntime): Promise<ExtensionJ
     await Promise.all(imageMedia.map((image) => runtime.forgetUpload(cacheQuery(runtime, image, "photo"))));
     throw new Error(`豆瓣草稿保存失败（HTTP ${result.status}）：${result.message || "未知错误"}`);
   }
+  const url = `https://www.douban.com/topic/create?draft_id=${encodeURIComponent(result.id)}`;
+  runtime.report({ stage: 2, progress: 92, message: "豆瓣草稿已创建，正在打开草稿页" });
+  await runtime.navigate(tabId, url, true);
+  runtime.report({ message: "已打开豆瓣草稿页" });
   return {
     status: "awaiting_confirm",
-    url: `https://www.douban.com/topic/create?draft_id=${encodeURIComponent(result.id)}`,
+    url,
     pageUrl: await runtime.currentUrl(tabId),
     tabId,
     error: null,

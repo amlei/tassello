@@ -70,6 +70,7 @@ await registerNativeMessagingHosts({
 
 run(process.env.TASSELLO_BUN ?? "bun", ["run", "src/index.ts"], API_DIR, {
   TASSELLO_API_PORT: String(API_PORT),
+  TASSELLO_WEB_ORIGIN: process.env.TASSELLO_WEB_ORIGIN ?? `http://localhost:${WEB_PORT}`,
   TASSELLO_DATA_DIR: process.env.TASSELLO_DATA_DIR ?? path.join(ROOT, ".onda"),
 });
 await waitFor(`http://127.0.0.1:${API_PORT}/api/v1/health`);

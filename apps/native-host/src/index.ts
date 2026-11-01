@@ -6,6 +6,7 @@ type RuntimeDescriptor = {
   runtimeId: string;
   installationId: string;
   apiOrigin: string;
+  webOrigin?: string;
   protocolVersion: number;
   nativeHostVersion: number;
 };
@@ -30,7 +31,12 @@ function loopbackOrigin(value: string): boolean {
 async function discover(): Promise<Record<string, unknown>> {
   try {
     const runtime = JSON.parse(await fs.readFile(discoveryFile(), "utf8")) as RuntimeDescriptor;
-    if (!runtime.runtimeId || !runtime.installationId || !loopbackOrigin(runtime.apiOrigin)) {
+    if (
+      !runtime.runtimeId
+      || !runtime.installationId
+      || !loopbackOrigin(runtime.apiOrigin)
+      || (runtime.webOrigin !== undefined && !loopbackOrigin(runtime.webOrigin))
+    ) {
       return { ok: false, error: "本机运行信息无效" };
     }
     return { ok: true, ...runtime };

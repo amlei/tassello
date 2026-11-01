@@ -91,6 +91,14 @@ function mediaKind(path: string): MediaRef["kind"] | null {
   return null;
 }
 
+function decodeLocalMediaTarget(target: string): string {
+  try {
+    return decodeURIComponent(target);
+  } catch {
+    return target;
+  }
+}
+
 export function extractMedia(markdown: string): MediaRef[] {
   const media: MediaRef[] = [];
   const imageRe = /!\[([^\]]*)\]\(([^)\s]+)(?:\s+["'][^"']*["'])?\)/g;
@@ -105,7 +113,14 @@ export function extractMedia(markdown: string): MediaRef[] {
       : target.startsWith("/") || /^[A-Za-z]:[\\/]/.test(target)
         ? "absolute"
         : "relative";
-    media.push({ raw, alt, kind, source, resolved: target, order: media.length });
+    media.push({
+      raw,
+      alt,
+      kind,
+      source,
+      resolved: source === "url" ? target : decodeLocalMediaTarget(target),
+      order: media.length,
+    });
   }
   return media;
 }

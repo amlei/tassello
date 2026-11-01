@@ -151,6 +151,13 @@
 .tassello-publisher .publish-field-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .tassello-publisher .publish-field-head b { color: var(--tp-ink); font-size: 11px; }
 .tassello-publisher .publish-field-head span { color: var(--tp-ink3); font-size: 9.8px; }
+.tassello-publisher .publish-account-actions { display: inline-flex; align-items: center; gap: 7px; }
+.tassello-publisher .publish-account-actions button {
+  border: 0; padding: 0; background: transparent; color: var(--tp-accent);
+  font-size: 10.2px; font-weight: 700; cursor: pointer;
+}
+.tassello-publisher .publish-account-actions button:hover { text-decoration: underline; }
+.tassello-publisher .publish-account-actions button:disabled { opacity: .45; cursor: default; text-decoration: none; }
 .tassello-publisher .publish-platform-empty { min-height: 64px; border-radius: 11px; background: var(--tp-hover); display: grid; place-items: center; color: var(--tp-ink3); font-size: 10.5px; }
 .tassello-publisher .publish-platforms { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
 .tassello-publisher .publish-platform {
@@ -174,9 +181,18 @@
 }
 .tassello-publisher .publish-platform.off { opacity: .46; cursor: not-allowed; }
 .tassello-publisher .publish-platform .glyph { width: 25px; height: 25px; border-radius: 7px; flex: 0 0 auto; display: grid; place-items: center; overflow: hidden; }
+.tassello-publisher .publish-platform-copy { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
 .tassello-publisher .publish-platform-name { min-width: 0; overflow: hidden; font-size: 10.8px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.tassello-publisher .publish-platform-account {
+  max-width: 122px; overflow: hidden; color: var(--tp-ink2); font-size: 10px;
+  line-height: 1.25; text-overflow: ellipsis; white-space: nowrap;
+}
+.tassello-publisher .publish-platform-account.failed { color: var(--tp-error); }
 .tassello-publisher .publish-platform .checkmark { width: 16px; height: 16px; margin-left: auto; border-radius: 50%; flex: 0 0 auto; display: grid; place-items: center; background: var(--tp-card); color: transparent; font-size: 9px; font-weight: 900; }
 .tassello-publisher .publish-platform.selected .checkmark { background: var(--platform-color); color: white; }
+.tassello-publisher .publish-account-status { color: var(--tp-warn); font-size: 9.2px; line-height: 1.45; }
+.tassello-publisher .publish-account-status.done { color: var(--tp-ok); }
+.tassello-publisher .publish-account-status.failed { color: var(--tp-error); }
 .tassello-publisher .publish-dialog-actions { display: flex; justify-content: flex-end; gap: 7px; margin-top: 20px; }
 
 .tassello-publisher .mode {

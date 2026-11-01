@@ -1,5 +1,5 @@
 import { requestUrl } from "obsidian";
-import type { PlatformDTO, PodcastRssDTO, PublishSourceInput } from "@tassello/shared";
+import type { AccountDTO, PlatformDTO, PodcastRssDTO, PublishSourceInput } from "@tassello/shared";
 import type { PublishStatus, PublishTask } from "../types";
 
 type ApiResult<T> = { ok: true; data: T } | { ok: false; error: string };
@@ -92,6 +92,13 @@ export class BackendApi {
 
   async platforms(): Promise<PlatformDTO[]> {
     return this.request<PlatformDTO[]>("/platforms");
+  }
+
+  async verifyAccount(platformId: string): Promise<AccountDTO> {
+    return this.request<AccountDTO>(`/accounts/${encodeURIComponent(platformId)}`, {
+      method: "POST",
+      body: { action: "verify" },
+    });
   }
 
   async podcastRss(): Promise<PodcastRssDTO | null> {

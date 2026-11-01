@@ -5,6 +5,7 @@ import {
   executeInPage,
   setControlValue,
   setInputFiles,
+  waitForImageCount,
   waitForSelector,
   waitForText,
 } from "../page-runtime.ts";
@@ -256,15 +257,21 @@ async function publishImage(runtime: PublishRuntime): Promise<ExtensionJobResult
   if (images.length > 20) throw new Error("公众号贴图一次最多 20 张");
   const tabId = await openEditor(runtime, 8);
   await waitForSelector(tabId, 'input[type="file"]', { visible: false, timeoutMs: 60_000 });
-  if (!(await setInputFiles(tabId, 'input[type="file"]', [images[0]!]))) {
+  runtime.report({ status: "uploading", stage: 1, progress: 30, message: `上传公众号图片（${images.length} 张）` });
+  if (!(await setInputFiles(tabId, 'input[type="file"]', images))) {
     throw new Error("公众号贴图没有进入上传控件");
   }
-  await waitForText(tabId, "上传成功", 180_000).catch(() => undefined);
+  const uploaded = await waitForImageCount(tabId, "img[src*='mmbiz.qpic.cn']", images.length, 180_000);
+  if (uploaded < images.length) {
+    throw new Error(`公众号贴图上传未完成（${uploaded} / ${images.length}）`);
+  }
+  runtime.report({ status: "filling", stage: 1, progress: 90, message: `${images.length} 张图片已上传` });
   await waitForSelector(tabId, "#title, .js_title_main .ProseMirror", { visible: true, timeoutMs: 60_000 });
   const title = runtime.job.snapshot.title.slice(0, 64);
   if (!(await setControlValue(tabId, "#title, .js_title_main .ProseMirror", title))) {
     throw new Error("公众号贴图标题写入失败");
   }
+  runtime.report({ status: "filling", stage: 2, progress: 100, message: `公众号贴图已就绪（${images.length} 张）` });
   return {
     status: "awaiting_confirm",
     url: null,

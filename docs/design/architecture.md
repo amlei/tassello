@@ -15,8 +15,8 @@
 | 前端 | Next.js rewrite 调用 API；编辑器保存 Markdown + fingerprint | 外部修改实时提示 |
 | Obsidian | 远端 API 客户端、直接 Markdown 编辑、预览内发布、WebSocket 状态 | 插件 token 配对与完整冲突交互 |
 | 桌面 | Electron 托管 API 二进制与 Next standalone，动态端口与完整链路自检 | 目标平台安装包实跑 |
-| 浏览器执行 | MV3、Native Messaging 自动发现/配对、单连接、心跳、12 个 active 扩展平台驱动、串行任务与断线恢复、结果确认回执、tab 聚焦/关闭、媒体传输与上传复用、账号自动发现/验证；RSS 认领在账号检查时采集一次；微信公众号文章/短语音、微博贴图、小红书长文/播客、即刻贴图、豆瓣图文草稿、知乎文章/视频、X 图文/视频、百家号图文/视频/动态、小宇宙/喜马拉雅/蜻蜓 FM/荔枝单音频已真机通过；头条号驱动代码保留但产品状态为 planned | 头条号完整开发验收、微信长播客改走 RSS、微博/小红书视频回归、其余未列平台组合、账号与发布全平台回归、真机安装包验证 |
-| 应用内网页生图 | 豆包任务契约、本机后端持久化、扩展串行执行、原图下载、Vault 落盘和按需 CLI | 页面入口、Agent/MCP 接口、更多平台 |
+| 浏览器执行 | MV3、Native Messaging 自动发现/配对、单连接、心跳、12 个 active 扩展平台驱动、按平台并发任务与断线恢复、结果确认回执、tab 聚焦/关闭、媒体传输与上传复用、账号自动发现/验证；RSS 认领在账号检查时采集一次；微信公众号文章/短语音、微博贴图、小红书长文/播客、即刻贴图、豆瓣图文草稿、知乎文章/视频、X 图文/视频、百家号图文/视频/动态、小宇宙/喜马拉雅/蜻蜓 FM/荔枝单音频已真机通过；头条号驱动代码保留但产品状态为 planned | 头条号完整开发验收、微信长播客改走 RSS、微博/小红书视频回归、其余未列平台组合、账号与发布全平台回归、真机安装包验证 |
+| 应用内网页生图 | 豆包任务契约、本机后端持久化、扩展按平台并发执行、原图下载、Vault 落盘和按需 CLI | 页面入口、Agent/MCP 接口、更多平台 |
 
 阅读和实现时必须区分“已落地”和“尚未完成”。未完成迁移的代码不得被描述为已满足目标契约。
 
@@ -374,7 +374,7 @@ Obsidian 的 Markdown 视图继承 `TextFileView`；官方 API 对自动保存�
 
 ```text
 TASSELLO_DATA_DIR/
-├── runtime.json                 # API 端口、临时 runtimeId、pid、协议版本；不含长期 token
+├── runtime.json                 # API/Web 地址、临时 runtimeId、pid、协议版本；不含长期 token
 ├── secrets.json                 # API 凭据，chmod 600
 └── state/
     ├── identity.json            # 稳定 installationId，首次启动生成
@@ -460,7 +460,7 @@ GET    /api/v1/extensions
 DELETE /api/v1/extensions/:clientId
 ```
 
-`GET /api/v1/runtime` 同时返回 `cliProtocolVersion`；CLI 在每次调用前校验版本，协议不一致时要求同时更新 API、Web 与 CLI。任务 DTO 从发布快照派生 `contentType`，供 CLI 按平台和类型查询，不新增第二套任务字段。
+`GET /api/v1/runtime` 同时返回 `cliProtocolVersion`、`apiOrigin` 和 `webOrigin`；CLI 在每次调用前校验版本，协议不一致时要求同时更新 API、Web 与 CLI。任务 DTO 从发布快照派生 `contentType`，供 CLI 按平台和类型查询，不新增第二套任务字段。
 
 WebSocket：
 
@@ -474,7 +474,7 @@ WebSocket：
 - server 只监听 `127.0.0.1`。
 - Web UI 通过 Elysia 建立短期本机会话；CORS 只允许已知 Web origin。
 - Obsidian 插件通过一次性配对码换取插件 token。
-- 浏览器扩展通过 Native Messaging 获得当前 `apiOrigin`，再由官方扩展 ID 白名单换取 token。
+- 浏览器扩展通过 Native Messaging 获得当前 `apiOrigin`，再由官方扩展 ID 白名单换取 token；打开前台时从 API 运行时信息读取明确的 `webOrigin`，不得把 API 端口拼成 Web 路径。
 - 不同 token 绑定不同能力域：UI、Obsidian、扩展、Agent 不能互相冒充。
 - Agent 只通过后端 API / WebSocket 接入，不得直接控制浏览器扩展；详见 [`agents.md`](./agents.md)。
 - 扩展 token 只存哈希；撤销后立即断开现有连接。
@@ -624,7 +624,7 @@ apps/native-host/
 2. 安装包注册固定名称 `com.jiuyang.onda` 的 Native Messaging Host。
 3. Host manifest 的 `allowed_origins` 只允许官方、手动安装和开发扩展 ID。
 4. 扩展安装或启动后通过 `chrome.runtime.sendNativeMessage()` 请求当前运行环境。
-5. Host 读取 `~/.onda/runtime.json`，校验 loopback origin 后返回动态 `apiOrigin` 与 `runtimeId`。
+5. Host 读取 `~/.onda/runtime.json`，校验 loopback origin 后返回动态 `apiOrigin`、`webOrigin` 与 `runtimeId`。
 6. 扩展换取长期 token，通过 `/ws/extension` 建立连接并上报浏览器、版本和心跳。
 7. 设置页与扩展 popup 只显示连接状态色，不要求用户填写地址、短码或手动确认配对。
 
@@ -648,6 +648,7 @@ apps/native-host/
 - Web 与 Obsidian 都是同一后端的客户端，只读取发布能力状态；不得各自保存“扩展连接给某个应用”的副本。
 - 一个 installation 同时只保留一个浏览器扩展执行连接；Web、Obsidian 与 Agent 可以同时连接后端。
 - 扩展心跳更新内存状态；磁盘只在连接建立、断开、撤销和低频检查点时刷新，避免每次心跳写文件。
+- 扩展 popup 读取当前平台账号状态并允许重新检查；检查仍经本机后端发起和持久化，扩展不成为第二套账号状态源。
 
 ### 10.4 任务协议
 
@@ -682,7 +683,10 @@ type ExtensionMessage =
 - 看到明确成功回执才自动 success。
 - 已经可能提交但结果不确定时标记 `unknown`，不能自动重试以免重复发布。
 - 成功和等待确认都不自动关闭标签页；用户可通过“关闭标签页”显式清理，取消任务时关闭本次任务创建的标签页。
-- 发布和生图共用唯一扩展执行通道，但使用不同任务类型和回执消息；生图不使用发布快照或平台注册表。
+- 发布和生图共用唯一扩展连接与按平台键控的调度器，但使用不同任务类型和回执消息；生图不使用发布快照或平台注册表。
+- 不同平台的任务立即并行启动，不设全局并发数量上限；用户选择多少个可发布平台，就允许多少个平台同时执行。
+- 同一平台的任务保持 FIFO 串行，避免同一编辑器、账号会话和标签页互相覆盖。
+- 取消、标签页控制和断线恢复都按 `jobId` 隔离，不得关闭或中断同轮其它平台的任务。
 
 ### 10.5 页面执行
 
@@ -762,8 +766,9 @@ storage, scripting, tabs, alarms, nativeMessaging
 3. 调用 `save()`，确保编辑器 Buffer 已写入磁盘。
 4. 插件向后端提交文档 ID、当前 Vault、相对路径、Markdown、fingerprint、平台与频道。
 5. 后端按显式文件路径解析本地资源，并生成不可变快照，不依赖全局 Vault 查找。
-6. 插件订阅任务事件并显示进度、平台标签页和发布链接。
-7. 任务完成后链接保存在后端任务文件中，插件从 API 读取。
+6. 发布平台选择直接显示当前账号名称，并可在同一区域按当前内容类型重新检查平台账号。
+7. 插件订阅任务事件并显示进度、平台标签页和发布链接。
+8. 任务完成后链接保存在后端任务文件中，插件从 API 读取。
 
 ### 11.3 设置
 
@@ -842,6 +847,7 @@ storage, scripting, tabs, alarms, nativeMessaging
 - 12 个 active 扩展平台账号、1 个扩展连接：状态文件与 WS 开销可忽略。
 - 发布连接状态查询、心跳与切换均为 `O(1)`；单连接 30 秒心跳约 24 KB/小时。
 - 每平台每次发布 1–20 张图片：网络与磁盘主要受媒体大小影响。
+- 典型发布选择 3–6 个不同平台时，每平台最多一个任务并行；标注页与上传网络开销随平台数线性增长。
 - RSS 认领只缓存小型元数据；每个 Feed 典型小于 10 KiB，公开索引查询最多读取 1 MiB HTML/JSON。
 
 ### 14.2 最坏负载
@@ -849,6 +855,7 @@ storage, scripting, tabs, alarms, nativeMessaging
 - 10,000 篇长文时，全量搜索会产生明显的 `O(N × B)` 磁盘读取和 CPU 开销；UI 必须显示扫描状态并支持取消。
 - 同步盘或 git checkout 一次修改 1,000 个文件时，watcher 需要合批，避免逐文件重新渲染。
 - 1 GB 视频无法保证低内存注入；超阈值必须人工选择文件或使用平台分片接口。
+- 设用户一次选择 `P` 个不同平台，则最坏有 `P` 个任务同时各自读取最多 128 MiB 媒体；扩展 base64 内存上界约为 `P × 128 MiB`，另加各标签页自身内存。调度不设隐藏的全局并发上限，因此 `P` 是用户可感知的资源边界。
 - 多个 verify 标签页不能并发打开；默认串行，最多 1–2 个。
 - RSS Feed 最坏响应限制为 2 MiB，并在完整读入内存前检查上限；不下载音频。
 - 扩展安装数量不参与调度；最坏情况仍只允许一个活跃扩展连接，避免重复发布和无界状态增长。

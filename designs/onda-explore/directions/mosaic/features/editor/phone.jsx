@@ -132,7 +132,7 @@ function PhoneCard({ post, paneRef, onScroll, more }) {
       <div className="m-phone-head">
         <span className="av" style={{ background: t.color }}>九</span>
         <div>
-          <div className="who">九漾小记</div>
+          <div className="who">九漾 Onda</div>
         </div>
       </div>
       {post.type === "article" && <PreviewCover image={cover} type="article" />}

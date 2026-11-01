@@ -10,8 +10,10 @@ import {
   type ImageGenerationJobResult,
 } from "@tassello/shared";
 import { accountResult, openPlatformLogin, verifyPlatformAccount } from "./accounts.ts";
+import { resolveWebAppUrl } from "./app-url.ts";
 import { runDriver } from "./drivers.ts";
 import { runDoubaoImageGeneration } from "./drivers/doubao-generation.ts";
+import { KeyedJobScheduler } from "./job-scheduler.ts";
 import { closeTab, focusTab } from "./page-runtime.ts";
 import { PublishRuntime } from "./publish-runtime.ts";
 import type { BackgroundState, ClientMessage, ServerMessage, StoredConnection } from "./protocol.ts";
@@ -20,7 +22,8 @@ const STORAGE_KEY = "tassello.connection";
 const RECONNECT_ALARM = "tassello.reconnect";
 const HEARTBEAT_ALARM = "tassello.heartbeat";
 const JOB_QUEUE_KEY = "tassello.jobQueue";
-const JOB_ACTIVE_KEY = "tassello.activeJob";
+const JOB_ACTIVE_JOBS_KEY = "tassello.activeJobs";
+const LEGACY_JOB_ACTIVE_KEY = "tassello.activeJob";
 const JOB_RESULTS_KEY = "tassello.jobResults";
 const JOB_ACKED_KEY = "tassello.ackedJobResults";
 
@@ -31,12 +34,19 @@ type BrowserWork =
   | { kind: "publish"; job: ExtensionJob }
   | { kind: "generation"; job: ImageGenerationJob };
 type BrowserResult = ExtensionJobResult | ImageGenerationJobResult;
-let jobQueue: BrowserWork[] = [];
-let activeJob: BrowserWork | null = null;
-let jobPumpRunning = false;
-let activeJobRunning = false;
-let activeTabs = new Set<number>();
-let activeJobCancelled = false;
+function workPlatform(work: BrowserWork): string {
+  return work.kind === "publish" ? work.job.snapshot.platformId : "doubao";
+}
+
+const jobScheduler = new KeyedJobScheduler<BrowserWork>(
+  (work) => work.job.jobId,
+  workPlatform,
+);
+const activeTabsByJob = new Map<string, Set<number>>();
+const cancelledJobs = new Set<string>();
+let recoveredActiveJobs: BrowserWork[] = [];
+let hydration: Promise<void> | null = null;
+let persistedTail: Promise<void> = Promise.resolve();
 let jobKeepAliveTimer: ReturnType<typeof setInterval> | null = null;
 let jobResults = new Map<string, BrowserResult>();
 let ackedResults = new Set<string>();
@@ -63,28 +73,47 @@ async function getConnection(): Promise<StoredConnection | null> {
 }
 
 async function hydrateJobs(): Promise<void> {
-  const stored = await chrome.storage.local.get([JOB_QUEUE_KEY, JOB_ACTIVE_KEY, JOB_RESULTS_KEY, JOB_ACKED_KEY]);
-  jobQueue = Array.isArray(stored[JOB_QUEUE_KEY])
-    ? (stored[JOB_QUEUE_KEY] as BrowserWork[]).filter((work) =>
-        work && (work.kind === "publish" || work.kind === "generation")
-      )
-    : [];
-  activeJob = stored[JOB_ACTIVE_KEY] && typeof stored[JOB_ACTIVE_KEY] === "object"
-    && ["publish", "generation"].includes(String((stored[JOB_ACTIVE_KEY] as { kind?: unknown }).kind))
-    ? stored[JOB_ACTIVE_KEY] as BrowserWork
-    : null;
-  const results = Array.isArray(stored[JOB_RESULTS_KEY]) ? stored[JOB_RESULTS_KEY] as BrowserResult[] : [];
-  jobResults = new Map(results.map((result) => [result.jobId, result]));
-  ackedResults = new Set(Array.isArray(stored[JOB_ACKED_KEY]) ? stored[JOB_ACKED_KEY] as string[] : []);
+  if (hydration) return hydration;
+  hydration = (async () => {
+    const stored = await chrome.storage.local.get([
+      JOB_QUEUE_KEY,
+      JOB_ACTIVE_JOBS_KEY,
+      LEGACY_JOB_ACTIVE_KEY,
+      JOB_RESULTS_KEY,
+      JOB_ACKED_KEY,
+    ]);
+    const queued = Array.isArray(stored[JOB_QUEUE_KEY])
+      ? (stored[JOB_QUEUE_KEY] as BrowserWork[]).filter((work) =>
+          work && (work.kind === "publish" || work.kind === "generation")
+        )
+      : [];
+    for (const work of queued) jobScheduler.enqueue(work);
+    const active = Array.isArray(stored[JOB_ACTIVE_JOBS_KEY])
+      ? stored[JOB_ACTIVE_JOBS_KEY] as BrowserWork[]
+      : [];
+    const legacy = stored[LEGACY_JOB_ACTIVE_KEY] as BrowserWork | null | undefined;
+    recoveredActiveJobs = [
+      ...active,
+      ...(legacy && (legacy.kind === "publish" || legacy.kind === "generation") ? [legacy] : []),
+    ].filter((work) => work && typeof work.job?.jobId === "string");
+    const results = Array.isArray(stored[JOB_RESULTS_KEY]) ? stored[JOB_RESULTS_KEY] as BrowserResult[] : [];
+    jobResults = new Map(results.map((result) => [result.jobId, result]));
+    ackedResults = new Set(Array.isArray(stored[JOB_ACKED_KEY]) ? stored[JOB_ACKED_KEY] as string[] : []);
+    if (legacy) await chrome.storage.local.remove(LEGACY_JOB_ACTIVE_KEY);
+  })();
+  return hydration;
 }
 
 async function persistJobState(): Promise<void> {
-  await Promise.all([
-    chrome.storage.local.set({ [JOB_QUEUE_KEY]: jobQueue }),
-    chrome.storage.local.set({ [JOB_ACTIVE_KEY]: activeJob }),
-    chrome.storage.local.set({ [JOB_RESULTS_KEY]: [...jobResults.values()].slice(-50) }),
-    chrome.storage.local.set({ [JOB_ACKED_KEY]: [...ackedResults].slice(-100) }),
-  ]);
+  const snapshot = {
+    [JOB_QUEUE_KEY]: jobScheduler.queued(),
+    [JOB_ACTIVE_JOBS_KEY]: jobScheduler.activeWorks(),
+    [JOB_RESULTS_KEY]: [...jobResults.values()].slice(-50),
+    [JOB_ACKED_KEY]: [...ackedResults].slice(-100),
+  };
+  const next = persistedTail.catch(() => undefined).then(() => chrome.storage.local.set(snapshot)).then(() => undefined);
+  persistedTail = next;
+  await next;
 }
 
 async function setState(patch: Partial<BackgroundState>): Promise<void> {
@@ -209,11 +238,10 @@ async function connectOnce(): Promise<void> {
       token: connection.token,
       extVersion: chrome.runtime.getManifest().version,
       accountProtocolVersion: 1,
-      activeJobId: activeJob?.job.jobId ?? null,
+      activeJobIds: jobScheduler.activeWorks().map((work) => work.job.jobId),
     }));
-    if (activeJob && !activeJobRunning) {
-      const stale = activeJob;
-      activeJob = null;
+    for (const stale of recoveredActiveJobs) {
+      if (jobResults.has(stale.job.jobId)) continue;
       jobResults.set(stale.job.jobId, {
         ...(stale.kind === "publish"
           ? {
@@ -235,11 +263,12 @@ async function connectOnce(): Promise<void> {
             }),
       });
     }
+    recoveredActiveJobs = [];
     for (const result of jobResults.values()) {
       if (!ackedResults.has(result.jobId)) send(result);
     }
     void persistJobState();
-    void pumpJobs();
+    startQueuedJobs();
   });
   currentSocket.addEventListener("message", (event) => {
     if (socket === currentSocket) void handleMessage(String(event.data), currentSocket);
@@ -308,7 +337,7 @@ async function handleMessage(raw: string, sourceSocket: WebSocket): Promise<void
     return;
   }
   if (message.type === "job.closeTab") {
-    activeTabs.delete(message.tabId);
+    for (const tabs of activeTabsByJob.values()) tabs.delete(message.tabId);
     await closeTab(message.tabId);
     return;
   }
@@ -330,9 +359,18 @@ async function handleMessage(raw: string, sourceSocket: WebSocket): Promise<void
 async function openApp(pathname: string): Promise<void> {
   const connection = await getConnection();
   const discovery = await discoverRuntime();
-  const origin = discovery.ok ? discovery.apiOrigin : connection?.apiOrigin;
-  if (!origin) throw new Error(discovery.error ?? "本机 Onda 未运行");
-  await chrome.tabs.create({ url: `${origin.replace(/\/+$/, "")}${pathname}` });
+  const apiOrigin = discovery.ok ? discovery.apiOrigin : connection?.apiOrigin;
+  if (!apiOrigin) throw new Error(discovery.error ?? "本机 Onda 未运行");
+  const response = await fetch(`${apiOrigin.replace(/\/+$/, "")}/api/v1/runtime`, { cache: "no-store" });
+  const payload = await response.json().catch(() => null) as {
+    ok?: boolean;
+    data?: { webOrigin?: unknown };
+    error?: string;
+  } | null;
+  if (!response.ok || payload?.ok !== true) {
+    throw new Error(payload?.error ?? `无法读取本机 Web 界面地址（HTTP ${response.status}）`);
+  }
+  await chrome.tabs.create({ url: resolveWebAppUrl(payload.data?.webOrigin, pathname) });
 }
 
 function send(message: ClientMessage): boolean {
@@ -413,32 +451,28 @@ async function enqueueJob(work: BrowserWork): Promise<void> {
     send(previous);
     return;
   }
-  if (activeJob?.job.jobId === jobId || jobQueue.some((item) => item.job.jobId === jobId)) return;
-  jobQueue.push(work);
+  if (!jobScheduler.enqueue(work)) return;
   await persistJobState();
-  await pumpJobs();
+  startQueuedJobs();
 }
 
-async function pumpJobs(): Promise<void> {
-  if (jobPumpRunning) return;
-  jobPumpRunning = true;
+function startQueuedJobs(): void {
+  const runnable = jobScheduler.takeRunnable();
+  if (!runnable.length) {
+    if (jobScheduler.activeCount() === 0) stopJobKeepAlive();
+    return;
+  }
   startJobKeepAlive();
-  try {
-    while (jobQueue.length > 0) {
-      const job = jobQueue.shift()!;
-      activeJob = job;
-      activeJobRunning = true;
-      activeJobCancelled = false;
-      activeTabs = new Set();
+  void persistJobState();
+  for (const job of runnable) {
+    activeTabsByJob.set(job.job.jobId, new Set());
+    void executeJob(job).finally(async () => {
+      jobScheduler.complete(job.job.jobId);
+      activeTabsByJob.delete(job.job.jobId);
+      cancelledJobs.delete(job.job.jobId);
       await persistJobState();
-      await executeJob(job);
-      activeJob = null;
-      activeJobRunning = false;
-      await persistJobState();
-    }
-  } finally {
-    stopJobKeepAlive();
-    jobPumpRunning = false;
+      startQueuedJobs();
+    });
   }
 }
 
@@ -459,10 +493,8 @@ function stopJobKeepAlive(): void {
 }
 
 async function cancelJob(jobId: string): Promise<void> {
-  const index = jobQueue.findIndex((work) => work.job.jobId === jobId);
-  if (index >= 0) {
-    const [work] = jobQueue.splice(index, 1);
-    if (!work) return;
+  const work = jobScheduler.removeQueued(jobId);
+  if (work) {
     const result: BrowserResult = work.kind === "publish"
       ? {
           type: "job.result",
@@ -477,13 +509,16 @@ async function cancelJob(jobId: string): Promise<void> {
     await deliverResult(result);
     return;
   }
-  if (activeJob?.job.jobId === jobId) {
-    activeJobCancelled = true;
-    await Promise.all([...activeTabs].map((tabId) => closeTab(tabId)));
+  if (jobScheduler.activeWorks().some((active) => active.job.jobId === jobId)) {
+    cancelledJobs.add(jobId);
+    await Promise.all([...(activeTabsByJob.get(jobId) ?? [])].map((tabId) => closeTab(tabId)));
   }
 }
 
 async function executeJob(work: BrowserWork): Promise<void> {
+  const jobId = work.job.jobId;
+  const activeTabs = activeTabsByJob.get(jobId) ?? new Set<number>();
+  activeTabsByJob.set(jobId, activeTabs);
   let result: BrowserResult;
   try {
     if (!connectionInfo) throw new Error("浏览器扩展未连接本机 Onda");
@@ -497,7 +532,7 @@ async function executeJob(work: BrowserWork): Promise<void> {
         });
       });
       let finalResult = await runDriver(runtime);
-      if (activeJobCancelled) {
+      if (cancelledJobs.has(jobId)) {
         finalResult = { status: "cancelled", error: null, pageUrl: finalResult.pageUrl ?? null };
       }
       if (finalResult.status === "cancelled") {
@@ -518,7 +553,7 @@ async function executeJob(work: BrowserWork): Promise<void> {
           event,
         });
       });
-      if (activeJobCancelled) {
+      if (cancelledJobs.has(jobId)) {
         await Promise.all([...activeTabs].map((tabId) => closeTab(tabId)));
         activeTabs.clear();
         finalResult = {
@@ -541,14 +576,14 @@ async function executeJob(work: BrowserWork): Promise<void> {
       ? {
           type: "job.result",
           jobId: work.job.jobId,
-          result: activeJobCancelled
+          result: cancelledJobs.has(jobId)
             ? { status: "cancelled", error: null }
             : { status: "failed", error: message },
         }
       : {
           type: "generation.result",
           jobId: work.job.jobId,
-          result: activeJobCancelled
+          result: cancelledJobs.has(jobId)
             ? { status: "cancelled", outputs: [], error: null }
             : { status: "failed", outputs: [], error: message },
         };
@@ -590,7 +625,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
   if (message?.type === "tassello.open-app") {
-    void openApp(String(message.path ?? "/library/article")).then(() => sendResponse({ ok: true }));
+    void openApp(String(message.path ?? "/library/article"))
+      .then(() => sendResponse({ ok: true }))
+      .catch((error) => sendResponse({
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+      }));
     return true;
   }
   if (message?.type === "tassello.state") {

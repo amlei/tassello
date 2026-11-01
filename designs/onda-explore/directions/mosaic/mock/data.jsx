@@ -108,32 +108,32 @@ function channelsOf(platform) {
  */
 const PLATFORMS = [
   { id: "wechat",    name: "微信公众号", char: "微", color: "#07C160", state: "ok", syncPhase: "extension_offline", link: "mp.weixin.qq.com/s/",        supports: ["article", "image", "video", "audio"],
-    account: { name: "九漾小记", kind: "订阅号", uid: "gh_3f9a2c7d", until: "2026-12-31", checked: "09-16 14:52", lands: "内容进这个号的草稿箱，群发要你去公众号后台点一次" } },
+    account: { name: "九漾 Onda", kind: "订阅号", uid: "gh_3f9a2c7d", until: "2026-12-31", checked: "09-16 14:52", lands: "内容进这个号的草稿箱，群发要你去公众号后台点一次" } },
   { id: "xhs",       name: "小红书",     char: "红", color: "#FF2442", state: "ok", syncPhase: "unverified", link: "www.xiaohongshu.com/explore/", supports: ["article", "image", "video", "audio"],
     account: { name: "九漾 Onda", kind: "个人号", uid: "小红书号 8823456712", until: "2026-11-30", checked: "09-16 09:12", lands: "直接发成一篇笔记，发完可以在小红书里继续改" } },
   { id: "weibo",     name: "微博",       char: "博", color: "#FF8200", state: "ok", syncPhase: "source_changed", link: "weibo.com/detail/",          supports: ["article", "image", "video"],
-    account: { name: "九漾Onda", kind: "个人认证", uid: "UID 5f2c91a4", until: "2027-01-15", checked: "09-15 20:41", lands: "直接发一条微博（这个号没开长文，正文限 500 字）" } },
+    account: { name: "九漾 Onda", kind: "个人认证", uid: "UID 5f2c91a4", until: "2027-01-15", checked: "09-15 20:41", lands: "直接发一条微博（这个号没开长文，正文限 500 字）" } },
   { id: "jike",      name: "即刻",       char: "即", color: "#FFD400", fg: "#16130E", state: "ok", link: "web.okjike.com/originalPost/", supports: ["image", "video"],
-    account: { name: "九漾", kind: "个人号", uid: "即刻 ID 9A3F7C", until: "2026-10-20", checked: "09-14 11:03", lands: "直接发一条动态" } },
+    account: { name: "九漾 Onda", kind: "个人号", uid: "即刻 ID 9A3F7C", until: "2026-10-20", checked: "09-14 11:03", lands: "直接发一条动态" } },
   { id: "bili",      name: "B站",        char: "B",  color: "#00A1D6", state: "fail", link: "www.bilibili.com/video/",    supports: ["article", "image", "video"], lands: "进投稿页，需要你确认封面与分区后提交",
     account: null, accountError: "账号已掉线（08-30），请重新登录 B站" },
   /* X 是单色品牌：品牌色跟主题翻转（亮色黑标 / 深色白标），见 index.html 的 --plat-x */
   { id: "x",         name: "X",          char: "X",  color: "var(--plat-x)", fg: "var(--plat-x-fg)", state: "fail", syncPhase: "needs_login", link: "x.com/i/status/",            supports: ["article", "image", "video"], lands: "直接发一条推文（长文走 X Article）",
     account: null, accountError: "账号连接已被 X 取消，请重新登录" },
   { id: "zhihu",     name: "知乎",       char: "知", color: "#0084FF", state: "ok",   link: "zhuanlan.zhihu.com/p/",      supports: ["article", "image", "video"],
-    account: { name: "九漾 Onda", kind: "机构号授权", uid: "zhuanlan.zhihu.com/people/onda", until: "2026-12-08", checked: "09-16 08:30", lands: "存成一篇专栏草稿，发布按钮在知乎后台" } },
+    account: { name: "九漾 Onda", kind: "机构号授权", uid: "zhuanlan.zhihu.com/people/example", until: "2026-12-08", checked: "09-16 08:30", lands: "存成一篇专栏草稿，发布按钮在知乎后台" } },
   { id: "douban",    name: "豆瓣",       char: "豆", color: "#2E963D", state: "ok",   link: "www.douban.com/note/",       supports: ["article", "image"],
-    account: { name: "九漾", kind: "个人号", uid: "豆瓣 ID 197364821", until: "2026-11-11", checked: "09-13 19:22", lands: "直接发成一篇日记" } },
+    account: { name: "九漾 Onda", kind: "个人号", uid: "豆瓣 ID 197364821", until: "2026-11-11", checked: "09-13 19:22", lands: "直接发成一篇日记" } },
   { id: "apple",     name: "Apple Podcasts", char: "", color: "#A855F7", state: "ok", rssOnly: true, link: "podcasts.apple.com/", supports: ["audio"], lands: "通过 RSS 自动收录",
-    account: { name: "青春列车", kind: "RSS", uid: "Apple Podcasts", until: "", checked: "账号检查时", lands: "通过 RSS 自动收录" } },
+    account: { name: "九漾 Onda", kind: "RSS", uid: "Apple Podcasts", until: "", checked: "账号检查时", lands: "通过 RSS 自动收录" } },
   { id: "toutiao",   name: "头条号",     char: "头", color: "#F04142", state: "ok",   link: "www.toutiao.com/article/",   supports: ["article", "image", "video", "audio"],
     contentLabels: { article: "文章", image: "微头条", video: "视频", audio: "音频" },
     account: { name: "九漾 Onda", kind: "头条号", uid: "头条号 ID 1736…", until: "2026-12-20", checked: "09-16 10:15", lands: "文章自动存草稿箱；微头条、视频、音频填好后停在发布前，由你在头条号后台确认" } },
   { id: "baijiahao", name: "百家号",     char: "百", color: "#2932E1", state: "ok",   link: "baijiahao.baidu.com/s?id=",  supports: ["article", "image", "video"],
     contentLabels: { article: "图文", image: "动态", video: "视频" },
-    account: { name: "九漾Onda", kind: "百家号", uid: "百家号 ID 9f3c…", until: "2027-02-01", checked: "09-16 10:20", lands: "图文可存草稿；视频、动态填好后停在发布前，由你在百家号后台确认" } },
+    account: { name: "九漾 Onda", kind: "百家号", uid: "百家号 ID 9f3c…", until: "2027-02-01", checked: "09-16 10:20", lands: "图文可存草稿；视频、动态填好后停在发布前，由你在百家号后台确认" } },
   { id: "douyin",    name: "抖音",       char: "抖", color: "#25F4EE", fg: "#16130E", state: "ok", link: "www.douyin.com/video/", supports: ["article", "image", "video"],
-    account: { name: "九漾 Onda", kind: "企业号", uid: "抖音号 onda2026", until: "2026-10-05", checked: "09-12 16:40", lands: "传成草稿，发布要你在抖音 App 里点" } },
+    account: { name: "九漾 Onda", kind: "企业号", uid: "抖音号 example2026", until: "2026-10-05", checked: "09-12 16:40", lands: "传成草稿，发布要你在抖音 App 里点" } },
   /* 四个音频出口：只收声音，不收图文/视频 —— 音频稿的发布面就是靠它们撑起来的 */
   /*
    * 账号 → 频道：播客/音频平台的一个账号底下往往不止一个发布目标 ——
@@ -142,35 +142,35 @@ const PLATFORMS = [
    * 单频道平台发布时不用选；多频道的平台发布弹层里要挑一个频道。
    */
   { id: "xiaoyuzhou", name: "小宇宙",    char: "宇", color: "#6E4AFF", state: "ok",   link: "www.xiaoyuzhoufm.com/episode/", supports: ["audio"],
-    account: { name: "九漾电台", kind: "播客", uid: "小宇宙 ID onda", until: "2027-03-01", checked: "09-16 11:02", lands: "单集进所选节目的草稿，发布要你去小宇宙创作者后台点一次",
+    account: { name: "九漾 Onda", kind: "播客", uid: "小宇宙 ID onda", until: "2027-03-01", checked: "09-16 11:02", lands: "单集进所选节目的草稿，发布要你去小宇宙创作者后台点一次",
       channels: [
-        { id: "xyz-radio", name: "九漾电台", uid: "小宇宙节目 ID onda", items: "EP.01 – EP.12" },
-        { id: "xyz-talk",  name: "九漾闲聊", uid: "小宇宙节目 ID onda-talk", items: "Vol.01 – Vol.07" },
+        { id: "xyz-radio", name: "九漾 Onda", uid: "小宇宙节目 ID onda", items: "EP.01 – EP.12" },
+        { id: "xyz-talk",  name: "九漾 Onda", uid: "小宇宙节目 ID onda-talk", items: "Vol.01 – Vol.07" },
       ] } },
   { id: "ximalaya",  name: "喜马拉雅",   char: "喜", color: "#F86442", state: "ok",   link: "www.ximalaya.com/sound/",       supports: ["audio"],
     account: { name: "九漾 Onda", kind: "主播号", uid: "喜马拉雅 ID 3f9c…", until: "2026-12-15", checked: "09-16 11:05", lands: "上传到所选专辑，成为一条待审核的声音",
       channels: [
-        { id: "xm-onda",  name: "九漾 Onda", uid: "专辑 ID 3f9c01", items: "128 条声音" },
+        { id: "xm-example", name: "九漾 Onda", uid: "专辑 ID 3f9c01", items: "128 条声音" },
         { id: "xm-noise", name: "白噪音收藏夹", uid: "专辑 ID 3f9c02", items: "34 条声音" },
       ] } },
   { id: "qingting",  name: "蜻蜓 FM",     char: "蜻", color: "#F04438", state: "ok",   link: "www.qingting.fm/channels/",    supports: ["audio"],
-    account: { name: "Amlei", kind: "主播号", uid: "蜻蜓 ID 1c95f2…", until: "", checked: "账号检查时", lands: "上传到所选专辑，停在平台「发布」前",
+    account: { name: "九漾 Onda", kind: "主播号", uid: "蜻蜓 ID 1c95f2…", until: "", checked: "账号检查时", lands: "上传到所选专辑，停在平台「发布」前",
       channels: [
-        { id: "530120", name: "青春列车", uid: "专辑 ID 530120", items: "RSS · 24 期" },
+        { id: "530120", name: "九漾 Onda", uid: "专辑 ID 530120", items: "RSS · 24 期" },
       ] } },
   { id: "lizhi",     name: "荔枝播客",     char: "荔", color: "#D6336C", state: "ok", syncPhase: "failed", link: "www.lizhi.fm/",                supports: ["audio"],
-    account: { name: "九漾电台", kind: "播客号", uid: "荔枝 ID lz8823", until: "2026-11-20", checked: "09-16 11:08", lands: "进草稿箱，发布要你去荔枝后台点",
+    account: { name: "九漾 Onda", kind: "播客号", uid: "荔枝 ID lz8823", until: "2026-11-20", checked: "09-16 11:08", lands: "进草稿箱，发布要你去荔枝后台点",
       channels: [
-        { id: "lz-main", name: "九漾电台", uid: "荔枝播单 lz8823", items: "56 期" },
+        { id: "lz-main", name: "九漾 Onda", uid: "荔枝播单 lz8823", items: "56 期" },
       ] } },
 ];
 
 const PODCAST_RSS = {
-  title: "青春列车",
+  title: "九漾 Onda",
   feedUrl: "https://feed.xyzfm.space/9kawahhdv9tp",
   episodeCount: 21,
   sourcePlatformId: "xiaoyuzhou",
-  sourceChannelName: "青春列车",
+  sourceChannelName: "九漾 Onda",
   checkedAt: "账号检查时获取",
   claims: [
     { platformId: "xhs", state: "claimed", label: "已同步", evidence: "20 期" },

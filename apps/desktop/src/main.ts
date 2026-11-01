@@ -172,6 +172,9 @@ function startApiServer(): void {
     env: {
       ...process.env,
       TASSELLO_API_PORT: String(activeApiPort),
+      TASSELLO_WEB_ORIGIN: process.env.TASSELLO_WEB_URL
+        ? new URL(process.env.TASSELLO_WEB_URL).origin
+        : `http://localhost:${activeWebPort}`,
       TASSELLO_DATA_DIR: dataDir,
       TASSELLO_DESKTOP: "1",
     },

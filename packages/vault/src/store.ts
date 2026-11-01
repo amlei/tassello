@@ -102,15 +102,17 @@ export function parseDocumentContent(
   const media = [...bodyMedia];
   if (cover) {
     const coverRef = extractMedia(`![封面](${cover})`).find((item) => item.kind === "image");
-    if (
-      coverRef
-      && !media.some((item) =>
+    if (coverRef) {
+      const existingIndex = media.findIndex((item) =>
         item.kind === "image"
         && item.source === coverRef.source
         && item.resolved === coverRef.resolved
-      )
-    ) {
-      media.push({ ...coverRef, order: media.length, role: "cover" });
+      );
+      if (existingIndex >= 0) {
+        media[existingIndex] = { ...media[existingIndex]!, role: "cover" };
+      } else {
+        media.push({ ...coverRef, order: media.length, role: "cover" });
+      }
     }
   }
   return {
